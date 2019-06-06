@@ -17,20 +17,10 @@ import logging
 import argparse
 import botocore.exceptions
 
+from ssm_common import *
 from instance_resolver import InstanceResolver
 
-def configure_logging(level):
-    streamHandler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "[%(name)s] %(levelname)s: %(message)s"
-    )
-    streamHandler.setFormatter(formatter)
-    logger = logging.getLogger("ssm-session")
-    logger.setLevel(level)
-    logger.addHandler(streamHandler)
-    logger.debug("Logging level set to DEBUG")
-
-    return logger
+logger = logging.getLogger()
 
 def parse_args(argv):
     """
@@ -39,12 +29,7 @@ def parse_args(argv):
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
 
-    group_general = parser.add_argument_group('General Options')
-    group_general.add_argument('--profile', '-p', dest='profile', type=str, help='Configuration profile from ~/.aws/{credentials,config}')
-    group_general.add_argument('--region', '-r', dest='region', type=str, help='Set / override AWS region.')
-    group_general.add_argument('--verbose', '-v', action='store_const', dest='log_level', const=logging.INFO, default=logging.WARN, help='Increase log_level level')
-    group_general.add_argument('--debug', '-d', action='store_const', dest='log_level', const=logging.DEBUG, help='Increase log_level level')
-    group_general.add_argument('--help', '-h', action="help", help='Print this help and exit')
+    add_general_parameters(parser)
 
     group_instance_wrapper = parser.add_argument_group('Instance Selection')
     group_instance = group_instance_wrapper.add_mutually_exclusive_group(required=True)
@@ -82,11 +67,11 @@ def start_session(instance_id, profile=None, region=None):
     logger.info("Running: %s", command)
     os.system(command)
 
-if __name__ == "__main__":
+def main():
     ## Split command line to main args and optional command to run
     args = parse_args(sys.argv[1:])
 
-    logger = configure_logging(args.log_level)
+    logger = configure_logging("ssm-session", args.log_level)
 
     try:
         instance = None
@@ -107,3 +92,6 @@ if __name__ == "__main__":
             botocore.exceptions.ClientError) as e:
         logger.error(e)
         quit(1)
+
+if __name__ == "__main__":
+    main()
