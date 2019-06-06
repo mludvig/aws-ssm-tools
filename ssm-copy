@@ -3,107 +3,133 @@
 import os
 import sys
 import re
+import logging
 import time
 import hashlib
 import base64
 import pexpect
-import colorama
 
+from ssm_common import *
 from instance_resolver import InstanceResolver
 
-def print_message(message, prefix, colour, **kwargs):
-    if type(message) == bytes:
-        message = message.decode('utf-8', errors='replace').strip()
-    print(colour + f"[{prefix}] {message}", **kwargs)
+logger_name = "ssm-copy"
 
-def debug(message, **kwargs):
-    print_message(message, "DEBUG", colorama.Fore.YELLOW, **kwargs)
+class SsmFileSender():
+    def __init__(self, instance, profile, region):
+        self._logger = logging.getLogger(logger_name)
+        self.connect(instance, profile, region)
 
-def info(message, **kwargs):
-    print_message(message, "INFO", colorama.Fore.GREEN, **kwargs)
+    def connect(self, instance, profile, region):
+        profile = f"--profile {profile}" if profile else ""
+        region = f"--region {region}" if region else ""
+        command = f"aws {profile} {region} ssm start-session --target {instance}"
+        self._logger.debug(f"Spawning: {command}")
+        self._child = pexpect.spawn(command, echo=False, encoding='utf-8', timeout=10)
+        #self._child.logfile_read = sys.stderr
+        self._logger.debug(f"PID: {self._child.pid}")
 
-def error(message, **kwargs):
-    print_message(message, "ERROR", colorama.Fore.RED, **kwargs)
+        self.wait_for_prompt()
+        self._logger.debug(f"{self._child.before.strip()}")
+        self.shell_prompt = self._child.after
 
-def wait_for_prompt():
-    child.expect('sh.*$')
-    #debug('Got prompt')
+        # Turn off input echo
+        self._child.sendline('stty -echo')
+        self.wait_for_prompt()
 
-def send_file(file_name, shell_prompt):
-    file_size = os.stat(file_name).st_size
-    base_name = os.path.basename(file_name)
-    remote_name = f"{base_name}"
+        # Change to home directory (SSM session starts in '/')
+        self._child.sendline('cd')
+        self.wait_for_prompt()
 
-    info(f'Copying local {file_name} to remote {remote_name} ({file_size} bytes)')
+    def exit(self):
+        self._logger.debug("Closing session")
+        self._child.sendline('exit')
+        try:
+            self._child.expect(['Exiting session', pexpect.EOF])
+        except (OSError, pexpect.exceptions.EOF):
+            pass
 
-    # Calculate SHA1SUM while we go
-    sha1 = hashlib.sha1()
+    def wait_for_prompt(self):
+        """
+        As of now a typical SSM prompt is 'sh-4.2$ '
+        """
+        self._child.expect('sh.*\$ $')
 
-    # We can't send binary data with pexpect
-    child.sendline(f'base64 -d > {remote_name}')
-    with open(file_name, 'rb') as f:
-        sent_size = 0
-        start_timestamp = time.time()
-        while True:
-            buf = f.read(2048)  # Larger buffers don't make it through
-            if not buf:
-                break
-            sha1.update(buf)
-            child.sendline(base64.b64encode(buf).decode('ascii'))
-            sent_size += len(buf)
-            progress = float(sent_size)*100/file_size
-            speed = sent_size/(time.time()-start_timestamp)
+    def send_file(self, file_name):
+        def _erase_line():
             print('\x1B[K\r', end="")   # Erase line
-            debug(f'{file_name} ... {progress:2.1f}% ({sent_size:6}/{file_size} bytes) {int(speed)} B/s', end="")
-        print()
-    child.sendcontrol('d')
-    wait_for_prompt()
 
-    debug('Verifying SHA1 checksum - this may take a while...')
-    child.sendline(f'sha1sum -b {remote_name}')
-    wait_for_prompt()
-    sha1_file = child.before
-    if not sha1_file:
-        wait_for_prompt()
-        sha1_file = child.before
-    m=re.search('([a-f0-9]{40})', sha1_file)
-    if not m:
-        error(f'Did not get a valid SHA1 sum: {sha1_file}')
-        return
-    sha1_remote = m.group(0)
-    sha1_local = sha1.hexdigest()
-    if sha1_remote != sha1_local:
-        error(f'SHA1 verification failed: {sha1_remote} != {sha1_local}')
-        return
-    else:
-        info(f'{file_name}: Local SHA1 matches remote.')
+        def _bytes_to_human(size):
+            units = [ 'B', 'kB', 'MB', 'GB', 'TB' ]
+            unit_idx = 0    # Start with Bytes
+            while unit_idx < len(units)-1:
+                if size < 2048:
+                    break
+                size /= 1024.0
+                unit_idx += 1
+            return size, units[unit_idx]
 
-if __name__ == "__main__":
-    colorama.init(autoreset=True)
+        file_size = os.stat(file_name).st_size
+        base_name = os.path.basename(file_name)
+        remote_name = f"{base_name}"
 
-    command = "aws --profile eit-prod ssm start-session --target i-05875df0708c2f722"
-    debug(f"Spawning: {command}")
-    child = pexpect.spawn(command, echo=False, encoding='utf-8', timeout=10)
-    child.logfile_read = sys.stderr
-    #debug(f"PID: {child.pid}")
+        self._logger.debug(f'Copying local {file_name} to remote {remote_name} ({file_size} bytes)')
 
-    wait_for_prompt()
-    debug(f"{child.before.strip()}")
-    shell_prompt = child.after
+        # Calculate SHA1SUM while we go
+        sha1 = hashlib.sha1()
 
-    # Turn off input echo
-    child.sendline('stty -echo')
-    wait_for_prompt()
+        # We can't send binary data with pexpect
+        self._child.sendline(f'base64 -d > {remote_name}')
+        with open(file_name, 'rb') as f:
+            sent_size = 0
+            start_timestamp = time.time()
+            while True:
+                buf = f.read(2048)  # Larger buffers don't make it through
+                if not buf:
+                    break
+                sha1.update(buf)
+                self._child.sendline(base64.b64encode(buf).decode('ascii'))
+                sent_size += len(buf)
+                progress = float(sent_size)*100/file_size
+                time_spent = time.time()-start_timestamp
+                speed = sent_size/time_spent
+                _erase_line()
+                print(f'{file_name} - {progress:2.1f}% ({sent_size:6}/{file_size} bytes) {int(speed)} B/s', end="")
+            _erase_line()
+        self._child.sendcontrol('d')
+        self.wait_for_prompt()
 
-    # Change to home directory (SSM session starts in '/')
-    child.sendline('cd')
-    wait_for_prompt()
+        self._logger.debug('Verifying SHA1 checksum - this may take a while...')
+        self._child.sendline(f'sha1sum -b {remote_name}')
+        self.wait_for_prompt()
+        sha1_file = self._child.before
+        if not sha1_file:
+            self.wait_for_prompt()
+            sha1_file = self._child.before
+        m=re.search('([a-f0-9]{40})', sha1_file)
+        if not m:
+            self._logger.error(f'{file_name} - Did not get a valid SHA1 sum: {sha1_file}')
+            return
+        sha1_remote = m.group(0)
+        sha1_local = sha1.hexdigest()
+        if sha1_remote != sha1_local:
+            self._logger.error(f'{file_name} - SHA1 verification failed: {sha1_remote} != {sha1_local}')
+            return
+        else:
+            sp_h, sp_u = _bytes_to_human(speed)
+            ss_h, ss_u = _bytes_to_human(sent_size)
+            if ss_u == "B":
+                ss_u = " Bytes"
+            print(f'{file_name} - {int(ss_h)}{ss_u}, {time_spent:.1f}s, {sp_h:.1f}{sp_u}/s, [SHA1 OK]')
+
+def main():
+    logger = configure_logging(logger_name, logging.DEBUG)
+
+    sender = SsmFileSender(instance="i-05875df0708c2f722", profile="eit-prod", region=None)
 
     for file_name in sys.argv[1:]:
-        send_file(file_name, shell_prompt)
+        sender.send_file(file_name)
 
-    child.sendline('exit')
-    try:
-        child.expect(['Exiting session', pexpect.EOF])
-    except (OSError, pexpect.exceptions.EOF):
-        pass
+    sender.exit()
+
+if __name__ == "__main__":
+    main()
