@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import re
+import time
+import hashlib
+import base64
+import pexpect
+import colorama
+
+from instance_resolver import InstanceResolver
+
+def print_message(message, prefix, colour, **kwargs):
+    if type(message) == bytes:
+        message = message.decode('utf-8', errors='replace').strip()
+    print(colour + f"[{prefix}] {message}", **kwargs)
+
+def debug(message, **kwargs):
+    print_message(message, "DEBUG", colorama.Fore.YELLOW, **kwargs)
+
+def info(message, **kwargs):
+    print_message(message, "INFO", colorama.Fore.GREEN, **kwargs)
+
+def error(message, **kwargs):
+    print_message(message, "ERROR", colorama.Fore.RED, **kwargs)
+
+def wait_for_prompt():
+    child.expect('sh.*$')
+    #debug('Got prompt')
+
+def send_file(file_name, shell_prompt):
+    file_size = os.stat(file_name).st_size
+    base_name = os.path.basename(file_name)
+    remote_name = f"{base_name}"
+
+    info(f'Copying local {file_name} to remote {remote_name} ({file_size} bytes)')
+
+    # Calculate SHA1SUM while we go
+    sha1 = hashlib.sha1()
+
+    # We can't send binary data with pexpect
+    child.sendline(f'base64 -d > {remote_name}')
+    with open(file_name, 'rb') as f:
+        sent_size = 0
+        start_timestamp = time.time()
+        while True:
+            buf = f.read(2048)  # Larger buffers don't make it through
+            if not buf:
+                break
+            sha1.update(buf)
+            child.sendline(base64.b64encode(buf).decode('ascii'))
+            sent_size += len(buf)
+            progress = float(sent_size)*100/file_size
+            speed = sent_size/(time.time()-start_timestamp)
+            print('\x1B[K\r', end="")   # Erase line
+            debug(f'{file_name} ... {progress:2.1f}% ({sent_size:6}/{file_size} bytes) {int(speed)} B/s', end="")
+        print()
+    child.sendcontrol('d')
+    wait_for_prompt()
+
+    debug('Verifying SHA1 checksum - this may take a while...')
+    child.sendline(f'sha1sum -b {remote_name}')
+    wait_for_prompt()
+    sha1_file = child.before
+    if not sha1_file:
+        wait_for_prompt()
+        sha1_file = child.before
+    m=re.search('([a-f0-9]{40})', sha1_file)
+    if not m:
+        error(f'Did not get a valid SHA1 sum: {sha1_file}')
+        return
+    sha1_remote = m.group(0)
+    sha1_local = sha1.hexdigest()
+    if sha1_remote != sha1_local:
+        error(f'SHA1 verification failed: {sha1_remote} != {sha1_local}')
+        return
+    else:
+        info(f'{file_name}: Local SHA1 matches remote.')
+
+if __name__ == "__main__":
+    colorama.init(autoreset=True)
+
+    command = "aws --profile eit-prod ssm start-session --target i-05875df0708c2f722"
+    debug(f"Spawning: {command}")
+    child = pexpect.spawn(command, echo=False, encoding='utf-8', timeout=10)
+    child.logfile_read = sys.stderr
+    #debug(f"PID: {child.pid}")
+
+    wait_for_prompt()
+    debug(f"{child.before.strip()}")
+    shell_prompt = child.after
+
+    # Turn off input echo
+    child.sendline('stty -echo')
+    wait_for_prompt()
+
+    # Change to home directory (SSM session starts in '/')
+    child.sendline('cd')
+    wait_for_prompt()
+
+    for file_name in sys.argv[1:]:
+        send_file(file_name, shell_prompt)
+
+    child.sendline('exit')
+    try:
+        child.expect(['Exiting session', pexpect.EOF])
+    except (OSError, pexpect.exceptions.EOF):
+        pass
