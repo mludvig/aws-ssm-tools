@@ -26,7 +26,9 @@ def add_general_parameters(parser):
     """
     group_general = parser.add_argument_group('General Options')
     group_general.add_argument('--profile', '-p', dest='profile', type=str, help='Configuration profile from ~/.aws/{credentials,config}')
-    group_general.add_argument('--region', '-r', dest='region', type=str, help='Set / override AWS region.')
+    group_general.add_argument('--region', '-g', dest='region', type=str, help='Set / override AWS region.')
     group_general.add_argument('--verbose', '-v', action='store_const', dest='log_level', const=logging.INFO, default=logging.WARN, help='Increase log_level level')
     group_general.add_argument('--debug', '-d', action='store_const', dest='log_level', const=logging.DEBUG, help='Increase log_level level')
     group_general.add_argument('--help', '-h', action="help", help='Print this help and exit')
+
+    return group_general

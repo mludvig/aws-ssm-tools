@@ -7,12 +7,88 @@ import logging
 import time
 import hashlib
 import base64
+import argparse
 import pexpect
+from enum import Enum
 
 from ssm_common import *
 from instance_resolver import InstanceResolver
 
 logger_name = "ssm-copy"
+
+class Direction(Enum):
+    UNKNOWN = 0
+    LOCAL_TO_REMOTE = 1
+    REMOTE_TO_LOCAL = 2
+
+def parse_location(location):
+    """
+    Parse [[user@]host:]file location string.
+    """
+    m = re.match('(?:(?:(?P<user>[^@]+)@)?(?P<host>[^@:]+):)?(?P<file>[^@:]+)', location)
+    if not m:
+        return {'user': None, 'host': None, 'file': None}
+    return m.groupdict()
+
+def parse_args():
+    """
+    Parse command line arguments.
+    """
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
+
+    group_general = add_general_parameters(parser)
+
+    group_instance = parser.add_argument_group('Source / Dest Selection')
+    group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances available for copy.')
+    group_instance.add_argument('--recursive', '-r', dest='list', action="store_true", help='Recursive copy. Source file must be a directory.')
+    group_instance.add_argument('SOURCE', nargs='+', help='Source file(s) for copy operation. Either source or destination must be remote.')
+    group_instance.add_argument('DESTINATION', help='Destination for copy operation. Either source or destination must be remote.')
+
+    parser.description = 'Start SSM Shell Session to a given instance'
+    parser.epilog = f'''
+IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
+before you can copy files to/from them! Instances not registered in SSM
+will not be recognised by {parser.prog} nor show up in --list output.
+
+Visit https://aws.nz/aws-utils/ssm-copy for more info and usage examples.
+
+Author: Michael Ludvig
+'''
+
+    # Parse supplied arguments
+    args = parser.parse_args()
+
+    direction = Direction.UNKNOWN
+    local_user_host = "None@None"
+
+    # Source verification
+    last_user_host = None
+    for source in args.SOURCE:
+        loc = parse_location(source)
+        user_host = f"{loc['user']}@{loc['host']}"
+        if direction == Direction.UNKNOWN:
+            if user_host == local_user_host:
+                direction = Direction.LOCAL_TO_REMOTE
+            else:
+                direction = Direction.REMOTE_TO_LOCAL
+            last_user_host = user_host
+        elif direction == Direction.REMOTE_TO_LOCAL and user_host == last_user_host:
+            continue
+        elif direction == Direction.LOCAL_TO_REMOTE and user_host == local_user_host:
+            continue
+        else:
+            parser.error(f'{source}: All SOURCE files must be local or remote with the same "[user@]instance:" prefix.')
+
+    # Destination verification
+    loc = parse_location(args.DESTINATION)
+    user_host = f"{loc['user']}@{loc['host']}"
+    if direction == Direction.LOCAL_TO_REMOTE and user_host == local_user_host:
+        parser.error('Either SOURCE or DESTINATION must be remote, e.g. [user@]instance:file')
+    elif direction == Direction.REMOTE_TO_LOCAL and user_host != local_user_host:
+        parser.error('Only one of SOURCE or DESTINATION must be remote, not both.')
+
+    return args
 
 class SsmFileSender():
     def __init__(self, instance, profile, region):
@@ -122,7 +198,10 @@ class SsmFileSender():
             print(f'{file_name} - {int(ss_h)}{ss_u}, {time_spent:.1f}s, {sp_h:.1f}{sp_u}/s, [SHA1 OK]')
 
 def main():
-    logger = configure_logging(logger_name, logging.DEBUG)
+    ## Split command line to main args and optional command to run
+    args = parse_args()
+
+    logger = configure_logging(logger_name, args.log_level)
 
     sender = SsmFileSender(instance="i-05875df0708c2f722", profile="eit-prod", region=None)
 
