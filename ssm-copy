@@ -10,6 +10,7 @@ import base64
 import argparse
 import pexpect
 from enum import Enum
+import botocore.exceptions
 
 from ssm_common import *
 from instance_resolver import InstanceResolver
@@ -25,7 +26,7 @@ def parse_location(location):
     """
     Parse [[user@]host:]file location string.
     """
-    m = re.match('(?:(?:(?P<user>[^@]+)@)?(?P<host>[^@:]+):)?(?P<file>[^@:]+)', location)
+    m = re.match('(?:(?:(?P<user>[^@]+)@)?(?P<host>[^@:]+):)?(?P<file>[^@:]*)', location)
     if not m:
         return {'user': None, 'host': None, 'file': None}
     return m.groupdict()
@@ -88,17 +89,20 @@ Author: Michael Ludvig
     elif direction == Direction.REMOTE_TO_LOCAL and user_host != local_user_host:
         parser.error('Only one of SOURCE or DESTINATION must be remote, not both.')
 
-    return args
+    return args, direction
 
 class SsmFileSender():
-    def __init__(self, instance, profile, region):
+    def __init__(self, instance_id, profile, region):
         self._logger = logging.getLogger(logger_name)
-        self.connect(instance, profile, region)
+        self.connect(instance_id, profile, region)
 
-    def connect(self, instance, profile, region):
-        profile = f"--profile {profile}" if profile else ""
-        region = f"--region {region}" if region else ""
-        command = f"aws {profile} {region} ssm start-session --target {instance}"
+    def connect(self, instance_id, profile, region):
+        extra_args = ""
+        if profile:
+            extra_args += f"--profile {profile} "
+        if region:
+            extra_args += f"--region {region} "
+        command = f'aws {extra_args} ssm start-session --target {instance_id}'
         self._logger.debug(f"Spawning: {command}")
         self._child = pexpect.spawn(command, echo=False, encoding='utf-8', timeout=10)
         #self._child.logfile_read = sys.stderr
@@ -135,6 +139,9 @@ class SsmFileSender():
             print('\x1B[K\r', end="")   # Erase line
 
         def _bytes_to_human(size):
+            """
+            Convert Bytes to more readable units
+            """
             units = [ 'B', 'kB', 'MB', 'GB', 'TB' ]
             unit_idx = 0    # Start with Bytes
             while unit_idx < len(units)-1:
@@ -199,16 +206,47 @@ class SsmFileSender():
 
 def main():
     ## Split command line to main args and optional command to run
-    args = parse_args()
+    args, direction = parse_args()
 
     logger = configure_logging(logger_name, args.log_level)
 
-    sender = SsmFileSender(instance="i-05875df0708c2f722", profile="eit-prod", region=None)
+    sender = None
 
-    for file_name in sys.argv[1:]:
-        sender.send_file(file_name)
+    try:
+        instance_id = None
+        if args.list:
+            # --list
+            InstanceResolver(args).print_list()
+            quit(0)
 
-    sender.exit()
+        if direction == Direction.LOCAL_TO_REMOTE:
+            loc = parse_location(args.DESTINATION)
+        else:
+            loc = parse_location(args.SOURCE[0])
+
+        instance_id = InstanceResolver(args).resolve_instance(loc['host'])
+        if not instance_id:
+            logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
+            logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
+            quit(1)
+
+        if direction == Direction.LOCAL_TO_REMOTE:
+            sender = SsmFileSender(instance_id, profile = args.profile, region = args.region)
+
+            for file_name in args.SOURCE:
+                sender.send_file(file_name)
+        else:
+            logger.error('Copying from remote to local files is not yet implemented')
+            quit(1)
+
+    except (botocore.exceptions.BotoCoreError,
+            botocore.exceptions.ClientError) as e:
+        logger.error(e)
+        quit(1)
+
+    finally:
+        if sender:
+            sender.exit()
 
 if __name__ == "__main__":
     main()

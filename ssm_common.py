@@ -2,6 +2,8 @@ import logging
 
 __all__ = []
 
+# ---------------------------------------------------------
+
 __all__.append("configure_logging")
 def configure_logging(logger_name, level):
     """
@@ -18,6 +20,8 @@ def configure_logging(logger_name, level):
     logger.debug("Logging level set to DEBUG")
 
     return logger
+
+# ---------------------------------------------------------
 
 __all__.append("add_general_parameters")
 def add_general_parameters(parser):
