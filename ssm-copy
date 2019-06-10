@@ -97,19 +97,6 @@ class SsmFileSender(SsmTalker):
         def _erase_line():
             print('\x1B[K\r', end="")   # Erase line
 
-        def _bytes_to_human(size):
-            """
-            Convert Bytes to more readable units
-            """
-            units = [ 'B', 'kB', 'MB', 'GB', 'TB' ]
-            unit_idx = 0    # Start with Bytes
-            while unit_idx < len(units)-1:
-                if size < 2048:
-                    break
-                size /= 1024.0
-                unit_idx += 1
-            return size, units[unit_idx]
-
         file_size = os.stat(file_name).st_size
         base_name = os.path.basename(file_name)
         remote_name = f"{base_name}"
@@ -157,8 +144,8 @@ class SsmFileSender(SsmTalker):
             self._logger.error(f'{file_name} - SHA1 verification failed: {sha1_remote} != {sha1_local}')
             return
         else:
-            sp_h, sp_u = _bytes_to_human(speed)
-            ss_h, ss_u = _bytes_to_human(sent_size)
+            sp_h, sp_u = bytes_to_human(speed)
+            ss_h, ss_u = bytes_to_human(sent_size)
             if ss_u == "B":
                 ss_u = " Bytes"
             print(f'{file_name} - {int(ss_h)}{ss_u}, {time_spent:.1f}s, {sp_h:.1f}{sp_u}/s, [SHA1 OK]')
