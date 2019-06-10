@@ -36,3 +36,19 @@ def add_general_parameters(parser):
     group_general.add_argument('--help', '-h', action="help", help='Print this help and exit')
 
     return group_general
+
+# ---------------------------------------------------------
+
+__all__.append("bytes_to_human")
+def bytes_to_human(size):
+    """
+    Convert Bytes to more readable units
+    """
+    units = [ 'B', 'kB', 'MB', 'GB', 'TB' ]
+    unit_idx = 0    # Start with Bytes
+    while unit_idx < len(units)-1:
+        if size < 2048:
+            break
+        size /= 1024.0
+        unit_idx += 1
+    return size, units[unit_idx]
