@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+
+# ssm-tunnel-client
+# Author: Michael Ludvig
+
+import sys
+import threading
+import pexpect
+from pytun import TunTapDevice
+
+def setup_tun(src, dst):
+    tun = TunTapDevice()
+
+    tun.addr = src
+    tun.dstaddr = dst
+    tun.netmask = '255.255.255.255'
+    tun.mtu = 1400
+
+    tun.up()
+
+    return tun
+
+def tun_reader(tun):
+    while True:
+        buf = tun.read(tun.mtu)
+        print("%{}".format(buf.hex()))
+
+def main():
+    tun = setup_tun(sys.argv[1], sys.argv[2])
+    print(f"# Device {tun.name} is ready", flush=True)
+
+    t = threading.Thread(target=tun_reader, args=(tun,))
+    t.daemon = True
+    t.start()
+
+    try:
+        while True:
+            bufhex = sys.stdin.readline()
+            buf = bytes.fromhex(bufhex.strip('%\n'))
+            tun.write(buf)
+
+    except KeyboardInterrupt:
+        tun.down()
+        tun.close()
+
+if __name__ == "__main__":
+    main()

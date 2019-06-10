@@ -1,3 +1,4 @@
+import time
 import logging
 import pexpect
 
@@ -32,6 +33,8 @@ class SsmTalker():
 
     def exit(self):
         self._logger.debug("Closing session")
+        self._child.sendcontrol('c')
+        time.sleep(0.5)
         self._child.sendline('exit')
         try:
             self._child.expect(['Exiting session', pexpect.EOF])

@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+
+import sys
+from scapy.all import IP, IPv6
+from pytun import TunTapDevice
+import threading
+import pexpect
+
+from ssm_talker import SsmTalker
+
+tun_local = "10.0.8.1"
+tun_remote = "10.0.8.2"
+tun_mtu = 1400
+
+class SsmTunnel(SsmTalker):
+    def open_remote_tunnel(self, local_ip, remote_ip):
+        def _erase_line():
+            print('\x1B[K\r', end="")   # Erase line
+
+        self._logger.debug(f'Creating tunnel')
+
+        # Open remote tun0 device
+        self._child.sendline(f"sudo python3 -u ssm-tunnel-client {remote_ip} {local_ip}")
+        self._child.expect('# Device .* is ready')
+
+    def open_local_tunnel(self, local_ip, remote_ip):
+        tun = TunTapDevice()
+
+        tun.addr = local_ip
+        tun.dstaddr = remote_ip
+        tun.netmask = '255.255.255.255'
+        tun.mtu = 1400
+
+        tun.up()
+
+        print(f"# Device {tun.name} is ready", flush=True)
+
+        self._tun = tun
+
+    def local_to_remote(self):
+        while True:
+            buf = self._tun.read(self._tun.mtu)
+            self._child.sendline("%{}".format(buf.hex()))
+            pkt = IP(buf[4:])
+            if pkt.version != 4:
+                continue
+                pkt = IPv6(buf[4:])
+            print(">{}".format(pkt.summary()))
+
+    def remote_to_local(self):
+        while True:
+            try:
+                line = self._child.readline()
+            except pexpect.exceptions.TIMEOUT:
+                continue
+            if line[0]=='%':
+                buf = bytes.fromhex(line[1:].strip('\r\n'))
+                self._tun.write(buf)
+                pkt = IP(buf[4:])
+                if pkt.version != 4:
+                    pkt = IPv6(buf[4:])
+                print("<{}".format(pkt.summary()))
+
+    def process_traffic(self):
+        tr_l2r = threading.Thread(target=self.local_to_remote, args=[])
+        tr_l2r.daemon = True
+        tr_l2r.start()
+
+        try:
+            self.remote_to_local()
+
+        except KeyboardInterrupt:
+            self.exit()
+            self._tun.down()
+            self._tun.close()
+
+    def start(self, local_ip, remote_ip):
+        self.open_remote_tunnel(local_ip, remote_ip)
+        self.open_local_tunnel(local_ip, remote_ip)
+        self.process_traffic()
+
+def main():
+    tunnel = SsmTunnel('i-...', profile='...', region='ap-southeast-2', logger_name='ssm-tunnel')
+    tunnel.start(tun_local, tun_remote)
+
+if __name__ == "__main__":
+    main()
