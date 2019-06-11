@@ -1,36 +1,81 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 # ssm-tunnel-client
 # Author: Michael Ludvig
 
+from __future__ import print_function
+
+import os
 import sys
+import struct
+import fcntl
+import time
 import threading
-import pexpect
-from base64 import b85encode, b85decode
-from pytun import TunTapDevice
+from base64 import b64encode, b64decode
 
-def setup_tun(src, dst):
-    tun = TunTapDevice()
+def run_command(command, assert_0=True):
+    print("# {}".format(command))
+    ret = os.system(command)
+    if assert_0:
+        assert ret == 0
 
-    tun.addr = src
-    tun.dstaddr = dst
-    tun.netmask = '255.255.255.255'
-    tun.mtu = 1500
+def create_tun(tun_name, local_ip, remote_ip):
+    params = {
+        "tun_name": tun_name,
+        "local_ip": local_ip,
+        "remote_ip": remote_ip,
+        "user_id": os.getuid(),
+    }
+    try:
+        run_command("sudo ip tuntap add {tun_name} mode tun user {user_id}".format(**params))
+        run_command("sudo ip addr add {local_ip} peer {remote_ip} dev {tun_name}".format(**params))
+        run_command("sudo ip link set {tun_name} up".format(**params))
+    except AssertionError:
+        delete_tun(tun_name)
+        quit(1)
+    except:
+        delete_tun(tun_name)
+        raise
 
-    tun.up()
+def delete_tun(tun_name):
+    params = {
+        "tun_name": tun_name,
+    }
+    # We don't check return code here - best effort to delete the devices
+    run_command("sudo ip link set {tun_name} down".format(**params), assert_0=False)
+    run_command("sudo ip tuntap del {tun_name} mode tun".format(**params), assert_0=False)
 
-    return tun
+def setup_tun(tun_name):
+    TUNSETIFF = 0x400454ca
+    IFF_TUN = 0x0001
+    IFF_NO_PI = 0x1000
 
-def tun_reader(tun):
+    tun_fd = os.open("/dev/net/tun", os.O_RDWR)
+
+    flags = IFF_TUN
+
+    ifr = struct.pack('16sH22s', tun_name.encode(), flags, b'\x00'*22)
+    ret = fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
+
+    dev, _ = struct.unpack('16sH', ret[:18])
+    print("# Client device {} is ready".format(dev.decode()))
+
+    return tun_fd
+
+def tun_reader(tun_fd):
     while True:
-        buf = tun.read(tun.mtu)
-        print("%{}".format(b85encode(buf).decode('ascii')))
+        buf = os.read(tun_fd, 1504)     # Virtual GRE header adds 4 bytes
+        print("%{}".format(b64encode(buf).decode('ascii')))
 
 def main():
-    tun = setup_tun(sys.argv[1], sys.argv[2])
-    print(f"# Client device {tun.name} is ready", flush=True)
+    tun_suffix = "{:.4f}".format(time.time())[8:]
+    tun_name = "tunSSM.{}".format(tun_suffix)
 
-    t = threading.Thread(target=tun_reader, args=(tun,))
+    create_tun(tun_name, sys.argv[1], sys.argv[2])
+
+    tun_fd = setup_tun(tun_name)
+
+    t = threading.Thread(target=tun_reader, args=(tun_fd,))
     t.daemon = True
     t.start()
 
@@ -38,12 +83,15 @@ def main():
         while True:
             line = sys.stdin.readline()
             if line[0] == '%':
-                buf = b85decode(line[1:].strip('\n\r'))
-                tun.write(buf)
+                buf = b64decode(line[1:].strip('\n\r'))
+                os.write(tun_fd, buf)
 
     except KeyboardInterrupt:
-        tun.down()
-        tun.close()
+        pass
+
+    finally:
+        os.close(tun_fd)
+        delete_tun(tun_name)
 
 if __name__ == "__main__":
     main()
