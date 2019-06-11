@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
 import sys
-from scapy.all import GRE
-from pytun import TunTapDevice
 import threading
 import pexpect
+from base64 import b85encode, b85decode
 
+from scapy.all import GRE
+from pytun import TunTapDevice
 from ssm_talker import SsmTalker
 
 tun_local = "10.0.8.1"
 tun_remote = "10.0.8.2"
-tun_mtu = 1400
+tun_mtu = 1500
 
 class SsmTunnel(SsmTalker):
     def open_remote_tunnel(self, local_ip, remote_ip):
@@ -21,7 +22,8 @@ class SsmTunnel(SsmTalker):
 
         # Open remote tun0 device
         self._child.sendline(f"sudo python3 -u ssm-tunnel-client {remote_ip} {local_ip}")
-        self._child.expect('# Device .* is ready')
+        self._child.expect('# Client device .* is ready')
+        print(self._child.after, flush=True)
 
     def open_local_tunnel(self, local_ip, remote_ip):
         tun = TunTapDevice()
@@ -33,14 +35,14 @@ class SsmTunnel(SsmTalker):
 
         tun.up()
 
-        print(f"# Device {tun.name} is ready", flush=True)
+        print(f"# Local device {tun.name} is ready", flush=True)
 
         self._tun = tun
 
     def local_to_remote(self):
         while True:
             buf = self._tun.read(self._tun.mtu)
-            self._child.sendline("%{}".format(buf.hex()))
+            self._child.sendline("%{}".format(b85encode(buf).decode('ascii')))
             pkt = GRE(buf)
             #print(">{:4d} {}".format(len(pkt), pkt.summary()))
             #print(buf.hex())
@@ -52,7 +54,7 @@ class SsmTunnel(SsmTalker):
             except pexpect.exceptions.TIMEOUT:
                 continue
             if line[0]=='%':
-                buf = bytes.fromhex(line[1:].strip('\r\n'))
+                buf = b85decode(line[1:].strip('\r\n'))
                 self._tun.write(buf)
                 pkt = GRE(buf)
                 #print("<{:4d} {}".format(len(pkt), pkt.summary()))

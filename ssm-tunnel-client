@@ -6,6 +6,7 @@
 import sys
 import threading
 import pexpect
+from base64 import b85encode, b85decode
 from pytun import TunTapDevice
 
 def setup_tun(src, dst):
@@ -14,7 +15,7 @@ def setup_tun(src, dst):
     tun.addr = src
     tun.dstaddr = dst
     tun.netmask = '255.255.255.255'
-    tun.mtu = 1400
+    tun.mtu = 1500
 
     tun.up()
 
@@ -23,11 +24,11 @@ def setup_tun(src, dst):
 def tun_reader(tun):
     while True:
         buf = tun.read(tun.mtu)
-        print("%{}".format(buf.hex()))
+        print("%{}".format(b85encode(buf).decode('ascii')))
 
 def main():
     tun = setup_tun(sys.argv[1], sys.argv[2])
-    print(f"# Device {tun.name} is ready", flush=True)
+    print(f"# Client device {tun.name} is ready", flush=True)
 
     t = threading.Thread(target=tun_reader, args=(tun,))
     t.daemon = True
@@ -35,9 +36,10 @@ def main():
 
     try:
         while True:
-            bufhex = sys.stdin.readline()
-            buf = bytes.fromhex(bufhex.strip('%\n'))
-            tun.write(buf)
+            line = sys.stdin.readline()
+            if line[0] == '%':
+                buf = b85decode(line[1:].strip('\n\r'))
+                tun.write(buf)
 
     except KeyboardInterrupt:
         tun.down()
