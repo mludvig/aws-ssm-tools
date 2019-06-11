@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
-from scapy.all import IP, IPv6
+from scapy.all import GRE
 from pytun import TunTapDevice
 import threading
 import pexpect
@@ -29,7 +29,7 @@ class SsmTunnel(SsmTalker):
         tun.addr = local_ip
         tun.dstaddr = remote_ip
         tun.netmask = '255.255.255.255'
-        tun.mtu = 1400
+        tun.mtu = tun_mtu
 
         tun.up()
 
@@ -41,11 +41,9 @@ class SsmTunnel(SsmTalker):
         while True:
             buf = self._tun.read(self._tun.mtu)
             self._child.sendline("%{}".format(buf.hex()))
-            pkt = IP(buf[4:])
-            if pkt.version != 4:
-                continue
-                pkt = IPv6(buf[4:])
-            print(">{}".format(pkt.summary()))
+            pkt = GRE(buf)
+            #print(">{:4d} {}".format(len(pkt), pkt.summary()))
+            #print(buf.hex())
 
     def remote_to_local(self):
         while True:
@@ -56,10 +54,9 @@ class SsmTunnel(SsmTalker):
             if line[0]=='%':
                 buf = bytes.fromhex(line[1:].strip('\r\n'))
                 self._tun.write(buf)
-                pkt = IP(buf[4:])
-                if pkt.version != 4:
-                    pkt = IPv6(buf[4:])
-                print("<{}".format(pkt.summary()))
+                pkt = GRE(buf)
+                #print("<{:4d} {}".format(len(pkt), pkt.summary()))
+                #print(buf.hex())
 
     def process_traffic(self):
         tr_l2r = threading.Thread(target=self.local_to_remote, args=[])
