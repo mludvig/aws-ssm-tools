@@ -2,16 +2,14 @@
 
 import sys
 import threading
+import random
 import pexpect
+import ipaddress
 from base64 import b64encode, b64decode
 
 from scapy.all import GRE
 from pytun import TunTapDevice
 from ssm_talker import SsmTalker
-
-tun_local = "10.0.8.1"
-tun_remote = "10.0.8.2"
-tun_mtu = 1500
 
 class SsmTunnel(SsmTalker):
     def open_remote_tunnel(self, local_ip, remote_ip):
@@ -31,11 +29,12 @@ class SsmTunnel(SsmTalker):
         tun.addr = local_ip
         tun.dstaddr = remote_ip
         tun.netmask = '255.255.255.255'
-        tun.mtu = tun_mtu
+        tun.mtu = 1500
 
         tun.up()
 
-        print(f"# Local device {tun.name} is ready", flush=True)
+        print(f"# Local device {tun.name} is ready")
+        print(f"# Local IP: {local_ip} / Remote IP: {remote_ip}")
 
         self._tun = tun
 
@@ -78,9 +77,20 @@ class SsmTunnel(SsmTalker):
         self.open_local_tunnel(local_ip, remote_ip)
         self.process_traffic()
 
+def random_ips(network):
+    # Network address
+    net = ipaddress.ip_network(network)
+    # Random host-part
+    host_bytes = int(random.uniform(2, 2**(net.max_prefixlen-net.prefixlen)-4))&0xFFFFFFFE
+    # Construct local/remote IP
+    local_ip = net.network_address + host_bytes
+    remote_ip = net.network_address + host_bytes + 1
+    return local_ip.compressed, remote_ip.compressed
+
 def main():
+    local_ip, remote_ip = random_ips("192.168.0.0/16")
     tunnel = SsmTunnel('i-...', profile='...', region='ap-southeast-2', logger_name='ssm-tunnel')
-    tunnel.start(tun_local, tun_remote)
+    tunnel.start(local_ip, remote_ip)
 
 if __name__ == "__main__":
     main()
