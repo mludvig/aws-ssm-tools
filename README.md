@@ -1,12 +1,12 @@
 # aws-ssm-tools - AWS System Manager Tools
 
-Convenience tools for AWS Systems Manager.
+Convenient tools for AWS Systems Manager.
 
 ## Scripts included
 
 * **[ssm-session](ssm-session)**
 
-  Convenience wrapper around `aws ssm start-session` that can open
+  Wrapper around `aws ssm start-session` that can open
   SSM Session to an instance specified by *Name* or *IP Address*.
 
   Check out *[SSM Sessions the easy
@@ -21,7 +21,9 @@ Convenience tools for AWS Systems Manager.
 ## Installation
 
 At the moment simply clone this repository and run the scripts
-with `--help`. *[Pipy](https://pypi.org/)* distribution is coming soon.
+with `--help`.
+
+*[Pipy](https://pypi.org/)* distribution is coming soon.
 
 ## Other AWS Utilities
 
