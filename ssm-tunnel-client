@@ -30,50 +30,56 @@ def create_tun(tun_name, local_ip, remote_ip):
         run_command("sudo ip tuntap add {tun_name} mode tun user {user_id}".format(**params))
         run_command("sudo ip addr add {local_ip} peer {remote_ip} dev {tun_name}".format(**params))
         run_command("sudo ip link set {tun_name} up".format(**params))
+        # Enable forwarding
+        run_command("sudo sysctl -q -w net.ipv4.ip_forward=1".format(**params), assert_0=False)
+        run_command("sudo iptables -t nat -I POSTROUTING -m comment --comment \"{tun_name}\" -s {remote_ip} -j MASQUERADE".format(**params), assert_0=False)
     except AssertionError:
-        delete_tun(tun_name)
+        delete_tun(tun_name, local_ip, remote_ip)
         quit(1)
     except:
-        delete_tun(tun_name)
+        delete_tun(tun_name, local_ip, remote_ip)
         raise
 
-def delete_tun(tun_name):
+def delete_tun(tun_name, local_ip, remote_ip):
     params = {
         "tun_name": tun_name,
+        "local_ip": local_ip,
+        "remote_ip": remote_ip,
     }
     # We don't check return code here - best effort to delete the devices
     run_command("sudo ip link set {tun_name} down".format(**params), assert_0=False)
     run_command("sudo ip tuntap del {tun_name} mode tun".format(**params), assert_0=False)
+    run_command("sudo iptables -t nat -D POSTROUTING -m comment --comment \"{tun_name}\" -s {remote_ip} -j MASQUERADE".format(**params), assert_0=False)
 
 def setup_tun(tun_name):
     TUNSETIFF = 0x400454ca
     IFF_TUN = 0x0001
-    IFF_NO_PI = 0x1000
 
     tun_fd = os.open("/dev/net/tun", os.O_RDWR)
 
     flags = IFF_TUN
-
     ifr = struct.pack('16sH22s', tun_name.encode(), flags, b'\x00'*22)
-    ret = fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
-
-    dev, _ = struct.unpack('16sH', ret[:18])
-    print("# Client device {} is ready".format(dev.decode()))
+    fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
 
     return tun_fd
 
 def tun_reader(tun_fd):
     while True:
         buf = os.read(tun_fd, 1504)     # Virtual GRE header adds 4 bytes
-        print("%{}".format(b64encode(buf).decode('ascii')))
+        sys.stdout.write("%{}\n".format(b64encode(buf).decode('ascii')))
+        sys.stdout.flush()
 
 def main():
+    local_ip = sys.argv[1]
+    remote_ip = sys.argv[2]
+
     tun_suffix = "{:.4f}".format(time.time())[8:]
     tun_name = "tunSSM.{}".format(tun_suffix)
 
-    create_tun(tun_name, sys.argv[1], sys.argv[2])
+    create_tun(tun_name, local_ip, remote_ip)
 
     tun_fd = setup_tun(tun_name)
+    print("# Client device {} is ready [{}]".format(tun_name, sys.argv[1]))
 
     t = threading.Thread(target=tun_reader, args=(tun_fd,))
     t.daemon = True
@@ -91,7 +97,7 @@ def main():
 
     finally:
         os.close(tun_fd)
-        delete_tun(tun_name)
+        delete_tun(tun_name, local_ip, remote_ip)
 
 if __name__ == "__main__":
     main()
