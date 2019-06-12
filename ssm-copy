@@ -95,7 +95,7 @@ Author: Michael Ludvig
 class SsmFileSender(SsmTalker):
     def send_file(self, file_name):
         def _erase_line():
-            print('\x1B[K\r', end="")   # Erase line
+            print('\r\x1B[K', end="")   # Erase line
 
         file_size = os.stat(file_name).st_size
         base_name = os.path.basename(file_name)
