@@ -27,7 +27,7 @@ from ssm_talker import SsmTalker
 from instance_resolver import InstanceResolver
 
 logger_name = "ssm-tunnel"
-tunnel_ips = "100.64.0.0/16"
+tunnel_cidr = "100.64.0.0/16"
 
 def parse_args():
     """
@@ -43,9 +43,11 @@ def parse_args():
     group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances registered in SSM.')
 
     group_network = parser.add_argument_group('Networking Options')
-    group_network.add_argument('--route', dest="routes", type=str, action="append", help='CIDR(s) to route through this tunnel. May be used multiple times.')
-    group_network.add_argument('--tunnel-ips', type=str, default=tunnel_ips, help=f'''By default the tunnel endpoint IPs
-        are randomly derived from the reserved {tunnel_ips} block (RFC6598). This should be ok for most users.''')
+    group_network.add_argument('--route', '-r', metavar="ROUTE", dest="routes", type=str, action="append",
+        help='CIDR(s) to route through this tunnel. May be used multiple times.')
+    group_network.add_argument('--tunnel-cidr', metavar="CIDR", type=str, default=tunnel_cidr, help=f'''By default
+        the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598).
+        This should be ok for most users.''')
 
     parser.description = 'Start SSM Shell Session to a given instance'
     parser.epilog = f'''
@@ -63,18 +65,15 @@ Author: Michael Ludvig
 
     return args
 
-def run_command(command, assert_0=True):
-    print(f"# {command}")
-    ret = os.system(command)
-    if assert_0:
-        assert ret == 0
-
 class SsmTunnel(SsmTalker):
-    def open_remote_tunnel(self, local_ip, remote_ip):
-        def _erase_line():
-            print('\x1B[K\r', end="")   # Erase line
+    def run_command(self, command, assert_0=True):
+        self._logger.debug("command: %s", command)
+        ret = os.system(command)
+        if assert_0:
+            assert ret == 0
 
-        self._logger.debug(f'Creating tunnel')
+    def open_remote_tunnel(self, local_ip, remote_ip):
+        self._logger.debug('Creating tunnel')
 
         # Open remote tun0 device
         self._child.sendline(f"./ssm-tunnel-client {remote_ip} {local_ip}")
@@ -96,12 +95,12 @@ class SsmTunnel(SsmTalker):
     def create_tun(self, routes):
         try:
             user_id = os.getuid()
-            run_command(f"sudo ip tuntap add {self.tun_name} mode tun user {user_id}")
-            run_command(f"sudo ip addr add {self.local_ip} peer {self.remote_ip} dev {self.tun_name}")
-            run_command(f"sudo ip link set {self.tun_name} up")
+            self.run_command(f"sudo ip tuntap add {self.tun_name} mode tun user {user_id}")
+            self.run_command(f"sudo ip addr add {self.local_ip} peer {self.remote_ip} dev {self.tun_name}")
+            self.run_command(f"sudo ip link set {self.tun_name} up")
             # Configure routes
             for route in routes:
-                run_command(f"sudo ip route add {route} via {self.remote_ip}")
+                self.run_command(f"sudo ip route add {route} via {self.remote_ip}")
         except AssertionError:
             self.delete_tun()
             quit(1)
@@ -116,9 +115,8 @@ class SsmTunnel(SsmTalker):
                 os.close(self._tun_fd)
             except:
                 pass
-        run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
-        run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
-        run_command(f"sudo iptables -t nat -D POSTROUTING -m comment --comment \"{self.tun_name}\" -s {self.remote_ip} -j MASQUERADE", assert_0=False)
+        self.run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
+        self.run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
 
     def setup_tun(self):
         TUNSETIFF = 0x400454ca
@@ -201,7 +199,7 @@ def main():
             logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
             quit(1)
 
-        local_ip, remote_ip = random_ips(args.tunnel_ips)
+        local_ip, remote_ip = random_ips(args.tunnel_cidr)
         tunnel = SsmTunnel(instance_id, profile=args.profile, region=args.region, logger_name=logger_name)
         tunnel.start(local_ip, remote_ip, args.routes or [])
 
