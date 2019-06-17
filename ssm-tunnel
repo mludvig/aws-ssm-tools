@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
 
+# Set up IP tunnel through SSM-enabled instance.
+#
+# See https://aws.nz/aws-utils/ssm-tunnel for more info.
+#
+# Author: Michael Ludvig (https://aws.nz)
+
+import os
 import sys
+import time
 import threading
 import random
+import struct
+import fcntl
 import argparse
-import pexpect
 import ipaddress
 from base64 import b64encode, b64decode
+
+import pexpect
 import botocore.exceptions
 
-from scapy.all import GRE
-from pytun import TunTapDevice
+#from scapy.all import GRE
 
 from ssm_common import *
 from ssm_talker import SsmTalker
@@ -33,7 +43,7 @@ def parse_args():
     group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances registered in SSM.')
 
     group_network = parser.add_argument_group('Networking Options')
-    group_network.add_argument('--route', type=str, nargs="+", help='CIDR(s) to route through this tunnel.')
+    group_network.add_argument('--route', dest="routes", type=str, action="append", help='CIDR(s) to route through this tunnel. May be used multiple times.')
     group_network.add_argument('--tunnel-ips', type=str, default=tunnel_ips, help=f'''By default the tunnel endpoint IPs
         are randomly derived from the reserved {tunnel_ips} block (RFC6598). This should be ok for most users.''')
 
@@ -53,6 +63,12 @@ Author: Michael Ludvig
 
     return args
 
+def run_command(command, assert_0=True):
+    print(f"# {command}")
+    ret = os.system(command)
+    if assert_0:
+        assert ret == 0
+
 class SsmTunnel(SsmTalker):
     def open_remote_tunnel(self, local_ip, remote_ip):
         def _erase_line():
@@ -65,24 +81,60 @@ class SsmTunnel(SsmTalker):
         self._child.expect('# Client device .* is ready')
         print(self._child.after, flush=True)
 
-    def open_local_tunnel(self, local_ip, remote_ip):
-        tun = TunTapDevice()
+    def open_local_tunnel(self, local_ip, remote_ip, routes):
+        tun_suffix = ".".join(local_ip.split(".")[2:])
+        self.tun_name = f"tunSSM.{tun_suffix}"
+        self.local_ip = local_ip
+        self.remote_ip = remote_ip
 
-        tun.addr = local_ip
-        tun.dstaddr = remote_ip
-        tun.netmask = '255.255.255.255'
-        tun.mtu = 1500
+        self.create_tun(routes)
+        self._tun_fd = self.setup_tun()
 
-        tun.up()
-
-        print(f"# Local device {tun.name} is ready")
+        print(f"# Local device {self.tun_name} is ready")
         print(f"# Local IP: {local_ip} / Remote IP: {remote_ip}")
 
-        self._tun = tun
+    def create_tun(self, routes):
+        try:
+            user_id = os.getuid()
+            run_command(f"sudo ip tuntap add {self.tun_name} mode tun user {user_id}")
+            run_command(f"sudo ip addr add {self.local_ip} peer {self.remote_ip} dev {self.tun_name}")
+            run_command(f"sudo ip link set {self.tun_name} up")
+            # Configure routes
+            for route in routes:
+                run_command(f"sudo ip route add {route} via {self.remote_ip}")
+        except AssertionError:
+            self.delete_tun()
+            quit(1)
+        except:
+            self.delete_tun()
+            raise
+
+    def delete_tun(self):
+        # We don't check return code here - best effort to close and delete the device
+        if self._tun_fd is not None:
+            try:
+                os.close(self._tun_fd)
+            except:
+                pass
+        run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
+        run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
+        run_command(f"sudo iptables -t nat -D POSTROUTING -m comment --comment \"{self.tun_name}\" -s {self.remote_ip} -j MASQUERADE", assert_0=False)
+
+    def setup_tun(self):
+        TUNSETIFF = 0x400454ca
+        IFF_TUN = 0x0001
+
+        tun_fd = os.open("/dev/net/tun", os.O_RDWR)
+
+        flags = IFF_TUN
+        ifr = struct.pack('16sH22s', self.tun_name.encode(), flags, b'\x00'*22)
+        fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
+
+        return tun_fd
 
     def local_to_remote(self):
         while True:
-            buf = self._tun.read(self._tun.mtu + 4) # Virtual GRE header adds 4 bytes
+            buf = os.read(self._tun_fd, 1504)     # Virtual GRE header adds 4 bytes
             self._child.sendline("%{}".format(b64encode(buf).decode('ascii')))
             #pkt = GRE(buf)
             #print(">{:4d} {}".format(len(pkt), pkt.summary()))
@@ -94,9 +146,9 @@ class SsmTunnel(SsmTalker):
                 line = self._child.readline()
             except pexpect.exceptions.TIMEOUT:
                 continue
-            if line[0]=='%':
+            if line[0] == '%':
                 buf = b64decode(line[1:].strip('\r\n'))
-                self._tun.write(buf)
+                os.write(self._tun_fd, buf)
                 #pkt = GRE(buf)
                 #print("<{:4d} {}".format(len(pkt), pkt.summary()))
                 #print(buf.hex())
@@ -111,12 +163,13 @@ class SsmTunnel(SsmTalker):
 
         except KeyboardInterrupt:
             self.exit()
-            self._tun.down()
-            self._tun.close()
 
-    def start(self, local_ip, remote_ip):
+        finally:
+            self.delete_tun()
+
+    def start(self, local_ip, remote_ip, routes):
         self.open_remote_tunnel(local_ip, remote_ip)
-        self.open_local_tunnel(local_ip, remote_ip)
+        self.open_local_tunnel(local_ip, remote_ip, routes)
         self.process_traffic()
 
 def random_ips(network):
@@ -150,7 +203,7 @@ def main():
 
         local_ip, remote_ip = random_ips(args.tunnel_ips)
         tunnel = SsmTunnel(instance_id, profile=args.profile, region=args.region, logger_name=logger_name)
-        tunnel.start(local_ip, remote_ip)
+        tunnel.start(local_ip, remote_ip, args.routes or [])
 
     except (botocore.exceptions.BotoCoreError,
             botocore.exceptions.ClientError) as e:

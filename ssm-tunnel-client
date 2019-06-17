@@ -9,7 +9,6 @@ import os
 import sys
 import struct
 import fcntl
-import time
 import threading
 from base64 import b64encode, b64decode
 
@@ -73,7 +72,7 @@ def main():
     local_ip = sys.argv[1]
     remote_ip = sys.argv[2]
 
-    tun_suffix = "{:.4f}".format(time.time())[8:]
+    tun_suffix = ".".join(local_ip.split(".")[2:])
     tun_name = "tunSSM.{}".format(tun_suffix)
 
     create_tun(tun_name, local_ip, remote_ip)
