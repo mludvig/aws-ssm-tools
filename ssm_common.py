@@ -52,3 +52,28 @@ def bytes_to_human(size):
         size /= 1024.0
         unit_idx += 1
     return size, units[unit_idx]
+
+# ---------------------------------------------------------
+
+__all__.append("seconds_to_human")
+def seconds_to_human(seconds, decimal=3):
+    """
+    Convert seconds to HH:MM:SS[.SSS]
+
+    If decimal==0 only full seconds are used.
+    """
+    secs = int(seconds)
+    fraction = seconds - secs
+
+    mins = int(secs / 60)
+    secs = secs % 60
+
+    hours = int(mins / 60)
+    mins = mins % 60
+
+    ret = f"{hours:02d}:{mins:02d}:{secs:02d}"
+    if decimal:
+        fraction = int(fraction * (10**decimal))
+        ret += f".{fraction:0{decimal}d}"
+
+    return ret

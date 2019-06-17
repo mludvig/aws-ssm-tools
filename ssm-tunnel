@@ -9,9 +9,11 @@
 import os
 import sys
 import time
+import copy
 import threading
 import random
 import struct
+import select
 import fcntl
 import argparse
 import ipaddress
@@ -28,6 +30,7 @@ from instance_resolver import InstanceResolver
 
 logger_name = "ssm-tunnel"
 tunnel_cidr = "100.64.0.0/16"
+keepalive_sec = 10
 
 def parse_args():
     """
@@ -66,6 +69,17 @@ Author: Michael Ludvig
     return args
 
 class SsmTunnel(SsmTalker):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Stats structure
+        self.stats = { 'ts': 0, 'l2r': 0, 'r2l': 0 }
+        self.stats_lock = threading.Lock()
+        self.stats_secs = 10
+        self.stats_refresh = 0.5        # Print stats every this many seconds
+
+        self._exitting = False
+
     def run_command(self, command, assert_0=True):
         self._logger.debug("command: %s", command)
         ret = os.system(command)
@@ -113,6 +127,7 @@ class SsmTunnel(SsmTalker):
         if self._tun_fd is not None:
             try:
                 os.close(self._tun_fd)
+                self._tun_fd = None
             except:
                 pass
         self.run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
@@ -131,44 +146,113 @@ class SsmTunnel(SsmTalker):
         return tun_fd
 
     def local_to_remote(self):
+        last_ts = time.time()
         while True:
-            buf = os.read(self._tun_fd, 1504)     # Virtual GRE header adds 4 bytes
-            self._child.sendline("%{}".format(b64encode(buf).decode('ascii')))
-            #pkt = GRE(buf)
-            #print(">{:4d} {}".format(len(pkt), pkt.summary()))
-            #print(buf.hex())
+            if self._exitting:
+                break
+            try:
+                r, w, x = select.select([self._tun_fd], [], [], 1)
+                if not self._tun_fd in r:
+                    if last_ts + keepalive_sec < time.time():
+                        # Keepalive timeout - send '#'
+                        self._child.sendline("#")
+                        last_ts = time.time()
+                    continue
+                buf = os.read(self._tun_fd, 1504)     # Virtual GRE header adds 4 bytes
+                self._child.sendline("%{}".format(b64encode(buf).decode('ascii')))
+            except OSError as e:
+                if e.errno == os.errno.EBADF and self._exitting:
+                    break
+
+            last_ts = time.time()
+            # Update stats
+            self.stats_lock.acquire()
+            self.stats['l2r'] += len(buf)
+            self.stats_lock.release()
+
+        self._logger.debug("local_to_remote() has exitted.")
 
     def remote_to_local(self):
         while True:
+            if self._exitting:
+                break
             try:
                 line = self._child.readline()
             except pexpect.exceptions.TIMEOUT:
+                # This is a long timeout, 30 sec, not very useful
                 continue
-            if line[0] == '%':
-                buf = b64decode(line[1:].strip('\r\n'))
-                os.write(self._tun_fd, buf)
-                #pkt = GRE(buf)
-                #print("<{:4d} {}".format(len(pkt), pkt.summary()))
-                #print(buf.hex())
+            if not line or line[0] != '%':
+                continue
+
+            buf = b64decode(line[1:].strip('\r\n'))
+            os.write(self._tun_fd, buf)
+            # Update stats
+            self.stats_lock.acquire()
+            self.stats['r2l'] += len(buf)
+            self.stats_lock.release()
+
+        self._logger.debug("remote_to_local() has exitted.")
 
     def process_traffic(self):
         tr_l2r = threading.Thread(target=self.local_to_remote, args=[])
         tr_l2r.daemon = True
         tr_l2r.start()
 
+        tr_r2l = threading.Thread(target=self.remote_to_local, args=[])
+        tr_r2l.daemon = True
+        tr_r2l.start()
+
         try:
-            self.remote_to_local()
+            self.display_stats()
 
         except KeyboardInterrupt:
             self.exit()
 
         finally:
+            self._logger.info('Exitting, please wait...')
+            self._exitting = True
             self.delete_tun()
 
     def start(self, local_ip, remote_ip, routes):
         self.open_remote_tunnel(local_ip, remote_ip)
         self.open_local_tunnel(local_ip, remote_ip, routes)
         self.process_traffic()
+
+    def display_stats(self):
+        def _erase_line():
+            print('\r\x1B[K', end="")   # Erase line
+
+        stat_history = [self.stats]
+        stat_history_len = int(self.stats_secs / self.stats_refresh)
+        start_ts = time.time()
+
+        while True:
+            time.sleep(self.stats_refresh)
+
+            # Take another 'stat' snapshot
+            self.stats_lock.acquire()
+            stat_history.insert(1, copy.copy(self.stats))
+            self.stats_lock.release()
+            stat_history[1]['ts'] = time.time()
+
+            # Calculate sliding window average
+            if stat_history[1]['ts'] > stat_history[-1]['ts']:
+                l2r_avg = (stat_history[1]['l2r'] - stat_history[-1]['l2r'])/(stat_history[1]['ts'] - stat_history[-1]['ts'])
+                r2l_avg = (stat_history[1]['r2l'] - stat_history[-1]['r2l'])/(stat_history[1]['ts'] - stat_history[-1]['ts'])
+            else:
+                l2r_avg = r2l_avg = 0.0
+
+            # Trim the oldest points
+            del(stat_history[stat_history_len+1:])
+
+            uptime = seconds_to_human(time.time()-start_ts, decimal=0)
+            l2r_t_h, l2r_t_u = bytes_to_human(stat_history[1]['l2r'])
+            r2l_t_h, r2l_t_u = bytes_to_human(stat_history[1]['r2l'])
+            l2r_a_h, l2r_a_u = bytes_to_human(l2r_avg)
+            r2l_a_h, r2l_a_u = bytes_to_human(r2l_avg)
+
+            _erase_line()
+            print(f"{uptime} | In: {r2l_t_h:6.1f}{r2l_t_u:>2s} @ {r2l_a_h:6.1f}{r2l_a_u:>2s}/s | Out: {l2r_t_h:6.1f}{l2r_t_u:>2s} @ {l2r_a_h:6.1f}{l2r_a_u:>2s}/s", end="", flush=True)
 
 def random_ips(network):
     # Network address
