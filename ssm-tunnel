@@ -22,8 +22,6 @@ from base64 import b64encode, b64decode
 import pexpect
 import botocore.exceptions
 
-#from scapy.all import GRE
-
 from ssm_common import *
 from ssm_talker import SsmTalker
 from ssm_instance_resolver import InstanceResolver
@@ -52,7 +50,7 @@ def parse_args():
         the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598).
         This should be ok for most users.''')
 
-    parser.description = 'Start SSM Shell Session to a given instance'
+    parser.description = 'Start IP tunnel to a given SSM instance'
     parser.epilog = f'''
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
 before you can copy files to/from them! Instances not registered in SSM
@@ -92,7 +90,7 @@ class SsmTunnel(SsmTalker):
         # Open remote tun0 device
         self._child.sendline(f"./ssm-tunnel-client {remote_ip} {local_ip}")
         self._child.expect('# Client device .* is ready')
-        print(self._child.after, flush=True)
+        self._logger.debug(self._child.after)
 
     def open_local_tunnel(self, local_ip, remote_ip, routes):
         tun_suffix = ".".join(local_ip.split(".")[2:])
@@ -101,10 +99,10 @@ class SsmTunnel(SsmTalker):
         self.remote_ip = remote_ip
 
         self.create_tun(routes)
-        self._tun_fd = self.setup_tun()
+        self._tun_fd = self.open_tun()
 
-        print(f"# Local device {self.tun_name} is ready")
-        print(f"# Local IP: {local_ip} / Remote IP: {remote_ip}")
+        self._logger.debug(f"# Local device {self.tun_name} is ready")
+        self._logger.info(f"Local IP: {local_ip} / Remote IP: {remote_ip}")
 
     def create_tun(self, routes):
         try:
@@ -133,7 +131,7 @@ class SsmTunnel(SsmTalker):
         self.run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
         self.run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
 
-    def setup_tun(self):
+    def open_tun(self):
         TUNSETIFF = 0x400454ca
         IFF_TUN = 0x0001
 
@@ -206,10 +204,11 @@ class SsmTunnel(SsmTalker):
             self.display_stats()
 
         except KeyboardInterrupt:
-            self.exit()
+            pass
 
         finally:
-            self._logger.info('Exitting, please wait...')
+            self._logger.info('Closing tunnel, please wait...')
+            self.exit()
             self._exitting = True
             self.delete_tun()
 
