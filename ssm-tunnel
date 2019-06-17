@@ -3,13 +3,55 @@
 import sys
 import threading
 import random
+import argparse
 import pexpect
 import ipaddress
 from base64 import b64encode, b64decode
+import botocore.exceptions
 
 from scapy.all import GRE
 from pytun import TunTapDevice
+
+from ssm_common import *
 from ssm_talker import SsmTalker
+from instance_resolver import InstanceResolver
+
+logger_name = "ssm-tunnel"
+tunnel_ips = "100.64.0.0/16"
+
+def parse_args():
+    """
+    Parse command line arguments.
+    """
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
+
+    group_general = add_general_parameters(parser)
+
+    group_instance = parser.add_argument_group('Instance Selection')
+    group_instance.add_argument('INSTANCE', nargs='?', help='Instance ID, Name, Host name or IP address')
+    group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances registered in SSM.')
+
+    group_network = parser.add_argument_group('Networking Options')
+    group_network.add_argument('--route', type=str, nargs="+", help='CIDR(s) to route through this tunnel.')
+    group_network.add_argument('--tunnel-ips', type=str, default=tunnel_ips, help=f'''By default the tunnel endpoint IPs
+        are randomly derived from the reserved {tunnel_ips} block (RFC6598). This should be ok for most users.''')
+
+    parser.description = 'Start SSM Shell Session to a given instance'
+    parser.epilog = f'''
+IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
+before you can copy files to/from them! Instances not registered in SSM
+will not be recognised by {parser.prog} nor show up in --list output.
+
+Visit https://aws.nz/aws-utils/ssm-tunnel for more info and usage examples.
+
+Author: Michael Ludvig
+'''
+
+    # Parse supplied arguments
+    args = parser.parse_args()
+
+    return args
 
 class SsmTunnel(SsmTalker):
     def open_remote_tunnel(self, local_ip, remote_ip):
@@ -42,7 +84,7 @@ class SsmTunnel(SsmTalker):
         while True:
             buf = self._tun.read(self._tun.mtu + 4) # Virtual GRE header adds 4 bytes
             self._child.sendline("%{}".format(b64encode(buf).decode('ascii')))
-            pkt = GRE(buf)
+            #pkt = GRE(buf)
             #print(">{:4d} {}".format(len(pkt), pkt.summary()))
             #print(buf.hex())
 
@@ -55,7 +97,7 @@ class SsmTunnel(SsmTalker):
             if line[0]=='%':
                 buf = b64decode(line[1:].strip('\r\n'))
                 self._tun.write(buf)
-                pkt = GRE(buf)
+                #pkt = GRE(buf)
                 #print("<{:4d} {}".format(len(pkt), pkt.summary()))
                 #print(buf.hex())
 
@@ -88,9 +130,32 @@ def random_ips(network):
     return local_ip.compressed, remote_ip.compressed
 
 def main():
-    local_ip, remote_ip = random_ips("192.168.0.0/16")
-    tunnel = SsmTunnel('i-...', profile='...', region='ap-southeast-2', logger_name='ssm-tunnel')
-    tunnel.start(local_ip, remote_ip)
+    ## Split command line args
+    args = parse_args()
+
+    logger = configure_logging(logger_name, args.log_level)
+
+    try:
+        instance_id = None
+        if args.list:
+            # --list
+            InstanceResolver(args).print_list()
+            quit(0)
+
+        instance_id = InstanceResolver(args).resolve_instance(args.INSTANCE)
+        if not instance_id:
+            logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
+            logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
+            quit(1)
+
+        local_ip, remote_ip = random_ips(args.tunnel_ips)
+        tunnel = SsmTunnel(instance_id, profile=args.profile, region=args.region, logger_name=logger_name)
+        tunnel.start(local_ip, remote_ip)
+
+    except (botocore.exceptions.BotoCoreError,
+            botocore.exceptions.ClientError) as e:
+        logger.error(e)
+        quit(1)
 
 if __name__ == "__main__":
     main()
