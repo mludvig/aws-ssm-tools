@@ -26,7 +26,7 @@ import botocore.exceptions
 
 from ssm_common import *
 from ssm_talker import SsmTalker
-from instance_resolver import InstanceResolver
+from ssm_instance_resolver import InstanceResolver
 
 logger_name = "ssm-tunnel"
 tunnel_cidr = "100.64.0.0/16"

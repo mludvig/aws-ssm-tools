@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 
-# ssm-tunnel-client
+# ssm-tunnel-client - remote agent for ssm-tunnel
+#
 # Author: Michael Ludvig
+
+# Intentionally Python 2 with no external dependencies as that's
+# what's available by default on Amazon Linux 2 as of now.
 
 from __future__ import print_function
 

@@ -14,7 +14,7 @@ import botocore.exceptions
 
 from ssm_common import *
 from ssm_talker import SsmTalker
-from instance_resolver import InstanceResolver
+from ssm_instance_resolver import InstanceResolver
 
 logger_name = "ssm-copy"
 
@@ -47,7 +47,7 @@ def parse_args():
     group_instance.add_argument('SOURCE', nargs='+', help='Source file(s) for copy operation. Either source or destination must be remote.')
     group_instance.add_argument('DESTINATION', help='Destination for copy operation. Either source or destination must be remote.')
 
-    parser.description = 'Start SSM Shell Session to a given instance'
+    parser.description = 'Copy files to/from a given instance over SSM.'
     parser.epilog = f'''
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
 before you can copy files to/from them! Instances not registered in SSM
