@@ -69,7 +69,7 @@ class InstanceResolver():
                 _try_append(items[instance_id]['Addresses'], instance, 'PublicIpAddress')
 
                 # Find instance name from tag Name
-                items[instance_id]['InstanceName'] = None
+                items[instance_id]['InstanceName'] = ""
                 for tag in instance['Tags']:
                     if tag['Key'] == 'Name':
                         items[instance_id]['InstanceName'] = tag['Value']

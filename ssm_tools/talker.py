@@ -4,6 +4,7 @@ import pexpect
 
 class SsmTalker():
     def __init__(self, instance_id, profile, region, logger_name):
+        self._instance_id = instance_id
         self._logger = logging.getLogger(logger_name)
         self.connect(instance_id, profile, region)
 

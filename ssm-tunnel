@@ -89,7 +89,13 @@ class SsmTunnel(SsmTalker):
 
         # Open remote tun0 device
         self._child.sendline(f"ssm-tunnel-agent {remote_ip} {local_ip}")
-        self._child.expect('# Agent device .* is ready')
+        patterns = ['# Agent device .* is ready', 'command not found']
+        match = self._child.expect(patterns)
+        if match != 0:  # Index matched in the 'patterns'
+            self._logger.error("Unable to establish the tunnel!")
+            self._logger.error("ssm-tunnel-agent: command not found on the target instance %s.", self._instance_id)
+            self._logger.error("Use 'ssm-session %s' and then run 'sudo pip install aws-ssm-tunnel-agent' to install it.", self._instance_id)
+            quit(1)
         self._logger.debug(self._child.after)
 
     def open_local_tunnel(self, local_ip, remote_ip, routes):
