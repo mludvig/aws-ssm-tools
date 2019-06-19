@@ -88,8 +88,8 @@ class SsmTunnel(SsmTalker):
         self._logger.debug('Creating tunnel')
 
         # Open remote tun0 device
-        self._child.sendline(f"./ssm-tunnel-client {remote_ip} {local_ip}")
-        self._child.expect('# Client device .* is ready')
+        self._child.sendline(f"ssm-tunnel-agent {remote_ip} {local_ip}")
+        self._child.expect('# Agent device .* is ready')
         self._logger.debug(self._child.after)
 
     def open_local_tunnel(self, local_ip, remote_ip, routes):

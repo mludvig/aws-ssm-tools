@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-# ssm-tunnel-client - remote agent for ssm-tunnel
+# ssm-tunnel-agent - remote agent for ssm-tunnel
+#                    this should be installed on the EC2 instance
+#                    and available in the $PATH (e.g. in /usr/local/bin)
 #
 # Author: Michael Ludvig
 
@@ -98,7 +100,7 @@ def main():
     create_tun(tun_name, local_ip, remote_ip)
 
     tun_fd = setup_tun(tun_name)
-    print("# Client device {} is ready [{}]".format(tun_name, sys.argv[1]))
+    print("# Agent device {} is ready [{}]".format(tun_name, sys.argv[1]))
 
     t = threading.Thread(target=tun_reader, args=(tun_fd,))
     t.daemon = True

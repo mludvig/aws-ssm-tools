@@ -18,7 +18,7 @@ setup(
     version=ssm_tools.__version__,
     packages=find_packages(),
     scripts=SCRIPTS+[
-        'ssm-tunnel-client'
+        'ssm-tunnel-agent'
     ],
 
     python_requires='>=3.6',
