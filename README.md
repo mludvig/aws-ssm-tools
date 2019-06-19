@@ -1,10 +1,11 @@
 # aws-ssm-tools - AWS System Manager Tools
 
-Helper tools for AWS Systems Manager.
+Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
+`ssm-tunnel`.
 
 ## Scripts included
 
-* **[ssm-session](ssm-session)**
+* **ssm-session**
 
   Wrapper around `aws ssm start-session` that can open
   SSM Session to an instance specified by *Name* or *IP Address*.
@@ -14,7 +15,7 @@ Helper tools for AWS Systems Manager.
 
   Works with any Linux or Windows EC2 instance registered in SSM.
 
-* **[ssm-copy](ssm-copy)**
+* **ssm-copy**
 
   Copy files to/from EC2 instances over *SSM Session* without the need to have a
   direct SSH access.
@@ -27,13 +28,13 @@ Helper tools for AWS Systems Manager.
   Only *copy to instance* is implemented at the moment. *Copy from* is on my todo
   list :)
 
-* **[ssm-tunnel](ssm-tunnel)**
+* **ssm-tunnel**
 
   Open *IP tunnel* to the SSM instance and to enable *network access*
-  to the instance VPC. This requires [ssm-tunnel-agent](ssm-tunnel-agent)
+  to the instance VPC. This requires [ssm-tunnel-agent](README-agent.md)
   installed on the instance.
 
-  Works with *Amazon Linux 2* instances and probably other recent systems.
+  Works with *Amazon Linux 2* instances and probably other recent Linux systems.
 
   Requires `ssm-tunnel-agent` installed on the instance - see below for
   instructions.
@@ -60,15 +61,17 @@ Helper tools for AWS Systems Manager.
 
     ```
     ~ $ ssm-session -v test1
-    Starting session with SessionId: botocore-session-1560983828-0d381153aca3ef740
+    Starting session with SessionId: botocore-session-0d381a3ef740153ac
     sh-4.2$ hostname
     test1.aws.nz
+
     sh-4.2$ cd
     sh-4.2$ ls -l
     total 1088
     -rw-r--r-- 1 ssm-user ssm-user 1113504 Jun 20 02:07 large-file
+
     sh-4.2$ exit
-    Exiting session with sessionId: botocore-session-1560983828-0d381153aca3ef740.
+    Exiting session with sessionId: botocore-session-0d381a3ef740153ac.
     ~ $
     ```
 
@@ -82,8 +85,8 @@ Helper tools for AWS Systems Manager.
     00:00:15 | In:  156.0 B @    5.2 B/s | Out:  509.0 B @   40.4 B/s
     ```
 
-    Leave it running and from another shell ssh to an instance listed with
-    `--list` above, for example to `test1` that's got VPC IP `192.168.45.158`:
+    Leave it running and from another shell `ssh` to one of the instances listed
+    with `--list` above. For example to `test1` that's got VPC IP `192.168.45.158`:
 
     ```
     ~ $ ssh ec2-user@192.168.45.158
@@ -93,15 +96,16 @@ Helper tools for AWS Systems Manager.
      21:20:43 up  1:43,  1 user,  load average: 0.00, 0.00, 0.00
     USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
     ec2-user pts/0    192.168.44.95    21:20    3.00s  0.02s  0.00s w -i
+                      ^^^^^^^^^^^^^
     [ec2-user@test1 ~]$ exit
     Connection to 192.168.45.158 closed.
     ~ $
     ```
 
     Note the source IP `192.168.44.95` that belongs to the `tunnel-test`
-    instance - our connections will *appear* to come from this instance. Obviously
-    the **Security Groups** of your other instances must allow SSH access
-    from the IP or SG of your tunnelling instance.
+    instance - our connections will *appear* as if they come from this instance.
+    Obviously the **Security Groups** of your other instances must allow SSH
+    access from the IP or SG of your tunnelling instance.
 
 All the tools support `--help` and a set of common parameters:
 
@@ -112,7 +116,8 @@ All the tools support `--help` and a set of common parameters:
     --verbose, -v       Increase log level
     --debug, -d         Increase log level
 
-They also support the standard AWS environment variables like `AWS_DEFAULT_PROFILE`, `AWS_DEFAULT_REGION`, etc.
+They also support the standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
+`AWS_DEFAULT_REGION`, etc.
 
 ## Installation
 
