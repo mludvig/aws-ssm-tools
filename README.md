@@ -38,6 +38,82 @@ Helper tools for AWS Systems Manager.
   Requires `ssm-tunnel-agent` installed on the instance - see below for
   instructions.
 
+## Usage
+
+1. **List instances** available for connection
+
+    ```
+    ~ $ ssm-session --list
+    i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
+    i-094df06d3633f3267   tunnel-test.aws.nz tunnel-test  192.168.44.95
+    i-02689d593e17f2b75   winbox.aws.nz      winbox       192.168.45.5    13.11.22.33
+    ```
+
+2. **Copy a file** to an instance:
+
+    ```
+    ~ $ ssm-copy large-file test1:
+    large-file - 1087kB, 27.6s, 39.4kB/s, [SHA1 OK]
+    ```
+
+3. **Open SSM session** to an instance:
+
+    ```
+    ~ $ ssm-session -v test1
+    Starting session with SessionId: botocore-session-1560983828-0d381153aca3ef740
+    sh-4.2$ hostname
+    test1.aws.nz
+    sh-4.2$ cd
+    sh-4.2$ ls -l
+    total 1088
+    -rw-r--r-- 1 ssm-user ssm-user 1113504 Jun 20 02:07 large-file
+    sh-4.2$ exit
+    Exiting session with sessionId: botocore-session-1560983828-0d381153aca3ef740.
+    ~ $
+    ```
+
+4. **Create IP tunnel** and SSH to another instance in the VPC through it.
+
+    We'll use `--route 192.168.44.0/23` that gives us access to the VPC CIDR.
+
+    ```
+    $ ssm-tunnel -v tunnel-test --route 192.168.44.0/23
+    [ssm-tunnel] INFO: Local IP: 100.64.160.100 / Remote IP: 100.64.160.101
+    00:00:15 | In:  156.0 B @    5.2 B/s | Out:  509.0 B @   40.4 B/s
+    ```
+
+    Leave it running and from another shell ssh to an instance listed with
+    `--list` above, for example to `test1` that's got VPC IP `192.168.45.158`:
+
+    ```
+    ~ $ ssh ec2-user@192.168.45.158
+    Last login: Tue Jun 18 20:50:59 2019 from 100.64.142.232
+    ...
+    [ec2-user@test1 ~]$ w -i
+     21:20:43 up  1:43,  1 user,  load average: 0.00, 0.00, 0.00
+    USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT
+    ec2-user pts/0    192.168.44.95    21:20    3.00s  0.02s  0.00s w -i
+    [ec2-user@test1 ~]$ exit
+    Connection to 192.168.45.158 closed.
+    ~ $
+    ```
+
+    Note the source IP `192.168.44.95` that belongs to the `tunnel-test`
+    instance - our connections will *appear* to come from this instance. Obviously
+    the **Security Groups** of your other instances must allow SSH access
+    from the IP or SG of your tunnelling instance.
+
+All the tools support `--help` and a set of common parameters:
+
+    --profile PROFILE, -p PROFILE
+                        Configuration profile from ~/.aws/{credentials,config}
+    --region REGION, -g REGION
+                        Set / override AWS region.
+    --verbose, -v       Increase log level
+    --debug, -d         Increase log level
+
+They also support the standard AWS environment variables like `AWS_DEFAULT_PROFILE`, `AWS_DEFAULT_REGION`, etc.
+
 ## Installation
 
 All the tools use **AWS CLI** to open **SSM Session** and then use that
@@ -55,7 +131,6 @@ aws-cli/1.16.175 Python/3.6.8 Linux/4.15.0-51-generic botocore/1.12.165
 
 ~ $ session-manager-plugin --version
 1.1.17.0
-
 ```
 
 Follow [AWS CLI installation
