@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+# Copy files to/from an EC2 instance over SSM Session channel.
+#
+# See https://aws.nz/aws-utils/ssm-copy for more info.
+#
+# Author: Michael Ludvig (https://aws.nz)
+
 import os
 import sys
 import re
@@ -12,9 +18,9 @@ import pexpect
 from enum import Enum
 import botocore.exceptions
 
-from ssm_common import *
-from ssm_talker import SsmTalker
-from ssm_instance_resolver import InstanceResolver
+from ssm_tools.common import *
+from ssm_tools.talker import SsmTalker
+from ssm_tools.resolver import InstanceResolver
 
 logger_name = "ssm-copy"
 

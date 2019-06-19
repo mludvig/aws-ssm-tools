@@ -17,8 +17,8 @@ import logging
 import argparse
 import botocore.exceptions
 
-from ssm_common import *
-from ssm_instance_resolver import InstanceResolver
+from ssm_tools.common import *
+from ssm_tools.resolver import InstanceResolver
 
 logger = logging.getLogger()
 
