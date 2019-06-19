@@ -4,7 +4,7 @@ This file / package should be installed on the EC2 instance
 through which you want to tunnel traffic to its VPC.
 
 It is useless on its own, it should be used with **[ssm-tunnel]** from
-**[aws-ssm-tools](https://raw.githubusercontent.com/mludvig/aws-ssm-tools)**.
+**[aws-ssm-tools](https://github.com/mludvig/aws-ssm-tools)**.
 
 ## Installation
 
@@ -14,7 +14,7 @@ work out of the box on any recently installed *Amazon Linux 2* instance.
 The easiest way to install the agent is from *[PyPI](https://pypi.org/)* repository:
 
 ```
-pip install aws-ssm-tunnel-agent
+sudo pip install aws-ssm-tunnel-agent
 ```
 
 If `pip` command is not available you can download it straight from GitHub:
