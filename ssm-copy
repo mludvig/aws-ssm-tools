@@ -128,7 +128,7 @@ class SsmFileSender(SsmTalker):
                 time_spent = time.time()-start_timestamp
                 speed = sent_size/time_spent
                 _erase_line()
-                print(f'{file_name} - {progress:2.1f}% ({sent_size:6}/{file_size} bytes) {int(speed)} B/s', end="")
+                print(f'{file_name} - {progress:2.1f}% ({sent_size:6}/{file_size} bytes) {int(speed)} B/s', end="", flush=True)
             _erase_line()
         self._child.sendcontrol('d')
         self.wait_for_prompt()
@@ -154,7 +154,7 @@ class SsmFileSender(SsmTalker):
             ss_h, ss_u = bytes_to_human(sent_size)
             if ss_u == "B":
                 ss_u = " Bytes"
-            print(f'{file_name} - {int(ss_h)}{ss_u}, {time_spent:.1f}s, {sp_h:.1f}{sp_u}/s, [SHA1 OK]')
+            print(f'{file_name} - {int(ss_h)}{ss_u}, {time_spent:.1f}s, {sp_h:.1f}{sp_u}/s, [SHA1 OK]', flush=True)
 
 def main():
     ## Split command line to main args and optional command to run
