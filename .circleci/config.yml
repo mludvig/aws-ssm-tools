@@ -24,4 +24,4 @@ jobs:
         command: ./build.sh
 
     - store_artifacts:
-        path: dist/*
+        path: ./dist
