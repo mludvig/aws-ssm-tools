@@ -1,5 +1,7 @@
 # aws-ssm-tools - AWS System Manager Tools
 
+[![CircleCI](https://circleci.com/gh/mludvig/aws-ssm-tools.svg?style=shield)](https://circleci.com/gh/mludvig/aws-ssm-tools)
+
 Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
 `ssm-tunnel`.
 
