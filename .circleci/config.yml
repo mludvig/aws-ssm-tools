@@ -16,8 +16,8 @@ jobs:
     - run:
         name: Check syntax and style
         command: |
-          pylint ssm-* --disable=invalid-name,missing-docstring,line-too-long
-          pylint -E
+          pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ssm-*
+          pylint --errors-only ssm-*
 
     - run:
         name: Build artifacts
