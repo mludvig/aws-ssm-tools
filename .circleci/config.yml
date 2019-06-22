@@ -1,0 +1,15 @@
+version: 2
+jobs:
+  build:
+    docker:
+    - image: circleci/python:3.6
+    steps:
+    - checkout
+    - run:
+        name: Static check
+        command:
+        - pylint
+    - run:
+        name: Build artifacts
+        command:
+        - ./build.sh
