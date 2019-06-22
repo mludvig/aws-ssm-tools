@@ -22,3 +22,6 @@ jobs:
     - run:
         name: Build artifacts
         command: ./build.sh
+
+    - store_artifacts:
+        path: dist/*
