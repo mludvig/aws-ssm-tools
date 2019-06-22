@@ -13,6 +13,10 @@ SCRIPTS=[
     'ssm-tunnel',
 ]
 
+requirements = HERE / "requirements.txt"
+with requirements.open() as f:
+    reqs = [ req.strip() for req in f.readlines() if req.strip() and not req.startswith('#') ]
+
 setup(
     name="aws-ssm-tools",
     version=ssm_tools.__version__,
@@ -23,11 +27,7 @@ setup(
 
     python_requires='>=3.6',
 
-    install_requires=[
-        'botocore',
-        'boto3',
-        'pexpect',
-    ],
+    install_requires=reqs,
 
     package_data={
         '': ['*.txt', '*.md'],

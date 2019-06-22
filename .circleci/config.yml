@@ -8,8 +8,16 @@ jobs:
     - checkout
 
     - run:
-        name: Static check
-        command: pylint
+        name: Install prerequisities
+        command: |
+          sudo pip install pylint pytest
+          pip install -r requirements.txt
+
+    - run:
+        name: Check syntax and style
+        command: |
+          pylint ssm-* --disable=invalid-name,missing-docstring,line-too-long
+          pylint -E
 
     - run:
         name: Build artifacts
