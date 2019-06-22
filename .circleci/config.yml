@@ -1,0 +1,27 @@
+version: 2
+jobs:
+  build:
+    docker:
+    - image: circleci/python:3.6
+
+    steps:
+    - checkout
+
+    - run:
+        name: Install prerequisities
+        command: |
+          sudo pip install pylint pytest
+          pip install --user -r requirements.txt
+
+    - run:
+        name: Check syntax and style
+        command: |
+          pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ssm-*
+          pylint --errors-only ssm-*
+
+    - run:
+        name: Build artifacts
+        command: ./build.sh
+
+    - store_artifacts:
+        path: ./dist
