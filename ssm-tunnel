@@ -76,7 +76,9 @@ class SsmTunnel(SsmTalker):
         self.stats_secs = 10
         self.stats_refresh = 0.5        # Print stats every this many seconds
 
-        self._exitting = False
+        self._exiting = False
+
+        self.tun_name = self.local_ip = self.remote_ip = self._tun_fd = None
 
     def run_command(self, command, assert_0=True):
         self._logger.debug("command: %s", command)
@@ -122,7 +124,8 @@ class SsmTunnel(SsmTalker):
         except AssertionError:
             self.delete_tun()
             quit(1)
-        except:
+        except Exception as e:
+            logging.exception(e)
             self.delete_tun()
             raise
 
@@ -132,10 +135,11 @@ class SsmTunnel(SsmTalker):
             try:
                 os.close(self._tun_fd)
                 self._tun_fd = None
-            except:
-                pass
-        self.run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
-        self.run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
+            except Exception as e:
+                self._logger.exception(e)
+        if self.tun_name is not None:
+            self.run_command(f"sudo ip link logging.exception(e)set {self.tun_name} down", assert_0=False)
+            self.run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
 
     def open_tun(self):
         TUNSETIFF = 0x400454ca
@@ -152,7 +156,7 @@ class SsmTunnel(SsmTalker):
     def local_to_remote(self):
         last_ts = time.time()
         while True:
-            if self._exitting:
+            if self._exiting:
                 break
             try:
                 r, w, x = select.select([self._tun_fd], [], [], 1)
@@ -165,7 +169,7 @@ class SsmTunnel(SsmTalker):
                 buf = os.read(self._tun_fd, 1504)     # Virtual GRE header adds 4 bytes
                 self._child.sendline("%{}".format(b64encode(buf).decode('ascii')))
             except OSError as e:
-                if e.errno == os.errno.EBADF and self._exitting:
+                if e.errno == os.errno.EBADF and self._exiting:
                     break
 
             last_ts = time.time()
@@ -178,7 +182,7 @@ class SsmTunnel(SsmTalker):
 
     def remote_to_local(self):
         while True:
-            if self._exitting:
+            if self._exiting:
                 break
             try:
                 line = self._child.readline()
@@ -215,7 +219,7 @@ class SsmTunnel(SsmTalker):
         finally:
             self._logger.info('Closing tunnel, please wait...')
             self.exit()
-            self._exitting = True
+            self._exiting = True
             self.delete_tun()
 
     def start(self, local_ip, remote_ip, routes):
@@ -275,8 +279,8 @@ def main():
 
     logger = configure_logging(logger_name, args.log_level)
 
+    tunnel = None
     try:
-        instance_id = None
         if args.list:
             # --list
             InstanceResolver(args).print_list()
@@ -296,6 +300,10 @@ def main():
             botocore.exceptions.ClientError) as e:
         logger.error(e)
         quit(1)
+
+    finally:
+        if tunnel:
+            tunnel.delete_tun()
 
 if __name__ == "__main__":
     main()
