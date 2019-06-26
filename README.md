@@ -1,6 +1,8 @@
 # aws-ssm-tools - AWS System Manager Tools
 
 [![CircleCI](https://circleci.com/gh/mludvig/aws-ssm-tools.svg?style=shield)](https://circleci.com/gh/mludvig/aws-ssm-tools)
+[![PyPI](https://img.shields.io/pypi/v/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
 
 Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
 `ssm-tunnel`.
