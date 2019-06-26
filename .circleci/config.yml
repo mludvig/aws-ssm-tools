@@ -60,6 +60,11 @@ jobs:
           command: ./build.sh
 
       - run:
+          name: Install twine
+          command: |
+            sudo pip install twine
+
+      - run:
           name: Upload to PyPI
           command: |
             twine upload dist/*
