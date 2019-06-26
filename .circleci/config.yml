@@ -19,30 +19,30 @@ workflows:
 jobs:
   build:
     docker:
-    - image: circleci/python:3.6
+      - image: circleci/python:3.6
 
     steps:
-    - checkout
+      - checkout
 
-    - run:
-        name: Install prerequisities
-        command: |
-          sudo pip install pylint pytest
-          pip install --user -r requirements.txt
+      - run:
+          name: Install prerequisities
+          command: |
+            sudo pip install pylint pytest
+            pip install --user -r requirements.txt
 
-    - run:
-        name: Check syntax and style
-        command: |
-          pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ssm-*
-          pylint --errors-only ssm-*
+      - run:
+          name: Check syntax and style
+          command: |
+            pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ssm-*
+            pylint --errors-only ssm-*
 
 
   publish:
     docker:
-    - image: circleci/python:3.6
+      - image: circleci/python:3.6
 
     steps:
-    - checkout
+      - checkout
       - run:
           name: Verify git tag vs. version
           command: |
