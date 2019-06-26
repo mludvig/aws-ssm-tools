@@ -1,4 +1,21 @@
-version: 2
+version: 2.1
+
+workflows:
+  build_and_publish:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /.*/
+      - publish:
+          requires:
+            - build
+          filters:
+            tags:
+              only: /[0-9]+(\.[0-9]+)*/
+            branches:
+              ignore: /.*/
+
 jobs:
   build:
     docker:
@@ -19,9 +36,28 @@ jobs:
           pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ssm-*
           pylint --errors-only ssm-*
 
-    - run:
-        name: Build artifacts
-        command: ./build.sh
-
     - store_artifacts:
         path: ./dist
+
+
+  publish:
+    - run:
+        name: Verify git tag vs. version
+        command: |
+          python setup.py verify
+
+    - run:
+        name: Init .pypirc
+        command: |
+          echo -e "[pypi]" >> ~/.pypirc
+          echo -e "username = $PYPI_USERNAME" >> ~/.pypirc
+          echo -e "password = $PYPI_PASSWORD" >> ~/.pypirc
+
+    - run:
+        name: Build packages
+        command: ./build.sh
+
+    - run:
+        name: Upload to PyPI
+        command: |
+          twine upload dist/*

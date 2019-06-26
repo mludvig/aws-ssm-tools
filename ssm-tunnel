@@ -178,7 +178,7 @@ class SsmTunnel(SsmTalker):
             self.stats['l2r'] += len(buf)
             self.stats_lock.release()
 
-        self._logger.debug("local_to_remote() has exitted.")
+        self._logger.debug("local_to_remote() has exited.")
 
     def remote_to_local(self):
         while True:
@@ -199,7 +199,7 @@ class SsmTunnel(SsmTalker):
             self.stats['r2l'] += len(buf)
             self.stats_lock.release()
 
-        self._logger.debug("remote_to_local() has exitted.")
+        self._logger.debug("remote_to_local() has exited.")
 
     def process_traffic(self):
         tr_l2r = threading.Thread(target=self.local_to_remote, args=[])
