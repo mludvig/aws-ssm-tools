@@ -36,28 +36,30 @@ jobs:
           pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ssm-*
           pylint --errors-only ssm-*
 
-    - store_artifacts:
-        path: ./dist
-
 
   publish:
-    - run:
-        name: Verify git tag vs. version
-        command: |
-          python setup.py verify
+    docker:
+    - image: circleci/python:3.6
 
-    - run:
-        name: Init .pypirc
-        command: |
-          echo -e "[pypi]" >> ~/.pypirc
-          echo -e "username = $PYPI_USERNAME" >> ~/.pypirc
-          echo -e "password = $PYPI_PASSWORD" >> ~/.pypirc
+    steps:
+    - checkout
+      - run:
+          name: Verify git tag vs. version
+          command: |
+            python setup.py verify
 
-    - run:
-        name: Build packages
-        command: ./build.sh
+      - run:
+          name: Init .pypirc
+          command: |
+            echo -e "[pypi]" >> ~/.pypirc
+            echo -e "username = $PYPI_USERNAME" >> ~/.pypirc
+            echo -e "password = $PYPI_PASSWORD" >> ~/.pypirc
 
-    - run:
-        name: Upload to PyPI
-        command: |
-          twine upload dist/*
+      - run:
+          name: Build packages
+          command: ./build.sh
+
+      - run:
+          name: Upload to PyPI
+          command: |
+            twine upload dist/*
