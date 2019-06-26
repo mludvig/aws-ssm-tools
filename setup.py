@@ -32,6 +32,9 @@ class VerifyVersionCommand(install):
         if not tag:
             sys.exit("Env var $CIRCLE_TAG is not defined - are we running a CircleCI build?")
 
+        if tag.startswith('v'): # If tag is v1.2.3 make it 1.2.3
+            tag = tag[1:]
+
         if tag != VERSION:
             info = f"Git tag: {tag} does not match the version of this app: {VERSION}"
             sys.exit(info)
