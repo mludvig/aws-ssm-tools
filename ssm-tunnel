@@ -125,7 +125,7 @@ class SsmTunnel(SsmTalker):
             self.delete_tun()
             quit(1)
         except Exception as e:
-            logging.exception(e)
+            self._logger.exception(e)
             self.delete_tun()
             raise
 
@@ -138,7 +138,7 @@ class SsmTunnel(SsmTalker):
             except Exception as e:
                 self._logger.exception(e)
         if self.tun_name is not None:
-            self.run_command(f"sudo ip link logging.exception(e)set {self.tun_name} down", assert_0=False)
+            self.run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
             self.run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
 
     def open_tun(self):
@@ -189,6 +189,10 @@ class SsmTunnel(SsmTalker):
             except pexpect.exceptions.TIMEOUT:
                 # This is a long timeout, 30 sec, not very useful
                 continue
+            if type(self._child.after) == pexpect.exceptions.EOF:
+                self._logger.warn("Received unexpected EOF - tunnel went down?")
+                self._exiting = True
+                break
             if not line or line[0] != '%':
                 continue
 
