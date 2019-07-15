@@ -140,6 +140,7 @@ class SsmTunnel(SsmTalker):
         if self.tun_name is not None:
             self.run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
             self.run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
+            self.tun_name = None
 
     def open_tun(self):
         TUNSETIFF = 0x400454ca
