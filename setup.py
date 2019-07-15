@@ -16,6 +16,7 @@ SCRIPTS = [
     'ssm-session',
     'ssm-copy',
     'ssm-tunnel',
+    'ssm-tunnel-updown.dns-example',
 ]
 VERSION = ssm_tools.__version__
 

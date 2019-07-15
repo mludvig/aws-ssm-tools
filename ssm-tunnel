@@ -50,8 +50,8 @@ def parse_args():
         the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598).
         This should be ok for most users.''')
     group_network.add_argument('--up-down', metavar="SCRIPT", dest='updown_script', type=str, help='''Script to call
-        during tunnel start up and close down. It is called with these arguments: {status} {device-name} {local-ip}
-        {remote-ip} [{route} ...]. The {status} will be: 'up' or 'down'.''')
+        during tunnel start up and close down. Check out 'ssm-tunnel-updown.dns-example' that
+        supports setting a custom DNS server when the tunnel goes up.''')
 
     parser.description = 'Start IP tunnel to a given SSM instance'
     parser.epilog = f'''

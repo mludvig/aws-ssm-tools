@@ -1,0 +1,44 @@
+#!/bin/bash -e
+
+# Simple up-down script that can set DNS servers for domains
+# resolvable over the SSM Tunnel link.
+# For example if you have a Private VPC Route53 zone you can
+# make it resolvable by your laptop with this script.
+
+# Requires 'update-systemd-resolved' in $PATH. Download it from
+# https://github.com/jonathanio/update-systemd-resolved
+
+# It is called with these parameters:
+#   {status} {device-name} {local-ip} {remote-ip} [{route} ...]
+# Where {status} will be: 'up' or 'down'.
+
+## Update these two variables to your needs
+
+DNS_SERVERS="172.31.0.2"
+DNS_DOMAINS="example.com vpc-only.example.com"
+
+## Nothing to configure below here
+
+if [ "$1" != "up" ]; then
+    # Only handle 'up' events. The config will be auto-cleared
+    # when the interface goes down.
+    exit 0
+fi
+
+# Set OpenVPN-style variables
+export script_type="up"
+export dev="$2"
+
+# Build the foreign_option_X variables
+IDX=1
+for DNS_SERVER in ${DNS_SERVERS}; do
+    export foreign_option_${IDX}="dhcp-option DNS ${DNS_SERVER}"
+    IDX=$((IDX + 1))
+done
+
+for DNS_DOMAIN in ${DNS_DOMAINS}; do
+    export foreign_option_${IDX}="dhcp-option DOMAIN-ROUTE ${DNS_DOMAIN}"
+    IDX=$((IDX + 1))
+done
+
+exec update-systemd-resolved
