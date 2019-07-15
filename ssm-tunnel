@@ -82,7 +82,8 @@ class SsmTunnel(SsmTalker):
         self._exiting = False
 
         self.tun_name = self._tun_fd = None
-        self.local_ip = self.remote_ip = self.routes = self.updown_script = None
+        self.local_ip = self.remote_ip = self.routes = None
+        self.updown_script = self.updown_up_success = None
 
     def run_command(self, command, assert_0=True):
         self._logger.debug("command: %s", command)
@@ -223,18 +224,23 @@ class SsmTunnel(SsmTalker):
         except KeyboardInterrupt:
             print("")   # Just to avoid "^C" at the end of line
 
-        finally:
-            self._logger.info('Closing tunnel, please wait...')
-            self.run_updown("down")
-            self.exit()
-            self._exiting = True
-            self.delete_tun()
-
     def run_updown(self, status):
         if not self.updown_script:
             return
+
+        if status == "down" and not self.updown_up_success:
+            # If 'up' failed we are immediately called with 'down' - don't do anything.
+            return
+
         routes = " ".join(self.routes)
-        self.run_command(f"{self.updown_script} {status} {self.tun_name} {self.local_ip} {self.remote_ip} {routes}", assert_0=False)
+        try:
+            cmd = f"{self.updown_script} {status} {self.tun_name} {self.local_ip} {self.remote_ip} {routes}"
+            self._logger.info(f"Running --up-down script: {cmd}")
+            self.run_command(cmd)
+            self.updown_up_success = True
+        except AssertionError:
+            self._logger.error(f'Updown script {self.updown_script} exitted with error.')
+            sys.exit(1)
 
     def start(self, local_ip, remote_ip, routes, updown_script):
         self.local_ip = local_ip
@@ -242,11 +248,19 @@ class SsmTunnel(SsmTalker):
         self.routes = routes
         self.updown_script = updown_script
 
-        self.open_remote_tunnel()
-        self.open_local_tunnel()
-        self.run_updown("up")
+        try:
+            self.open_remote_tunnel()
+            self.open_local_tunnel()
+            self.run_updown("up")
+            self.process_traffic()
 
-        self.process_traffic()
+        finally:
+            self._logger.info('Closing tunnel, please wait...')
+            self.run_updown("down")
+            self.exit()
+            self._exiting = True
+            self.delete_tun()
+
 
     def display_stats(self):
         def _erase_line():
