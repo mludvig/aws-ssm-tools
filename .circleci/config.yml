@@ -33,8 +33,9 @@ jobs:
       - run:
           name: Check syntax and style
           command: |
-            pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ssm-*
-            pylint --errors-only ssm-*
+            PYTHON_SCRIPTS=$(grep -l '#!/usr/bin/env python' ssm-*)
+            pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ${PYTHON_SCRIPTS}
+            pylint --errors-only ${PYTHON_SCRIPTS}
 
 
   publish:
