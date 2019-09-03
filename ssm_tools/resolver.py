@@ -31,51 +31,55 @@ class InstanceResolver():
 
         # List instances from SSM
         logger.debug("Fetching SSM inventory")
-        inventory = self.ssm_client.get_inventory()
-        for entity in inventory["Entities"]:
-            try:
-                content = entity['Data']['AWS:InstanceInformation']["Content"][0]
+        paginator = self.ssm_client.get_paginator('get_inventory')
+        response_iterator = paginator.paginate()
+        for inventory in response_iterator:
+            for entity in inventory["Entities"]:
+                try:
+                    content = entity['Data']['AWS:InstanceInformation']["Content"][0]
 
-                # At the moment we only support EC2 Instances
-                assert content["ResourceType"] == "EC2Instance"
+                    # At the moment we only support EC2 Instances
+                    assert content["ResourceType"] == "EC2Instance"
 
-                # Ignore Terminated instances
-                if content.get("InstanceStatus") == "Terminated":
-                    logger.debug("Ignoring terminated instance: %s", entity)
+                    # Ignore Terminated instances
+                    if content.get("InstanceStatus") == "Terminated":
+                        logger.debug("Ignoring terminated instance: %s", entity)
+                        continue
+
+                    # Add to the list
+                    instance_id = content['InstanceId']
+                    items[instance_id] = {
+                        "InstanceId": instance_id,
+                        "HostName": content.get("ComputerName"),
+                    }
+                    logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
+                except (KeyError, ValueError):
+                    logger.debug("SSM inventory entity not recognised: %s", entity)
                     continue
-
-                # Add to the list
-                instance_id = content['InstanceId']
-                items[instance_id] = {
-                    "InstanceId": instance_id,
-                    "HostName": content.get("ComputerName"),
-                }
-                logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
-            except (KeyError, ValueError):
-                logger.debug("SSM inventory entity not recognised: %s", entity)
-                continue
 
         # Add attributes from EC2
-        reservations = self.ec2_client.describe_instances(InstanceIds=list(items.keys()))
-        for reservation in reservations['Reservations']:
-            for instance in reservation['Instances']:
-                instance_id = instance['InstanceId']
-                if not instance_id in items:
-                    continue
+        paginator = self.ec2_client.get_paginator('describe_instances')
+        response_iterator = paginator.paginate(InstanceIds=list(items.keys()))
+        for reservations in response_iterator:
+            for reservation in reservations['Reservations']:
+                for instance in reservation['Instances']:
+                    instance_id = instance['InstanceId']
+                    if not instance_id in items:
+                        continue
 
-                # Find instance IPs
-                items[instance_id]['Addresses'] = []
-                _try_append(items[instance_id]['Addresses'], instance, 'PrivateIpAddress')
-                _try_append(items[instance_id]['Addresses'], instance, 'PublicIpAddress')
+                    # Find instance IPs
+                    items[instance_id]['Addresses'] = []
+                    _try_append(items[instance_id]['Addresses'], instance, 'PrivateIpAddress')
+                    _try_append(items[instance_id]['Addresses'], instance, 'PublicIpAddress')
 
-                # Find instance name from tag Name
-                items[instance_id]['InstanceName'] = ""
-                for tag in instance['Tags']:
-                    if tag['Key'] == 'Name':
-                        items[instance_id]['InstanceName'] = tag['Value']
+                    # Find instance name from tag Name
+                    items[instance_id]['InstanceName'] = ""
+                    for tag in instance['Tags']:
+                        if tag['Key'] == 'Name':
+                            items[instance_id]['InstanceName'] = tag['Value']
 
-                logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
-        return items
+                    logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
+            return items
 
     def print_list(self):
         hostname_len = 0
