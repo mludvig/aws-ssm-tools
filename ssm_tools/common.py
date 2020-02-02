@@ -1,4 +1,7 @@
+import sys
 import logging
+import boto3
+from . import __version__ as ssm_tools_version
 
 __all__ = []
 
@@ -33,9 +36,24 @@ def add_general_parameters(parser):
     group_general.add_argument('--region', '-g', dest='region', type=str, help='Set / override AWS region.')
     group_general.add_argument('--verbose', '-v', action='store_const', dest='log_level', const=logging.INFO, default=logging.WARN, help='Increase log_level level')
     group_general.add_argument('--debug', '-d', action='store_const', dest='log_level', const=logging.DEBUG, help='Increase log_level level')
+    group_general.add_argument('--version', '-V', action='store_true', dest='show_version', help=f'Show package version and exit. Version is {ssm_tools_version}')
     group_general.add_argument('--help', '-h', action="help", help='Print this help and exit')
 
     return group_general
+
+# ---------------------------------------------------------
+
+__all__.append("show_version")
+def show_version(args):
+    """
+    Show package version and exit.
+    """
+    version_string = f"ssm-tools/{ssm_tools_version}"
+    if args.log_level <= logging.INFO:
+        version_string += f" python/{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        version_string += f" boto3/{boto3.__version__}"
+    print(version_string)
+    sys.exit(0)
 
 # ---------------------------------------------------------
 

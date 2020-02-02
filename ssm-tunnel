@@ -67,6 +67,10 @@ Author: Michael Ludvig
     # Parse supplied arguments
     args = parser.parse_args()
 
+    # If --version do it now and exit
+    if args.show_version:
+        show_version(args)
+
     return args
 
 class SsmTunnel(SsmTalker):
