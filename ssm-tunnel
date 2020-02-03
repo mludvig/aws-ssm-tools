@@ -313,6 +313,11 @@ def random_ips(network):
     return local_ip.compressed, remote_ip.compressed
 
 def main():
+    if sys.platform != "linux":
+        print("The 'ssm-tunnel' program only works on Linux at the moment!", file=sys.stderr)
+        print("In other systems you are welcome to install it in VirtualBox or in a similar virtual environment running Linux.", file=sys.stderr)
+        quit(1)
+
     ## Split command line args
     args = parse_args()
 
