@@ -16,7 +16,6 @@ SCRIPTS = [
     'ssm-session',
     'ssm-copy',
     'ssm-tunnel',
-    'ssm-tunnel-updown.dns-example',
 ]
 VERSION = ssm_tools.__version__
 
@@ -46,9 +45,9 @@ setup(
     packages=find_packages(),
     entry_points={
         'console_scripts': [
-            'ssm-tunnel = ssm_tools.ssm_tunnel_cli:main',
-            'ssm-session = ssm_tools.ssm_session_cli:main',
-            'ssm-copy = ssm_tools.ssm_copy_cli:main',
+            # All script entries must be in this format:
+            # "ssm-session = ssm_tools.ssm_session_cli:main"
+            f"{script} = ssm_tools.{script.replace('-','_')}_cli:main" for script in SCRIPTS
         ]
     },
 
@@ -57,7 +56,7 @@ setup(
     install_requires=reqs,
 
     package_data={
-        '': ['*.txt', '*.md'],
+        '': ['*.txt', '*.md', 'ssm-tunnel-updown.dns-example'],
     },
 
     author="Michael Ludvig",
