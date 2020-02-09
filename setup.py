@@ -46,9 +46,9 @@ setup(
     packages=find_packages(),
     entry_points={
         'console_scripts': [
-            'ssm-tunnel = ssm_tools.ssm_tunnel_cli:main'
-            'ssm-session = ssm_tools.ssm_session_cli:main'
-            'ssm-copy = ssm_tools.ssm_copy_cli:main'
+            'ssm-tunnel = ssm_tools.ssm_tunnel_cli:main',
+            'ssm-session = ssm_tools.ssm_session_cli:main',
+            'ssm-copy = ssm_tools.ssm_copy_cli:main',
         ]
     },
 
