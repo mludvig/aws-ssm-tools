@@ -22,9 +22,9 @@ from base64 import b64encode, b64decode
 import pexpect
 import botocore.exceptions
 
-from ssm_tools.common import *
-from ssm_tools.talker import SsmTalker
-from ssm_tools.resolver import InstanceResolver
+from .common import *
+from .talker import SsmTalker
+from .resolver import InstanceResolver
 
 logger_name = "ssm-tunnel"
 tunnel_cidr = "100.64.0.0/16"

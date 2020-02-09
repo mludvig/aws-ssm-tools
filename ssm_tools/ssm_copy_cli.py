@@ -18,9 +18,9 @@ import pexpect
 from enum import Enum
 import botocore.exceptions
 
-from ssm_tools.common import *
-from ssm_tools.talker import SsmTalker
-from ssm_tools.resolver import InstanceResolver
+from .common import *
+from .talker import SsmTalker
+from .resolver import InstanceResolver
 
 logger_name = "ssm-copy"
 
