@@ -67,12 +67,13 @@ Author: Michael Ludvig
     # Parse supplied arguments
     args = parser.parse_args()
 
-    if not args.INSTANCE and not args.list:
-        parser.error("Specify INSTANCE or use --list")
-
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
+
+    # Require exactly one of INSTANCE or --list
+    if bool(args.INSTANCE) + bool(args.list) != 1:
+        parser.error("Specify either INSTANCE or --list")
 
     return args
 

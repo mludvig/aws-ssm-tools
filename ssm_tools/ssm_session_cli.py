@@ -31,8 +31,7 @@ def parse_args(argv):
 
     add_general_parameters(parser)
 
-    group_instance_wrapper = parser.add_argument_group('Instance Selection')
-    group_instance = group_instance_wrapper.add_mutually_exclusive_group(required=True)
+    group_instance = parser.add_argument_group('Instance Selection')
     group_instance.add_argument('INSTANCE', nargs='?', help='Instance ID, Name, Host name or IP address')
     group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances available for SSM Session')
 
@@ -53,6 +52,10 @@ Author: Michael Ludvig
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
+
+    # Require exactly one of INSTANCE or --list
+    if bool(args.INSTANCE) + bool(args.list) != 1:
+        parser.error("Specify either INSTANCE or --list")
 
     return args
 
