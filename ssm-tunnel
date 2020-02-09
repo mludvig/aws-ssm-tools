@@ -67,6 +67,9 @@ Author: Michael Ludvig
     # Parse supplied arguments
     args = parser.parse_args()
 
+    if not args.INSTANCE and not args.list:
+        parser.error("Specify INSTANCE or use --list")
+
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
