@@ -6,7 +6,8 @@
 
 import os
 import subprocess
-
+import logging
+import argparse
 import botocore.exceptions
 
 from .common import *
@@ -66,15 +67,6 @@ def parse_args():
         dest="endpoint",
         type=str,
         help="Endpoint to route through ssm tunnel.",
-    )
-    group_network.add_argument(
-        "--up-down",
-        metavar="SCRIPT",
-        dest="updown_script",
-        type=str,
-        help="""Script to call
-        during tunnel start up and close down. Check out 'ssm-tunnel-updown.dns-example' that
-        supports setting a custom DNS server when the tunnel goes up.""",
     )
 
     parser.description = "Start port tunnel to a given SSM instance"

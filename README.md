@@ -111,12 +111,25 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     Obviously the **Security Groups** of your other instances must allow SSH
     access from the IP or SG of your tunnelling instance.
 
-5. **Forward a port** and connect to an non EC2 resource in the VPC through it.
+5. **Forward a port** and connect to it on the local EC2 resource.
+
+    We will connect to a MySQL RDS on port tcp/3306 **locally*
+
+    ```
+    $ ssm-tunnel-local-port -v tunnel-test --port 3306
+    ```
+
+    Leave it running and from another shell connect using mysql client
+    ```
+    $ mysql -h 127.0.0.1 -u dbadmin -p
+    ```
+
+6. **Forward a port** and connect to an non EC2 resource in the VPC through it.
 
     We will connect to a MySQL RDS on port tcp/3306
 
     ```
-    $ ssm-tunnel-port -v tunnel-test --port 3306 --endpoint myrds.ap-southeast-2.rds.amazonaws.com --os-user ec2-user --az ap-southeast-2a
+    $ ssm-tunnel-remote-port -v tunnel-test --port 3306 --endpoint myrds.ap-southeast-2.rds.amazonaws.com --os-user ec2-user --az ap-southeast-2a
     ```
 
     Leave it running and from another shell connect using mysql client
@@ -129,7 +142,7 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     Obviously the **Security Groups** of your other instances must allow SSH
     access from the IP or SG of your tunnelling instance. You must also provide 
     **os-user** and **az** parameters. If you're using amazon amis then your user
-    will likely be **ec2-user** and if you're using ubuntu then it will be **ubunutu**
+    will likely be **ec2-user** and if you're using ubuntu then it will be **ubuntu**
 
 All the tools support `--help` and a set of common parameters:
 
