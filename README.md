@@ -49,9 +49,9 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
 
     ```
     ~ $ ssm-session --list
-    i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
-    i-094df06d3633f3267   tunnel-test.aws.nz tunnel-test  192.168.44.95
-    i-02689d593e17f2b75   winbox.aws.nz      winbox       192.168.45.5    13.11.22.33
+    i-07c189021bc56e042   ap-southeast-2a   test1.aws.nz       test1        192.168.45.158
+    i-094df06d3633f3267   ap-southeast-2a   tunnel-test.aws.nz tunnel-test  192.168.44.95
+    i-02689d593e17f2b75   ap-southeast-2b   winbox.aws.nz      winbox       192.168.45.5    13.11.22.33
     ```
 
 2. **Copy a file** to an instance:
@@ -110,6 +110,26 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     instance - our connections will *appear* as if they come from this instance.
     Obviously the **Security Groups** of your other instances must allow SSH
     access from the IP or SG of your tunnelling instance.
+
+5. **Forward a port** and connect to an non EC2 resource in the VPC through it.
+
+    We will connect to a MySQL RDS on port tcp/3306
+
+    ```
+    $ ssm-tunnel-port -v tunnel-test --port 3306 --endpoint myrds.ap-southeast-2.rds.amazonaws.com --os-user ec2-user --az ap-southeast-2a
+    ```
+
+    Leave it running and from another shell connect using mysql client
+    ```
+    $ mysql -h 127.0.0.1 -u dbadmin -p
+    ```
+
+    Note the source IP `192.168.44.95` that belongs to the `tunnel-test`
+    instance - our connections will *appear* as if they come from this instance.
+    Obviously the **Security Groups** of your other instances must allow SSH
+    access from the IP or SG of your tunnelling instance. You must also provide 
+    **os-user** and **az** parameters. If you're using amazon amis then your user
+    will likely be **ec2-user** and if you're using ubuntu then it will be **ubunutu**
 
 All the tools support `--help` and a set of common parameters:
 
