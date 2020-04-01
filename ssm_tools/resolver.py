@@ -77,6 +77,8 @@ class InstanceResolver():
                     for tag in instance['Tags']:
                         if tag['Key'] == 'Name':
                             items[instance_id]['InstanceName'] = tag['Value']
+                    
+                    items[instance_id]['AvailabilityZone'] = instance['Placement']['AvailabilityZone']
 
                     logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
             return items
@@ -99,7 +101,7 @@ class InstanceResolver():
             instname_len = max(instname_len, len(item['InstanceName']))
 
         for item in items:
-            print(f"{item['InstanceId']}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
+            print(f"{item['InstanceId']}   {item['AvailabilityZone']}    {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
 
     def resolve_instance(self, instance):
         # Is it a valid Instance ID?
