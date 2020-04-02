@@ -8,7 +8,6 @@ import os
 import logging
 import argparse
 import botocore.exceptions
-import json
 
 from .common import *
 from .resolver import InstanceResolver
@@ -78,11 +77,7 @@ def start_portfwd_session(instance_id, port, profile=None, region=None):
     if region:
         extra_args += f"--region {region} "
 
-    data = {}
-    data["portNumber"] = [port]
-    data["localPortNumber"] = [port]
-    json_data = json.dumps(data)
-    command = f"aws {extra_args} ssm start-session --target {instance_id} --document-name AWS-StartPortForwardingSession --parameters '{json_data}'"
+    command = f"aws {extra_args} ssm start-session --target {instance_id} --document-name AWS-StartPortForwardingSession --parameters portNumber={port}"
     logger.info("Running: %s", command)
     os.system(command)
 
