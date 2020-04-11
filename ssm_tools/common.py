@@ -1,6 +1,8 @@
 import sys
 import logging
+import subprocess
 import boto3
+import packaging.version
 from . import __version__ as ssm_tools_version
 
 __all__ = []
@@ -27,17 +29,25 @@ def configure_logging(logger_name, level):
 # ---------------------------------------------------------
 
 __all__.append("add_general_parameters")
-def add_general_parameters(parser):
+def add_general_parameters(parser, long_only = False):
     """
     Add General Options used by all ssm-* tools.
     """
+
+    # Remove short options if long_only==True
+    def _get_opts(opt_long, opt_short):
+        opts = [ opt_long ]
+        if not long_only:
+            opts.append(opt_short)
+        return opts
+
     group_general = parser.add_argument_group('General Options')
-    group_general.add_argument('--profile', '-p', dest='profile', type=str, help='Configuration profile from ~/.aws/{credentials,config}')
-    group_general.add_argument('--region', '-g', dest='region', type=str, help='Set / override AWS region.')
-    group_general.add_argument('--verbose', '-v', action='store_const', dest='log_level', const=logging.INFO, default=logging.WARN, help='Increase log_level level')
-    group_general.add_argument('--debug', '-d', action='store_const', dest='log_level', const=logging.DEBUG, help='Increase log_level level')
-    group_general.add_argument('--version', '-V', action='store_true', dest='show_version', help=f'Show package version and exit. Version is {ssm_tools_version}')
-    group_general.add_argument('--help', '-h', action="help", help='Print this help and exit')
+    group_general.add_argument(*_get_opts('--profile', '-p'), dest='profile', type=str, help='Configuration profile from ~/.aws/{credentials,config}')
+    group_general.add_argument(*_get_opts('--region',  '-g'), dest='region', type=str, help='Set / override AWS region.')
+    group_general.add_argument(*_get_opts('--verbose', '-v'), action='store_const', dest='log_level', const=logging.INFO, default=logging.WARN, help='Increase log_level level')
+    group_general.add_argument(*_get_opts('--debug',   '-d'), action='store_const', dest='log_level', const=logging.DEBUG, help='Increase log_level level')
+    group_general.add_argument(*_get_opts('--version', '-V'), action='store_true', dest='show_version', help=f'Show package version and exit. Version is {ssm_tools_version}')
+    group_general.add_argument(*_get_opts('--help',    '-h'), action="help", help='Print this help and exit')
 
     return group_general
 
@@ -95,3 +105,29 @@ def seconds_to_human(seconds, decimal=3):
         ret += f".{fraction:0{decimal}d}"
 
     return ret
+
+# ---------------------------------------------------------
+
+__all__.append("verify_plugin_version")
+def verify_plugin_version(version_required, logger):
+    """
+    Verify that a session-manager-plugin is installed
+    and is of a required version or newer.
+    """
+    session_manager_plugin = 'session-manager-plugin'
+
+    try:
+        result = subprocess.run([session_manager_plugin, '--version'], stdout=subprocess.PIPE)
+        plugin_version = result.stdout.decode('ascii').strip()
+        logger.debug(f"{session_manager_plugin} version {plugin_version}")
+
+        if packaging.version.parse(plugin_version) >= packaging.version.parse(version_required):
+            return True
+
+        logger.error(f"ERROR: session-manager-plugin version {plugin_version} is installed, {version_required} is required")
+    except FileNotFoundError as e:
+        logger.error(f"ERROR: {session_manager_plugin} not installed")
+
+    logger.error("ERROR: Check out https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html for instructions")
+
+    return False
