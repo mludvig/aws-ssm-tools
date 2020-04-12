@@ -15,6 +15,7 @@ README = (HERE / "README.md").read_text()
 SCRIPTS = [
     'ssm-session',
     'ssm-copy',
+    'ssm-ssh',
     'ssm-tunnel',
 ]
 VERSION = ssm_tools.__version__
