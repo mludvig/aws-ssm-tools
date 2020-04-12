@@ -31,7 +31,6 @@ def parse_args(argv):
     add_general_parameters(parser, long_only=True)
 
     group_instance = parser.add_argument_group('Instance Selection')
-    group_instance.add_argument('INSTANCE', nargs='?', help='Instance ID, Name, Host name or IP address')
     group_instance.add_argument('--list', dest='list', action="store_true", help='List instances available for SSM Session')
 
     parser.description = 'Open SSH connection through Session Manager'
@@ -40,7 +39,7 @@ IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
 before you can start a shell session! Instances not registered in SSM
 will not be recognised by {parser.prog} nor show up in --list output.
 
-Visit https://aws.nz/aws-utils/ssm-session for more info and usage examples.
+Visit https://aws.nz/aws-utils/ssm-ssh for more info and usage examples.
 
 Author: Michael Ludvig
 '''
@@ -53,25 +52,26 @@ Author: Michael Ludvig
         show_version(args)
 
     # Require exactly one of INSTANCE or --list
-    if bool(args.INSTANCE) + bool(args.list) != 1:
-        parser.error("Specify either INSTANCE or --list")
+    if bool(extra_args) + bool(args.list) != 1:
+        parser.error("Specify either --list or SSH Options including instance name")
 
     return args, extra_args
 
-def start_ssh_session(instance_id, profile=None, region=None, ssh_args=[]):
-    extra_args = ""
+def start_ssh_session(ssh_args, profile=None, region=None):
+    aws_args = ""
     if profile:
-        extra_args += f"--profile {profile} "
+        aws_args += f"--profile {profile} "
     if region:
-        extra_args += f"--region {region} "
-    proxy_option = f"-o ProxyCommand='aws {extra_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p'"
+        aws_args += f"--region {region} "
+    proxy_option = f"-o ProxyCommand='aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p'"
     ssh_args = " ".join([ f"'{arg}'" for arg in ssh_args ])
-    command = f'ssh {proxy_option} {instance_id} {ssh_args}'
-    logger.info("INFO: Running: %s", command)
-    logger.info("")
+    command = f'ssh {proxy_option} {ssh_args}'
+    logger.info("Running: %s", command)
     os.system(command)
 
 def main():
+    global logger
+
     ## Split command line to main args and optional command to run
     args, extra_args = parse_args(sys.argv[1:])
 
@@ -86,26 +86,52 @@ def main():
         quit(1)
 
     try:
+        instance_resolver = InstanceResolver(args)
+
         if args.list:
-            InstanceResolver(args).print_list()
+            instance_resolver.print_list()
             quit(0)
 
-        login_name = None
-        instance_split = args.INSTANCE.split('@', 1)
-        if len(instance_split) > 1:
-            login_name, instance = instance_split
-            extra_args.append(f"-l{login_name}")
-        else:
-            instance = instance_split[0]
+        # Loop through all possible instance names and try to resolve them.
+        ssh_args = []
+        instance_id = None
+        for arg in extra_args:
+            # If we already have instance id just copy the args
+            if instance_id:
+                ssh_args.append(arg)
+                continue
 
-        instance_id = InstanceResolver(args).resolve_instance(instance)
+            # Some args that can't be an instance name
+            if arg.startswith('-') or arg.find(':') > -1 or arg.find(os.path.sep) > -1:
+                ssh_args.append(arg)
+                continue
+
+            # This may be an instance name - try to resolve it
+            login_name = None
+            if arg.find('@') > -1:  # username@hostname format
+                login_name, instance = arg.split('@', 1)
+            else:
+                instance = arg
+
+            instance_id = instance_resolver.resolve_instance(instance)
+            if not instance_id:
+                # Not resolved as an instance name - put back to args
+                ssh_args.append(arg)
+                continue
+
+            # Woohoo we've got an instance id!
+            logger.info(f"Resolved instance name '{instance}' to '{instance_id}'")
+            ssh_args.append(instance_id)
+
+            if login_name:
+                ssh_args.extend(['-l', login_name])
 
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", instance)
             logger.warning("Perhaps the '%s' is not registered in SSM?", instance)
             quit(1)
 
-        start_ssh_session(instance_id, profile=args.profile, region=args.region, ssh_args=extra_args)
+        start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region)
 
     except (botocore.exceptions.BotoCoreError,
             botocore.exceptions.ClientError) as e:
