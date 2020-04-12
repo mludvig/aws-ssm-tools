@@ -14,23 +14,12 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
   Wrapper around `aws ssm start-session` that can open
   SSM Session to an instance specified by *Name* or *IP Address*.
 
+  It doesn't need user credentials or even `sshd` running on the instace.
+
   Check out *[SSM Sessions the easy
   way](https://aws.nz/projects/ssm-session/)* for an example use.
 
   Works with any Linux or Windows EC2 instance registered in SSM.
-
-* **ssm-copy**
-
-  Copy files to/from EC2 instances over *SSM Session* without the need to have a
-  direct SSH access.
-
-  Works with *Linux* instances only, however *no* remote agent is required. All
-  that is needed is a shell and standard linux tools like `base64` (yes, we are
-  transferring the files base64-encoded as *SSM Sessions* won't pass through
-  binary data).
-
-  Only *copy to instance* is implemented at the moment. *Copy from* is on my todo
-  list :)
 
 * **ssm-tunnel**
 
@@ -38,10 +27,30 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
   to the instance VPC. This requires [ssm-tunnel-agent](README-agent.md)
   installed on the instance.
 
-  Works with *Amazon Linux 2* instances and probably other recent Linux systems.
+  Works with *Amazon Linux 2* instances and probably other recent Linux
+  EC2 instances. Requires *Linux* on the client side - if you are on Mac
+  or Windows you can install a Linux VM in a [VirtualBox](https://virtualbox.org).
 
   Requires `ssm-tunnel-agent` installed on the instance - see below for
   instructions.
+
+* **ssm-ssh**
+
+  Open an SSH connection to the remote server through *Systems Manager*
+  without the need for open firewall or direct internet access. SSH can
+  then be used to forward ports, copy files, etc.
+
+  Unlike `ssm-tunnel` it doesn't create a full VPN link, however it's in
+  some aspects more versatile as it can be used with `rsync`, `scp`,
+  `sftp`, etc.
+
+  It works with any client that can run SSH (including Mac OS-X) and
+  doesn't require a special agent on the instance, other than the standard
+  AWS SSM agent.
+
+* **ssm-copy**
+
+  **DEPRECATED and REMOVED** - use `rsync` with `ssm-ssh` instead.
 
 ## Usage
 
@@ -54,14 +63,24 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     i-02689d593e17f2b75   winbox.aws.nz      winbox       192.168.45.5    13.11.22.33
     ```
 
-2. **Copy a file** to an instance:
+    If you're like me and have access to many different AWS accounts you
+    can select the right `--profile` and / or change the `--region`:
 
     ```
-    ~ $ ssm-copy large-file test1:
-    large-file - 1087kB, 27.6s, 39.4kB/s, [SHA1 OK]
+    ~ $ ssm-session --profile aws-sandpit --region us-west-2 --list
+    i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
     ```
 
-3. **Open SSM session** to an instance:
+    Alternatively use the standard AWS *environment variables*:
+
+    ```
+    ~ $ export AWS_DEFAULT_PROFILE=aws-sandpit
+    ~ $ export AWS_DEFAULT_REGION=us-west-2
+    ~ $ ssm-session --list
+    i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
+    ```
+
+2. **Open SSM session** to an instance:
 
     ```
     ~ $ ssm-session -v test1
@@ -69,22 +88,94 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     sh-4.2$ hostname
     test1.aws.nz
 
-    sh-4.2$ cd
-    sh-4.2$ ls -l
-    total 1088
-    -rw-r--r-- 1 ssm-user ssm-user 1113504 Jun 20 02:07 large-file
+    sh-4.2$ sudo -u ec2-user -i
+    [ec2-user@ip-192-168-45-158] ~ $ id
+    uid=1000(ec2-user) gid=1000(ec2-user) groups=1000(ec2-user),...
 
+    [ec2-user@ip-192-168-45-158] ~ $ ^D
     sh-4.2$ exit
     Exiting session with sessionId: botocore-session-0d381a3ef740153ac.
     ~ $
     ```
 
-4. **Create IP tunnel** and SSH to another instance in the VPC through it.
+3. **Open SSH session** over SSM with *port forwarding*.
 
-    We'll use `--route 192.168.44.0/23` that gives us access to the VPC CIDR.
+    The `ssm-ssh` tool provides a connection and authentication mechanism
+    for running SSH over Systems Manager.
+
+    Note that the target instance *does not need* inbound internet connection nor
+    needs an open SSH port in the Security Group. All it needs is being
+    registered in the Systems Manager.
+
+    While we are at it we will forward port 3306 to our MySQL RDS database
+    using the standard `-L 3306:mysql-rds.aws.nz:3306` SSH port forwarding method.
 
     ```
-    $ ssm-tunnel -v tunnel-test --route 192.168.44.0/23
+    ~ $ ssm-ssh ec2-user@test1 -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
+    [ssm-ssh] INFO: Resolved instance name 'test1' to 'i-07c189021bc56e042'
+    [ssm-ssh] INFO: Running: ssh -o ProxyCommand='aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p' i-07c189021bc56e042 -l ec2-user -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
+    OpenSSH_7.6p1 Ubuntu-4ubuntu0.3, OpenSSL 1.0.2n  7 Dec 2017
+    ...
+    Last login: Sun Apr 12 20:05:09 2020 from localhost
+
+       __|  __|_  )
+       _|  (     /   Amazon Linux 2 AMI
+      ___|\___|___|
+
+    https://aws.amazon.com/amazon-linux-2/
+    [ec2-user@ip-192-168-45-158] ~ $ 
+    ```
+
+    From another terminal we can now connect to the MySQL RDS. Since the
+    port 3306 is forwarded from *localhost* through the tunnel we will
+    instruct `mysql` client to connect to `127.0.0.1` (localhost).
+
+    ```
+    ~ $ mysql -h 127.0.0.1 -u {RdsMasterUser} -p
+    Enter password: {RdsMasterPassword}
+    Welcome to the MariaDB monitor.  Commands end with ; or \g.
+    Server version: 5.6.10 MySQL Community Server (GPL)
+    
+    MySQL [(none)]> show processlist;
+    +-----+------------+-----------------------+
+    | Id  | User       | Host                  |
+    +-----+------------+-----------------------+
+    |  52 | rdsadmin   | localhost             |
+    | 289 | masteruser | 192.168.45.158:52182  | <<< Connection from test1 IP
+    +-----+------------+-----------------------+
+    2 rows in set (0.04 sec)
+    ```
+
+4. **Use `rsync` with `ssm-ssh`** to copy files to/from EC2 instance.
+
+    Since in the end we run a standard `ssh` client we can use it with
+    [rsync](https://en.wikipedia.org/wiki/Rsync) to copy files to/from the
+    EC2 instance.
+
+    ```
+    ~ $ rsync -e ssm-ssh -Prv ec2-user@test1:some-file.tar.gz .
+    some-file.tar.gz
+         31,337,841 100%  889.58kB/s    0:00:34 (xfr#1, to-chk=0/1)
+    sent 43 bytes  received 31,345,607 bytes  814,172.73 bytes/sec
+    total size is 31,337,841  speedup is 1.00
+    ```
+
+    Obviously we can supply select a different AWS profile and/or region:
+
+    ```
+    ~ $ rsync -e "ssm-ssh --profile aws-sandpit --region us-west-2" -Prv ...
+    ```
+
+    Alternatively set the profile and region through standard AWS
+    *environment variables* `AWS_DEFAULT_PROFILE` and
+    `AWS_DEFAULT_REGION`.`
+
+5. **Create IP tunnel** and SSH to another instance in the VPC through it.
+
+    We will use `--route 192.168.44.0/23` that gives us access to the VPC CIDR.
+
+    ```
+    ~ $ ssm-tunnel -v tunnel-test --route 192.168.44.0/23
     [ssm-tunnel] INFO: Local IP: 100.64.160.100 / Remote IP: 100.64.160.101
     00:00:15 | In:  156.0 B @    5.2 B/s | Out:  509.0 B @   40.4 B/s
     ```
@@ -136,10 +227,10 @@ on your laptop.
 
 ```
 ~ $ aws --version
-aws-cli/1.16.175 Python/3.6.8 Linux/4.15.0-51-generic botocore/1.12.165
+aws-cli/1.18.31 Python/3.6.9 Linux/5.3.0-42-generic botocore/1.15.31
 
 ~ $ session-manager-plugin --version
-1.1.17.0
+1.1.56.0
 ```
 
 Follow [AWS CLI installation
@@ -147,12 +238,18 @@ guide](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html)
 and [session-manager-plugin
 installation guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) to install them if needed.
 
+Note that `ssm-ssh` needs `session-manager-plugin` version *1.1.23* or
+newer. Upgrade if your version is older.
+
 ### Register your instances with Systems Manager
 
 *Amazon Linux 2* instances already have the `amazon-ssm-agent` installed and
 running. All they need to register with *Systems Manager* is
 **AmazonEC2RoleforSSM** managed role in their *IAM Instance Role* and network
 access to `ssm.{region}.amazonaws.com` either directly or through a *https proxy*.
+
+Follow the detailed instructions at [**Using SSM Session Manager for
+interactive instance access**](https://aws.nz/best-practice/ssm-session-manager/) for details.
 
 ### Install SSM-Tools *(finally! :)*
 
