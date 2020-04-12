@@ -64,7 +64,7 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     ```
 
     If you're like me and have access to many different AWS accounts you
-    can select the right `--profile` and / or change the `--region`:
+    can select the right one with `--profile` and / or change the `--region`:
 
     ```
     ~ $ ssm-session --profile aws-sandpit --region us-west-2 --list
@@ -81,6 +81,10 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     ```
 
 2. **Open SSM session** to an instance:
+
+    This opens an interactive shell session over SSM without the need for
+    a password or SSH key. Note that the login user is `ssm-user`, most
+    likely you will want to `sudo` to `ec2-user` or to `root` first.
 
     ```
     ~ $ ssm-session -v test1
@@ -103,12 +107,13 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     The `ssm-ssh` tool provides a connection and authentication mechanism
     for running SSH over Systems Manager.
 
-    Note that the target instance *does not need* inbound internet connection nor
-    needs an open SSH port in the Security Group. All it needs is being
+    The target instance *does not need* a public IP address, it also does
+    *not* need an open SSH port in the Security Group. All it needs is to be
     registered in the Systems Manager.
 
-    While we are at it we will forward port 3306 to our MySQL RDS database
-    using the standard `-L 3306:mysql-rds.aws.nz:3306` SSH port forwarding method.
+    All `ssh` options are supported, go wild. In this example we will
+    forward port 3306 to our MySQL RDS database using the standard
+    `-L 3306:mysql-rds.aws.nz:3306` SSH port forwarding method.
 
     ```
     ~ $ ssm-ssh ec2-user@test1 -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
@@ -122,8 +127,7 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
        _|  (     /   Amazon Linux 2 AMI
       ___|\___|___|
 
-    https://aws.amazon.com/amazon-linux-2/
-    [ec2-user@ip-192-168-45-158] ~ $ 
+    [ec2-user@ip-192-168-45-158] ~ $
     ```
 
     From another terminal we can now connect to the MySQL RDS. Since the
@@ -160,7 +164,7 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     total size is 31,337,841  speedup is 1.00
     ```
 
-    Obviously we can supply select a different AWS profile and/or region:
+    We can also select a different AWS profile and/or region:
 
     ```
     ~ $ rsync -e "ssm-ssh --profile aws-sandpit --region us-west-2" -Prv ...
@@ -202,23 +206,34 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-copy` and
     Obviously the **Security Groups** of your other instances must allow SSH
     access from the IP or SG of your tunnelling instance.
 
-All the tools support `--help` and a set of common parameters:
+All these tools support `--help` and a set of common parameters:
 
     --profile PROFILE, -p PROFILE
                         Configuration profile from ~/.aws/{credentials,config}
     --region REGION, -g REGION
                         Set / override AWS region.
-    --verbose, -v       Increase log level
-    --debug, -d         Increase log level
+    --verbose, -v       Increase log level.
+    --debug, -d         Increase log level even more.
 
-They also support the standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
-`AWS_DEFAULT_REGION`, etc.
+`ssm-ssh` only supports the long options to prevent conflict with `ssh`'s
+own short options that are being passed through.
+
+Standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
+`AWS_DEFAULT_REGION`, etc, are also supported.
 
 ## Installation
 
 All the tools use **AWS CLI** to open **SSM Session** and then use that
-session to run commands on the target instance. The target instances must be
-registered in SSM.
+session to run commands on the target instance. The target instances **must be
+registered in SSM**, which means they need:
+
+- **connectivity to SSM endpoint**, e.g. through public IP, NAT Gateway, or
+  SSM VPC endpoint.
+- **EC2 instance IAM Role** with permissions to connect to Systems Manager.
+
+Follow the detailed instructions at [**Using SSM Session Manager for
+interactive instance access**](https://aws.nz/best-practice/ssm-session-manager/)
+for more informations.
 
 ### Install *AWS CLI* and `session-manager-plugin`
 
@@ -248,8 +263,7 @@ running. All they need to register with *Systems Manager* is
 **AmazonEC2RoleforSSM** managed role in their *IAM Instance Role* and network
 access to `ssm.{region}.amazonaws.com` either directly or through a *https proxy*.
 
-Follow the detailed instructions at [**Using SSM Session Manager for
-interactive instance access**](https://aws.nz/best-practice/ssm-session-manager/) for details.
+Check out the [detailed instructions](https://aws.nz/best-practice/ssm-session-manager/) for more info.
 
 ### Install SSM-Tools *(finally! :)*
 
