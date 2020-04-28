@@ -5,11 +5,14 @@ import re
 import logging
 import botocore.credentials
 import botocore.session
+from botocore.exceptions import ClientError
 import boto3
 
 logger = logging.getLogger("ssm-session")
 
+
 class InstanceResolver():
+
     def __init__(self, args):
         # aws-cli compatible MFA cache
         cli_cache = os.path.join(os.path.expanduser('~'),'.aws/cli/cache')
@@ -22,11 +25,7 @@ class InstanceResolver():
         self.ssm_client = session.client('ssm')
         self.ec2_client = session.client('ec2')
 
-    def get_list(self):
-        def _try_append(_list, _dict, _key):
-            if _key in _dict:
-                _list.append(_dict[_key])
-
+    def _resolve_ssm(self):
         items = {}
 
         # List instances from SSM
@@ -56,36 +55,68 @@ class InstanceResolver():
                 except (KeyError, ValueError):
                     logger.debug("SSM inventory entity not recognised: %s", entity)
                     continue
+        return items
+
+    def _resolve_addresses(self, items, depth=0):
+        def _try_append(_list, _dict, _key):
+            if _key in _dict:
+                _list.append(_dict[_key])
 
         # Add attributes from EC2
-        paginator = self.ec2_client.get_paginator('describe_instances')
-        response_iterator = paginator.paginate(InstanceIds=list(items.keys()))
-        for reservations in response_iterator:
-            for reservation in reservations['Reservations']:
-                for instance in reservation['Instances']:
-                    instance_id = instance['InstanceId']
-                    if not instance_id in items:
-                        continue
+        try:
+            paginator = self.ec2_client.get_paginator('describe_instances')
+            response_iterator = paginator.paginate(InstanceIds=list(items.keys()))
+            for reservations in response_iterator:
+                for reservation in reservations['Reservations']:
+                    for instance in reservation['Instances']:
+                        instance_id = instance['InstanceId']
+                        if not instance_id in items:
+                            continue
 
-                    # Find instance IPs
-                    items[instance_id]['Addresses'] = []
-                    _try_append(items[instance_id]['Addresses'], instance, 'PrivateIpAddress')
-                    _try_append(items[instance_id]['Addresses'], instance, 'PublicIpAddress')
+                        # Find instance IPs
+                        items[instance_id]['Addresses'] = []
+                        _try_append(items[instance_id]['Addresses'], instance, 'PrivateIpAddress')
+                        _try_append(items[instance_id]['Addresses'], instance, 'PublicIpAddress')
 
-                    # Find instance name from tag Name
-                    items[instance_id]['InstanceName'] = ""
-                    for tag in instance['Tags']:
-                        if tag['Key'] == 'Name':
-                            items[instance_id]['InstanceName'] = tag['Value']
+                        # Find instance name from tag Name
+                        items[instance_id]['InstanceName'] = ""
+                        for tag in instance['Tags']:
+                            if tag['Key'] == 'Name':
+                                items[instance_id]['InstanceName'] = tag['Value']
 
-                    logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
-            return items
+                        logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
+        except ClientError as ex:
+            logger.debug(
+                'DescribeInstances got ClientError: %s (response: %s)',
+                ex, ex.response
+            )
+            if ex.response.get('Error', {}).get('Code', '') != 'InvalidInstanceID.NotFound':
+                raise
+            if not re.match(
+                    r'^The instance IDs? \'.+\' do(?:es)? not exist$',
+                    ex.response.get('Error', {}).get('Message', '')
+            ):
+                raise
+            if depth > 3:
+                logger.error(
+                    'Error: got InvalidInstanceID.NotFound error after three '
+                    'attempts; raising error.'
+                )
+                raise
+            logger.debug('Got InvalidInstanceID.NotFound error: %s', ex)
+            to_remove = ex.response['Error']['Message'].split("'")[1].split(', ')
+            logger.debug('Removing instance IDs: %s', to_remove)
+            return self._resolve_addresses(
+                {x: items[x] for x in items.keys() if x not in to_remove},
+                depth + 1
+            )
+        return items
 
     def print_list(self):
         hostname_len = 0
         instname_len = 0
 
-        items = self.get_list().values()
+        items = self._resolve_addresses(self._resolve_ssm()).values()
 
         if not items:
             logger.warning("No instances registered in SSM!")
@@ -96,10 +127,14 @@ class InstanceResolver():
 
         for item in items:
             hostname_len = max(hostname_len, len(item['HostName']))
-            instname_len = max(instname_len, len(item['InstanceName']))
+            instname_len = max(instname_len, len(item.get('InstanceName', '')))
 
         for item in items:
-            print(f"{item['InstanceId']}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
+            print(
+                f"{item['InstanceId']}   {item['HostName']:{hostname_len}}   "
+                f"{item.get('InstanceName', ''):{instname_len}}   "
+                f"{' '.join(item.get('Addresses', ''))}"
+            )
 
     def resolve_instance(self, instance):
         # Is it a valid Instance ID?
@@ -109,11 +144,26 @@ class InstanceResolver():
         # It is not - find it in the list
         instances = []
 
-        items = self.get_list()
+        # First try to resolve just by Instance ID or HostName, which SSM knows
+        items = self._resolve_ssm()
         for instance_id in items:
             item = items[instance_id]
-            if instance.lower() in [item['HostName'].lower(), item['InstanceName'].lower()] + item['Addresses']:
+            if instance.lower() in [
+                item['HostName'].lower(), item['InstanceId'].lower()
+            ]:
                 instances.append(instance_id)
+        logger.debug(
+            'After calling ssm:GetInventory, instances found: %s', items
+        )
+
+        if not instances:
+            # if Instance ID or HostName didn't work, call DescribeInstances
+            # to resolve by IP address or InstanceName (Name tag)
+            items = self._resolve_addresses(items)
+            for instance_id in items:
+                item = items[instance_id]
+                if instance.lower() in item['Addresses'] + [item['InstanceName']]:
+                    instances.append(instance_id)
 
         if not instances:
             return None
@@ -125,4 +175,3 @@ class InstanceResolver():
 
         # Found only one instance - return it
         return instances[0]
-
