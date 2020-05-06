@@ -49,8 +49,10 @@ class InstanceResolver():
                     instance_id = content['InstanceId']
                     items[instance_id] = {
                         "InstanceId": instance_id,
-                        "HostName": content.get("ComputerName"),
+                        "HostName": content.get("ComputerName", ''),
                     }
+                    if items[instance_id]['HostName'] is None:
+                        items[instance_id]['HostName'] = ''
                     logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
                 except (KeyError, ValueError):
                     logger.debug("SSM inventory entity not recognised: %s", entity)
@@ -59,7 +61,7 @@ class InstanceResolver():
 
     def _resolve_addresses(self, items, depth=0):
         def _try_append(_list, _dict, _key):
-            if _key in _dict:
+            if _dict.get(_key) is not None:
                 _list.append(_dict[_key])
 
         # Add attributes from EC2
@@ -81,7 +83,7 @@ class InstanceResolver():
                         # Find instance name from tag Name
                         items[instance_id]['InstanceName'] = ""
                         for tag in instance['Tags']:
-                            if tag['Key'] == 'Name':
+                            if tag['Key'] == 'Name' and tag['Value'] is not None:
                                 items[instance_id]['InstanceName'] = tag['Value']
 
                         logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
@@ -162,7 +164,7 @@ class InstanceResolver():
             items = self._resolve_addresses(items)
             for instance_id in items:
                 item = items[instance_id]
-                if instance.lower() in item['Addresses'] + [item['InstanceName']]:
+                if instance.lower() in item.get('Addresses', []) + [item.get('InstanceName', '')]:
                     instances.append(instance_id)
 
         if not instances:
