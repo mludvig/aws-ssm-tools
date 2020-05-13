@@ -54,7 +54,7 @@ class InstanceResolver():
                     items[instance_id] = {
                         "InstanceId": instance_id,
                         "InstanceName": "",
-                        "HostName": content.get("ComputerName"),
+                        "HostName": content.get("ComputerName", ""),
                         "Addresses": [ content.get("IpAddress") ],
                     }
                     logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
