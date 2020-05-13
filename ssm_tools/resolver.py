@@ -50,7 +50,7 @@ class InstanceResolver():
                     instance_id = content['InstanceId']
                     items[instance_id] = {
                         "InstanceId": instance_id,
-                        "HostName": content.get("ComputerName"),
+                        "HostName": content.get("ComputerName", ""),
                     }
                     logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
                 except (KeyError, ValueError):
