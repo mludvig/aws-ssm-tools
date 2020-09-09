@@ -39,7 +39,7 @@ class InstanceResolver():
                     content = entity['Data']['AWS:InstanceInformation']["Content"][0]
 
                     # At the moment we only support EC2 Instances and ManagedInstances
-                    if content["ResourceType"] not in [ "EC2Instance" ]:
+                    if content["ResourceType"] not in [ "EC2Instance", "ManagedInstance" ]:
                         logger.warning("Unknown instance type: %s: %s", entity['Id'], content['ResourceType'])
                         logger.debug(entity)
                         continue
@@ -53,7 +53,9 @@ class InstanceResolver():
                     instance_id = content['InstanceId']
                     items[instance_id] = {
                         "InstanceId": instance_id,
+                        "InstanceName": "",
                         "HostName": content.get("ComputerName"),
+                        "Addresses": [ content.get("IpAddress") ],
                     }
                     logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
                 except (KeyError, ValueError):
@@ -62,7 +64,8 @@ class InstanceResolver():
 
         # Add attributes from EC2
         paginator = self.ec2_client.get_paginator('describe_instances')
-        response_iterator = paginator.paginate(InstanceIds=list(items.keys()))
+        ec2_instance_ids = list(filter(lambda x: x.startswith("i-"), items))
+        response_iterator = paginator.paginate(InstanceIds=ec2_instance_ids)
         for reservations in response_iterator:
             for reservation in reservations['Reservations']:
                 for instance in reservation['Instances']:
@@ -76,7 +79,6 @@ class InstanceResolver():
                     _try_append(items[instance_id]['Addresses'], instance, 'PublicIpAddress')
 
                     # Find instance name from tag Name
-                    items[instance_id]['InstanceName'] = ""
                     for tag in instance['Tags']:
                         if tag['Key'] == 'Name':
                             items[instance_id]['InstanceName'] = tag['Value']
@@ -102,7 +104,7 @@ class InstanceResolver():
             instname_len = max(instname_len, len(item['InstanceName']))
 
         for item in items:
-            print(f"{item['InstanceId']}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
+            print(f"{item['InstanceId']:20}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
 
     def resolve_instance(self, instance):
         # Is it a valid Instance ID?
