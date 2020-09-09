@@ -38,8 +38,11 @@ class InstanceResolver():
                 try:
                     content = entity['Data']['AWS:InstanceInformation']["Content"][0]
 
-                    # At the moment we only support EC2 Instances
-                    assert content["ResourceType"] == "EC2Instance"
+                    # At the moment we only support EC2 Instances and ManagedInstances
+                    if content["ResourceType"] not in [ "EC2Instance" ]:
+                        logger.warning("Unknown instance type: %s: %s", entity['Id'], content['ResourceType'])
+                        logger.debug(entity)
+                        continue
 
                     # Ignore Terminated instances
                     if content.get("InstanceStatus") == "Terminated":
@@ -54,7 +57,7 @@ class InstanceResolver():
                     }
                     logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
                 except (KeyError, ValueError):
-                    logger.debug("SSM inventory entity not recognised: %s", entity)
+                    logger.warning("SSM inventory entity not recognised: %s", entity)
                     continue
 
         # Add attributes from EC2
