@@ -47,7 +47,7 @@ Author: Michael Ludvig
 '''
 
     # Parse supplied arguments
-    args = parser.parse_args(argv)
+    args, extras = parser.parse_known_args(argv)
 
     # If --version do it now and exit
     if args.show_version:
@@ -57,21 +57,26 @@ Author: Michael Ludvig
     if bool(args.INSTANCE) + bool(args.list) != 1:
         parser.error("Specify either INSTANCE or --list")
 
-    return args
+    return args, extras
 
-def start_session(instance_id, profile=None, region=None):
+def start_session(instance_id, extras, profile=None, region=None):
     extra_args = ""
     if profile:
         extra_args += f"--profile {profile} "
     if region:
         extra_args += f"--region {region} "
-    command = f'aws {extra_args} ssm start-session --target {instance_id}'
+
+    parameters = ""
+    for extra in extras:
+        parameters += f" {extra}"
+
+    command = f'aws {extra_args} ssm start-session --target {instance_id}{parameters}'
     logger.info("Running: %s", command)
     os.system(command)
 
 def main():
     ## Split command line to main args and optional command to run
-    args = parse_args(sys.argv[1:])
+    args, extras = parse_args(sys.argv[1:])
 
     logger = configure_logging("ssm-session", args.log_level)
 
@@ -88,7 +93,7 @@ def main():
             logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
             quit(1)
 
-        start_session(instance_id, profile=args.profile, region=args.region)
+        start_session(instance_id, extras, profile=args.profile, region=args.region)
 
     except (botocore.exceptions.BotoCoreError,
             botocore.exceptions.ClientError) as e:
