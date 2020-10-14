@@ -66,11 +66,9 @@ def start_session(instance_id, extras, profile=None, region=None):
     if region:
         extra_args += f"--region {region} "
 
-    parameters = ""
-    for extra in extras:
-        parameters += f" {extra}"
+    parameters = " ".join(extras)
 
-    command = f'aws {extra_args} ssm start-session --target {instance_id}{parameters}'
+    command = f'aws {extra_args} ssm start-session --target {instance_id} {parameters}'
     logger.info("Running: %s", command)
     os.system(command)
 
