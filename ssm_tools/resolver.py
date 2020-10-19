@@ -65,30 +65,59 @@ class InstanceResolver():
         # Add attributes from EC2
         paginator = self.ec2_client.get_paginator('describe_instances')
         ec2_instance_ids = list(filter(lambda x: x.startswith("i-"), items))
-        response_iterator = paginator.paginate(InstanceIds=ec2_instance_ids)
-        for reservations in response_iterator:
-            for reservation in reservations['Reservations']:
-                for instance in reservation['Instances']:
-                    instance_id = instance['InstanceId']
-                    if not instance_id in items:
-                        continue
 
-                    # Find instance IPs
-                    items[instance_id]['Addresses'] = []
-                    _try_append(items[instance_id]['Addresses'], instance, 'PrivateIpAddress')
-                    _try_append(items[instance_id]['Addresses'], instance, 'PublicIpAddress')
+        tries = 5
+        while tries:
+            # The SSM inventory sometimes returns instances that have been terminated
+            # a short while ago which makes the following call fail
+            # with InvalidInstanceID.NotFound exception. We'll try and remove the invalid
+            # instance ids a {tries} times or until we succeed. If unsuccessful we'll remove
+            # the list obtained from SSM without extra details (host name, public IPs, etc).
+            # This mostly / only affects accounts with high churn of starting / stopping
+            # instances - most users will pass this loop only once.
+            try:
+                response_iterator = paginator.paginate(InstanceIds=ec2_instance_ids)
+                for reservations in response_iterator:
+                    for reservation in reservations['Reservations']:
+                        for instance in reservation['Instances']:
+                            instance_id = instance['InstanceId']
+                            if not instance_id in items:
+                                continue
 
-                    # Find instance name from tag Name
-                    for tag in instance['Tags']:
-                        if tag['Key'] == 'Name':
-                            items[instance_id]['InstanceName'] = tag['Value']
+                            # Find instance IPs
+                            items[instance_id]['Addresses'] = []
+                            _try_append(items[instance_id]['Addresses'], instance, 'PrivateIpAddress')
+                            _try_append(items[instance_id]['Addresses'], instance, 'PublicIpAddress')
 
-                    logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
-            return items
+                            # Find instance name from tag Name
+                            for tag in instance['Tags']:
+                                if tag['Key'] == 'Name' and tag['Value']:
+                                    items[instance_id]['InstanceName'] = tag['Value']
+
+                            logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
+                    return items
+
+            except botocore.exceptions.ClientError as ex:
+                if ex.response.get('Error', {}).get('Code', '') != 'InvalidInstanceID.NotFound':
+                    raise
+                message = ex.response.get('Error', {}).get('Message', '')
+                if not message.startswith("The instance ID") or not message.endswith("not exist"):
+                    logger.warning("Unexpected InvalidInstanceID.NotFound message:", message)
+                # Try to extract instace ids ...
+                remove_instance_ids = re.findall('i-[0-9a-f]+', message)
+                logger.debug("Removing non-existent InstanceIds: %s", remove_instance_ids)
+                # Remove the failed ids from the list and try again
+                ec2_instance_ids = list(set(ec2_instance_ids) - set(remove_instance_ids))
+                tries -= 1
+
+        if not tries:
+            logger.warning("Unable to list instance details. Some instance names and IPs may be missing.")
+
+        return items
 
     def print_list(self):
-        hostname_len = 0
-        instname_len = 0
+        hostname_len = 1    # Minimum of 1 char, otherwise f-string below fails for empty hostnames
+        instname_len = 1
 
         items = self.get_list().values()
 
