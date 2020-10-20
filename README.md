@@ -82,24 +82,26 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-ssh` and `ssm-tunnel`.
 2. **Open SSM session** to an instance:
 
     This opens an interactive shell session over SSM without the need for
-    a password or SSH key. Note that the login user is `ssm-user`, most
-    likely you will want to `sudo` to `ec2-user` or to `root` first.
+    a password or SSH key. Note that by default the login user is `ssm-user`.
+    You can specify most a different user with e.g. `--user ec2-user` or
+    even `--user root`.
 
     ```
-    ~ $ ssm-session -v test1
+    ~ $ ssm-session -v test1 --user ec2-user
     Starting session with SessionId: botocore-session-0d381a3ef740153ac
-    sh-4.2$ hostname
+    [ec2-user@ip-192-168-45-158] ~ $ hostname
     test1.aws.nz
 
-    sh-4.2$ sudo -u ec2-user -i
     [ec2-user@ip-192-168-45-158] ~ $ id
     uid=1000(ec2-user) gid=1000(ec2-user) groups=1000(ec2-user),...
 
     [ec2-user@ip-192-168-45-158] ~ $ ^D
-    sh-4.2$ exit
     Exiting session with sessionId: botocore-session-0d381a3ef740153ac.
     ~ $
     ```
+
+    You can specify other SSM documents to run with `--document-name AWS-...`
+    to customise your session. Refer to AWS docs for details.
 
 3. **Open SSH session** over SSM with *port forwarding*.
 
