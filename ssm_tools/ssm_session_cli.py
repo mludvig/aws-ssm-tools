@@ -35,6 +35,11 @@ def parse_args(argv):
     group_instance.add_argument('INSTANCE', nargs='?', help='Instance ID, Name, Host name or IP address')
     group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances available for SSM Session')
 
+    group_session = parser.add_argument_group('Session Parameters')
+    group_session.add_argument('--user', '-u', '--sudo', dest='user', metavar="USER", help='SUDO to USER after opening the session. Can\'t be used together with --document-name / --parameters. (optional)')
+    group_session.add_argument('--document-name', dest='document_name', help='Document to execute, e.g. AWS-StartInteractiveCommand (optional)')
+    group_session.add_argument('--parameters', dest='parameters', help='Parameters for the --document-name, e.g. \'command=["sudo -i -u ec2-user"]\' (optional)')
+
     parser.description = 'Start SSM Shell Session to a given instance'
     parser.epilog = f'''
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
@@ -57,18 +62,33 @@ Author: Michael Ludvig
     if bool(args.INSTANCE) + bool(args.list) != 1:
         parser.error("Specify either INSTANCE or --list")
 
+    if args.parameters and not args.document_name:
+        parser.error("--parameters can only be used together with --document-name")
+
+    if args.user and args.document_name:
+            parser.error("--user can't used used together with --document-name")
+
     return args, extras
 
-def start_session(instance_id, extras, profile=None, region=None):
-    extra_args = ""
-    if profile:
-        extra_args += f"--profile {profile} "
-    if region:
-        extra_args += f"--region {region} "
+def start_session(instance_id, args):
+    aws_args = ""
+    if args.profile:
+        aws_args += f"--profile {args.profile} "
+    if args.region:
+        aws_args += f"--region {args.region} "
 
-    parameters = " ".join(extras)
+    ssm_args = ""
+    if args.user:
+        # Fake --document-name / --parameters for --user
+        ssm_args += f"--document-name AWS-StartInteractiveCommand --parameters 'command=[\"sudo -i -u {args.user}\"]'"
+    else:
+        # Or use the provided values
+        if args.document_name:
+            ssm_args += f"--document-name {args.document_name} "
+        if args.parameters:
+            ssm_args += f"--parameters {args.parameters} "
 
-    command = f'aws {extra_args} ssm start-session --target {instance_id} {parameters}'
+    command = f'aws {aws_args} ssm start-session --target {instance_id} {ssm_args}'
     logger.info("Running: %s", command)
     os.system(command)
 
@@ -76,6 +96,7 @@ def main():
     ## Split command line to main args and optional command to run
     args, extras = parse_args(sys.argv[1:])
 
+    global logger
     logger = configure_logging("ssm-session", args.log_level)
 
     try:
@@ -91,7 +112,7 @@ def main():
             logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
             quit(1)
 
-        start_session(instance_id, extras, profile=args.profile, region=args.region)
+        start_session(instance_id, args)
 
     except (botocore.exceptions.BotoCoreError,
             botocore.exceptions.ClientError) as e:
