@@ -14,6 +14,7 @@
 import os
 import sys
 import logging
+import signal
 import argparse
 import botocore.exceptions
 
@@ -21,6 +22,8 @@ from .common import *
 from .resolver import InstanceResolver
 
 logger = logging.getLogger()
+
+signal.signal(signal.SIGTSTP, signal.SIG_IGN)   # Ignore Ctrl-Z - pass it on to the shell
 
 def parse_args(argv):
     """
