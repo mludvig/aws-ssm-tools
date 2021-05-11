@@ -19,7 +19,7 @@ workflows:
 jobs:
   build:
     docker:
-      - image: circleci/python:3.6
+      - image: circleci/python:3.9
 
     steps:
       - checkout
@@ -40,7 +40,7 @@ jobs:
 
   publish:
     docker:
-      - image: circleci/python:3.6
+      - image: circleci/python:3.9
 
     steps:
       - checkout

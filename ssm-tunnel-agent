@@ -12,6 +12,7 @@
 from __future__ import print_function
 
 import os
+import errno
 import sys
 import time
 import struct
@@ -45,7 +46,7 @@ def create_tun(tun_name, local_ip, remote_ip):
         run_command("sudo iptables -t nat -I POSTROUTING -m comment --comment \"{tun_name}\" -s {remote_ip} -j MASQUERADE".format(**params), assert_0=False)
     except AssertionError:
         delete_tun(tun_name, local_ip, remote_ip)
-        quit(1)
+        sys.exit(1)
     except:
         delete_tun(tun_name, local_ip, remote_ip)
         raise
@@ -76,7 +77,7 @@ def setup_tun(tun_name):
 def tun_reader(tun_fd):
     while True:
         try:
-            r, w, x = select.select([tun_fd], [], [], keepalive_sec)
+            r, _, _ = select.select([tun_fd], [], [], keepalive_sec)
             if not tun_fd in r:
                 # Keepalive timeout - send '#'
                 sys.stdout.write("#\n")
@@ -86,7 +87,7 @@ def tun_reader(tun_fd):
             sys.stdout.write("%{}\n".format(b64encode(buf).decode('ascii')))
             sys.stdout.flush()
         except OSError as e:
-            if e.errno == os.errno.EBADF:
+            if e.errno == errno.EBADF:
                 # Closed FD during exit
                 break
 
@@ -110,7 +111,7 @@ def main():
         last_ts = time.time()
         stdin_fd = sys.stdin.fileno()       # Should be '0', but still...
         while True:
-            r, w, x = select.select([stdin_fd], [], [], 1)    # Wait 1 sec for input
+            r, _, _ = select.select([stdin_fd], [], [], 1)    # Wait 1 sec for input
             if not stdin_fd in r:
                 if last_ts + timeout_sec < time.time():
                     print("# ERROR: {} sec timeout, exitting...".format(timeout_sec))
