@@ -89,7 +89,7 @@ def start_session(instance_id, args):
         if args.document_name:
             ssm_args += f"--document-name {args.document_name} "
         if args.parameters:
-            ssm_args += f"--parameters {args.parameters} "
+            ssm_args += f"--parameters '{args.parameters}' "
 
     command = f'aws {aws_args} ssm start-session --target {instance_id} {ssm_args}'
     logger.info("Running: %s", command)
