@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import copy
+import errno
 import threading
 import random
 import struct
@@ -181,7 +182,7 @@ class SsmTunnel(SsmTalker):
                 buf = os.read(self._tun_fd, 1504)     # Virtual GRE header adds 4 bytes
                 self._child.sendline("%{}".format(b64encode(buf).decode('ascii')))
             except OSError as e:
-                if e.errno == os.errno.EBADF and self._exiting:
+                if e.errno == errno.EBADF and self._exiting:
                     break
 
             last_ts = time.time()
