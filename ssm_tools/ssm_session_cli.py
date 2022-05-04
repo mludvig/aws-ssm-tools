@@ -15,6 +15,7 @@ import os
 import sys
 import logging
 import signal
+import subprocess
 import argparse
 import botocore.exceptions
 
@@ -40,6 +41,7 @@ def parse_args(argv):
 
     group_session = parser.add_argument_group('Session Parameters')
     group_session.add_argument('--user', '-u', '--sudo', dest='user', metavar="USER", help='SUDO to USER after opening the session. Can\'t be used together with --document-name / --parameters. (optional)')
+    group_session.add_argument('--shell', '-s', dest='shell', help='Choose a shell to run the aws command. If avoided, will default to $SHELL')
     group_session.add_argument('--document-name', dest='document_name', help='Document to execute, e.g. AWS-StartInteractiveCommand (optional)')
     group_session.add_argument('--parameters', dest='parameters', help='Parameters for the --document-name, e.g. \'command=["sudo -i -u ec2-user"]\' (optional)')
 
@@ -69,7 +71,7 @@ Author: Michael Ludvig
         parser.error("--parameters can only be used together with --document-name")
 
     if args.user and args.document_name:
-            parser.error("--user can't used used together with --document-name")
+        parser.error("--user can't used used together with --document-name")
 
     return args, extras
 
@@ -93,7 +95,11 @@ def start_session(instance_id, args):
 
     command = f'aws {aws_args} ssm start-session --target {instance_id} {ssm_args}'
     logger.info("Running: %s", command)
-    os.system(command)
+
+    shell = args.shell if args.shell else os.environ.get("SHELL", "/bin/sh")
+    # the shell is run interactively to source the rc file
+    # it's useful to expand aliases or running awscli in a Docker container
+    subprocess.run([shell, '-i', '-c', command])
 
 def main():
     ## Split command line to main args and optional command to run
