@@ -14,6 +14,7 @@ README = (HERE / "README.md").read_text()
 
 SCRIPTS = [
     'ssm-session',
+    'ecs-session',
     'ssm-ssh',
     'ssm-tunnel',
 ]

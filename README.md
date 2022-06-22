@@ -13,12 +13,24 @@ Helper tools for AWS Systems Manager: `ssm-session`, `ssm-ssh` and `ssm-tunnel`.
   Wrapper around `aws ssm start-session` that can open
   SSM Session to an instance specified by *Name* or *IP Address*.
 
-  It doesn't need user credentials or even `sshd` running on the instace.
+  It doesn't need user credentials or even `sshd` running on the instance.
 
   Check out *[SSM Sessions the easy
   way](https://aws.nz/projects/ssm-session/)* for an example use.
 
   Works with any Linux or Windows EC2 instance registered in SSM.
+
+* **ecs-session**
+
+  Wrapper around `aws ecs execute-command` that can run a command
+  or open an interactive session to an Exec-enabled ECS container
+  specified by the service, name, IP address, etc.
+
+  It doesn't need user credentials or `sshd` running on the container,
+  however the containers must be configured to allow this access.
+
+  Check out *[Interactive shell in ECS Containers](https://aws.nz/projects/ecs-session/)*
+  for an example use.
 
 * **ssm-tunnel**
 

@@ -9,18 +9,23 @@ import boto3
 
 logger = logging.getLogger("ssm-session")
 
-class InstanceResolver():
+class CommonResolver():
     def __init__(self, args):
         # aws-cli compatible MFA cache
         cli_cache = os.path.join(os.path.expanduser('~'),'.aws/cli/cache')
 
         # Construct boto3 session with MFA cache
-        session = boto3.session.Session(profile_name=args.profile, region_name=args.region)
-        session._session.get_component('credential_provider').get_provider('assume-role').cache = botocore.credentials.JSONFileCache(cli_cache)
+        self.session = boto3.session.Session(profile_name=args.profile, region_name=args.region)
+        self.session._session.get_component('credential_provider').get_provider('assume-role').cache = botocore.credentials.JSONFileCache(cli_cache)
+
+
+class InstanceResolver(CommonResolver):
+    def __init__(self, args):
+        super().__init__(args)
 
         # Create boto3 clients from session
-        self.ssm_client = session.client('ssm')
-        self.ec2_client = session.client('ec2')
+        self.ssm_client = self.session.client('ssm')
+        self.ec2_client = self.session.client('ec2')
 
     def get_list(self):
         def _try_append(_list, _dict, _key):
@@ -160,3 +165,109 @@ class InstanceResolver():
         # Found only one instance - return it
         return instances[0]
 
+class ContainerResolver(CommonResolver):
+    def __init__(self, args):
+        super().__init__(args)
+
+        # Create boto3 clients from session
+        self.ecs_client = self.session.client('ecs')
+
+        self.containers = []
+        self._tasks = {}
+
+    def add_container(self, container):
+        _task_parsed = container['taskArn'].split(":")[-1].split("/")
+        self.containers.append({
+            "cluster_name": _task_parsed[1],
+            "task_id": _task_parsed[2],
+            "cluster_arn": self._tasks[container['taskArn']]['clusterArn'],
+            "task_arn": container['taskArn'],
+            "group_name": self._tasks[container['taskArn']]['group'],
+            "container_name": container['name'],
+            "container_ip": container['networkInterfaces'][0]['privateIpv4Address'],
+        })
+
+    def get_list(self):
+        def _try_append(_list, _dict, _key):
+            if _key in _dict:
+                _list.append(_dict[_key])
+
+        items = {}
+
+        # List ECS Clusters
+        clusters = []
+        logger.debug("Listing ECS Clusters")
+        paginator = self.ecs_client.get_paginator('list_clusters')
+        for page in paginator.paginate():
+            clusters.extend(page['clusterArns'])
+
+        if not clusters:
+            logger.warning("No ECS Clusters found.")
+            return []
+
+        # List tasks in each cluster
+        paginator = self.ecs_client.get_paginator('list_tasks')
+        for cluster in clusters:
+            logger.debug("Listing tasks in cluster: %s", cluster)
+
+            # maxResults must be <= 100 because describe_tasks() doesn't accept more than that
+            for page in paginator.paginate(cluster=cluster, maxResults=100):
+                response = self.ecs_client.describe_tasks(cluster=cluster, tasks=page['taskArns'])
+
+                # Filter containers that have a running ExecuteCommandAgent
+                for task in response['tasks']:
+                    self._tasks[task['taskArn']] = task
+                    for container in task['containers']:
+                        if not 'managedAgents' in container:
+                            continue
+                        for agent in container['managedAgents']:
+                            if agent['name'] == 'ExecuteCommandAgent' and agent['lastStatus'] == 'RUNNING':
+                                self.add_container(container)
+
+        return self.containers
+
+    def print_containers(self, containers):
+        max_len = {}
+        for container in containers:
+            for key in container.keys():
+                if not key in max_len:
+                    max_len[key] = len(container[key])
+                else:
+                    max_len[key] = max(max_len[key], len(container[key]))
+        containers.sort(key = lambda x: [x['cluster_name'], x['container_name']])
+        for container in containers:
+            print(f"{container['cluster_name']:{max_len['cluster_name']}}  {container['group_name']:{max_len['group_name']}}  {container['task_id']:{max_len['task_id']}}  {container['container_name']:{max_len['container_name']}}  {container['container_ip']:{max_len['container_ip']}}")
+
+    def print_list(self):
+        containers = self.get_list()
+
+        if not containers:
+            logger.warning("No Execute-Command capable contaianers found!")
+            quit(1)
+
+        self.print_containers(containers)
+
+    def resolve_container(self, keyword):
+        containers = self.get_list()
+
+        if not containers:
+            logger.warning("No Execute-Command capable contaianers found!")
+            quit(1)
+
+        logger.debug("Searching for: %s", keyword)
+
+        candidates = []
+        for container in containers:
+            if keyword in (container['group_name'], container['task_id'], container['container_name'], container['container_ip']):
+                candidates.append(container)
+        if not candidates:
+            logger.warning("No container found for: %s", keyword)
+            quit(1)
+        elif len(candidates) == 1:
+            self.print_containers(candidates)
+            return candidates[0]
+        else:
+            logger.warning("Found %d instances for: %s", len(containers), keyword)
+            logger.warning("Use Container IP or Task ID to connect to a specific one")
+            self.print_containers(candidates)
+            quit(1)
