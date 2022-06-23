@@ -4,7 +4,8 @@
 [![PyPI](https://img.shields.io/pypi/v/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
 
-Helper tools for AWS Systems Manager: `ssm-session`, `ssm-ssh` and `ssm-tunnel`.
+Helper tools for AWS Systems Manager: `ssm-session`, `ssm-ssh` and `ssm-tunnel`,
+and for ECS Docker Exec: `ecs-session`
 
 ## Scripts included
 
