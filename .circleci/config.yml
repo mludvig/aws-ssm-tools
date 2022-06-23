@@ -19,7 +19,7 @@ workflows:
 jobs:
   build:
     docker:
-      - image: circleci/python:3.6
+      - image: circleci/python:3.9
 
     steps:
       - checkout
@@ -33,14 +33,14 @@ jobs:
       - run:
           name: Check syntax and style
           command: |
-            PYTHON_SCRIPTS=$(grep -l '#!/usr/bin/env python' ssm-*)
+            PYTHON_SCRIPTS=$(grep -l '#!/usr/bin/env python' ssm-* ecs-*)
             pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ${PYTHON_SCRIPTS}
             pylint --errors-only ${PYTHON_SCRIPTS}
 
 
   publish:
     docker:
-      - image: circleci/python:3.6
+      - image: circleci/python:3.9
 
     steps:
       - checkout
