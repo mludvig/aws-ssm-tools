@@ -34,6 +34,7 @@ def parse_args(argv):
     group_container = parser.add_argument_group('Container Selection')
     group_container.add_argument('CONTAINER', nargs='?', help='Task ID, Container Name or IP address')
     group_container.add_argument('--list', '-l', dest='list', action="store_true", help='List available containers configured for ECS RunTask')
+    group_container.add_argument('--cluster', dest='cluster', metavar='CLUSTER', help='Specify an ECS cluster. (optional)')
 
     group_session = parser.add_argument_group('Session Parameters')
     group_session.add_argument('--command', dest='command', metavar='COMMAND', default='/bin/sh', help='Command to run inside the container. Default: /bin/sh')

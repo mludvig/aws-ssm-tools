@@ -172,6 +172,7 @@ class ContainerResolver(CommonResolver):
         # Create boto3 clients from session
         self.ecs_client = self.session.client('ecs')
 
+        self.args = args
         self.containers = []
         self._tasks = {}
 
@@ -200,6 +201,14 @@ class ContainerResolver(CommonResolver):
         paginator = self.ecs_client.get_paginator('list_clusters')
         for page in paginator.paginate():
             clusters.extend(page['clusterArns'])
+
+        if self.args.cluster:
+            filtered_clusters = []
+            for cluster in clusters:
+                if ((self.args.cluster.startswith('arn:') and cluster == self.args.cluster) or cluster.endswith(f"/{self.args.cluster}")):
+                    filtered_clusters.append(cluster)
+                    break
+            clusters = filtered_clusters
 
         if not clusters:
             logger.warning("No ECS Clusters found.")
