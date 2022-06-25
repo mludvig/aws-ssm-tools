@@ -142,7 +142,7 @@ class InstanceResolver(CommonResolver):
 
     def resolve_instance(self, instance):
         # Is it a valid Instance ID?
-        if re.match('^i-[a-f0-9]+$', instance):
+        if re.match('^m?i-[a-f0-9]+$', instance):
             return instance
 
         # It is not - find it in the list
