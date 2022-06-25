@@ -57,7 +57,7 @@ setup(
     install_requires=reqs,
 
     package_data={
-        '': ['*.txt', '*.md', 'ssm-tunnel-updown.dns-example'],
+        '': ['*.txt', '*.md', 'ssm-tunnel-updown.dns-example', 'LICENSE'],
     },
 
     author="Michael Ludvig",
