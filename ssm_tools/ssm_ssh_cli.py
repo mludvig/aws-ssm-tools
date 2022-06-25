@@ -63,11 +63,10 @@ def start_ssh_session(ssh_args, profile=None, region=None):
         aws_args += f"--profile {profile} "
     if region:
         aws_args += f"--region {region} "
-    proxy_option = f"-o ProxyCommand='aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p'"
-    ssh_args = " ".join([ f"'{arg}'" for arg in ssh_args ])
-    command = f'ssh {proxy_option} {ssh_args}'
+    proxy_option = ["-o", f"ProxyCommand=aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"]
+    command = ["ssh"] + proxy_option + ssh_args
     logger.info("Running: %s", command)
-    os.system(command)
+    os.execvp(command[0], command)
 
 def main():
     global logger

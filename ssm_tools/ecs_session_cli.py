@@ -63,21 +63,21 @@ Author: Michael Ludvig
     return args, extras
 
 def start_session(container, args, command):
-    aws_args = ""
+    exec_args = [ "aws", "ecs", "execute-command" ]
     if args.profile:
-        aws_args += f"--profile {args.profile} "
+        exec_args += ["--profile", args.profile]
     if args.region:
-        aws_args += f"--region {args.region} "
+        exec_args += ["--region", args.region]
 
-    command = (
-        f'aws {aws_args} ecs execute-command '
-            f'--cluster {container["cluster_arn"]} '
-            f'--task {container["task_arn"]} '
-            f'--container {container["container_name"]} '
-            f'--command \'{command}\' --interactive '
-    )
-    logger.info("Running: %s", command)
-    os.system(command)
+    exec_args += [
+        "--cluster", container["cluster_arn"],
+        "--task", container["task_arn"],
+        "--container", container["container_name"],
+        "--command", command, "--interactive",
+    ]
+
+    logger.info("Running: %s", exec_args)
+    os.execvp(exec_args[0], exec_args)
 
 def main():
     ## Split command line to main args and optional command to run

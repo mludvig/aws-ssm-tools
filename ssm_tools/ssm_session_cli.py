@@ -74,26 +74,26 @@ Author: Michael Ludvig
     return args, extras
 
 def start_session(instance_id, args):
-    aws_args = ""
+    exec_args = [ "aws", "ssm", "start-session" ]
     if args.profile:
-        aws_args += f"--profile {args.profile} "
+        exec_args += ["--profile", args.profile]
     if args.region:
-        aws_args += f"--region {args.region} "
+        exec_args += ["--region", args.region]
 
-    ssm_args = ""
     if args.user:
         # Fake --document-name / --parameters for --user
-        ssm_args += f"--document-name AWS-StartInteractiveCommand --parameters 'command=[\"sudo -i -u {args.user}\"]'"
+        exec_args += [ "--document-name", "AWS-StartInteractiveCommand",
+                       "--parameters", f"command=[\"sudo -i -u {args.user}\"]" ]
     else:
         # Or use the provided values
         if args.document_name:
-            ssm_args += f"--document-name {args.document_name} "
+            exec_args += [ "--document-name", args.document_name ]
         if args.parameters:
-            ssm_args += f"--parameters '{args.parameters}' "
+            exec_args += [ "--parameters", args.parameters ]
 
-    command = f'aws {aws_args} ssm start-session --target {instance_id} {ssm_args}'
-    logger.info("Running: %s", command)
-    os.system(command)
+    exec_args += ["--target", instance_id]
+    logger.info("Running: %s", exec_args)
+    os.execvp(exec_args[0], exec_args)
 
 def main():
     ## Split command line to main args and optional command to run
