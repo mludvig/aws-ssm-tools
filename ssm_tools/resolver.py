@@ -64,7 +64,7 @@ class InstanceResolver(CommonResolver):
                     }
                     logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
                 except (KeyError, ValueError):
-                    logger.warning("SSM inventory entity not recognised: %s", entity)
+                    logger.debug("SSM inventory entity not recognised: %s", entity)
                     continue
 
         # Add attributes from EC2
@@ -276,7 +276,7 @@ class ContainerResolver(CommonResolver):
             self.print_containers(candidates)
             return candidates[0]
         else:
-            logger.warning("Found %d instances for: %s", len(containers), keyword)
+            logger.warning("Found %d instances for: %s", len(candidates), keyword)
             logger.warning("Use Container IP or Task ID to connect to a specific one")
             self.print_containers(candidates)
             quit(1)
