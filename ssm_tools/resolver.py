@@ -107,7 +107,7 @@ class InstanceResolver(CommonResolver):
                     raise
                 message = ex.response.get('Error', {}).get('Message', '')
                 if not message.startswith("The instance ID") or not message.endswith("not exist"):
-                    logger.warning("Unexpected InvalidInstanceID.NotFound message:", message)
+                    logger.warning("Unexpected InvalidInstanceID.NotFound message: %s", message)
                 # Try to extract instace ids ...
                 remove_instance_ids = re.findall('i-[0-9a-f]+', message)
                 logger.debug("Removing non-existent InstanceIds: %s", remove_instance_ids)

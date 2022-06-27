@@ -14,6 +14,7 @@ from __future__ import print_function
 import os
 import sys
 import time
+import errno
 import struct
 import select
 import fcntl
@@ -86,7 +87,7 @@ def tun_reader(tun_fd):
             sys.stdout.write("%{}\n".format(b64encode(buf).decode('ascii')))
             sys.stdout.flush()
         except OSError as e:
-            if e.errno == os.errno.EBADF:
+            if e.errno == errno.EBADF:
                 # Closed FD during exit
                 break
 
