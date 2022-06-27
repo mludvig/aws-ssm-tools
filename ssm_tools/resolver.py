@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import re
 import logging
 import botocore.credentials
@@ -160,7 +161,7 @@ class InstanceResolver(CommonResolver):
         if len(instances) > 1:
             logger.warning("Found %d instances for '%s': %s", len(instances), instance, " ".join(instances))
             logger.warning("Use INSTANCE_ID to connect to a specific one")
-            quit(1)
+            sys.exit(1)
 
         # Found only one instance - return it
         return instances[0]
@@ -252,7 +253,7 @@ class ContainerResolver(CommonResolver):
 
         if not containers:
             logger.warning("No Execute-Command capable contaianers found!")
-            quit(1)
+            sys.exit(1)
 
         self.print_containers(containers)
 
@@ -261,7 +262,7 @@ class ContainerResolver(CommonResolver):
 
         if not containers:
             logger.warning("No Execute-Command capable contaianers found!")
-            quit(1)
+            sys.exit(1)
 
         logger.debug("Searching for: %s", keyword)
 
@@ -271,7 +272,7 @@ class ContainerResolver(CommonResolver):
                 candidates.append(container)
         if not candidates:
             logger.warning("No container found for: %s", keyword)
-            quit(1)
+            sys.exit(1)
         elif len(candidates) == 1:
             self.print_containers(candidates)
             return candidates[0]
@@ -279,4 +280,4 @@ class ContainerResolver(CommonResolver):
             logger.warning("Found %d instances for: %s", len(candidates), keyword)
             logger.warning("Use Container IP or Task ID to connect to a specific one")
             self.print_containers(candidates)
-            quit(1)
+            sys.exit(1)

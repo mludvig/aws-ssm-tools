@@ -48,7 +48,7 @@ def parse_args():
 
     group_network = parser.add_argument_group('Networking Options')
     group_network.add_argument('--route', '-r', metavar="ROUTE", dest="routes", type=str, action="append",
-        help='CIDR(s) to route through this tunnel. May be used multiple times.')
+                               help='CIDR(s) to route through this tunnel. May be used multiple times.')
     group_network.add_argument('--tunnel-cidr', metavar="CIDR", type=str, default=tunnel_cidr, help=f'''By default
         the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598).
         This should be ok for most users.''')
@@ -113,7 +113,7 @@ class SsmTunnel(SsmTalker):
             logger.error("Unable to establish the tunnel!")
             logger.error("ssm-tunnel-agent: command not found on the target instance %s.", self._instance_id)
             logger.error("Use 'ssm-session %s' and then run 'sudo pip install aws-ssm-tunnel-agent' to install it.", self._instance_id)
-            quit(1)
+            sys.exit(1)
         logger.debug(self._child.after)
 
     def open_local_tunnel(self):
@@ -123,8 +123,8 @@ class SsmTunnel(SsmTalker):
         self.create_tun()
         self._tun_fd = self.open_tun()
 
-        logger.debug(f"# Local device {self.tun_name} is ready")
-        logger.info(f"Local IP: {self.local_ip} / Remote IP: {self.remote_ip}")
+        logger.debug("# Local device %s is ready", self.tun_name)
+        logger.info("Local IP: %s / Remote IP: %s", self.local_ip, self.remote_ip)
 
     def create_tun(self):
         try:
@@ -137,7 +137,7 @@ class SsmTunnel(SsmTalker):
                 self.run_command(f"sudo ip route add {route} via {self.remote_ip}")
         except AssertionError:
             self.delete_tun()
-            quit(1)
+            sys.exit(1)
         except Exception as e:
             logger.exception(e)
             self.delete_tun()
@@ -246,11 +246,11 @@ class SsmTunnel(SsmTalker):
         routes = " ".join(self.routes)
         try:
             cmd = f"{self.updown_script} {status} {self.tun_name} {self.local_ip} {self.remote_ip} {routes}"
-            logger.info(f"Running --up-down script: {cmd}")
+            logger.info("Running --up-down script: %s", cmd)
             self.run_command(cmd)
             self.updown_up_success = True
         except AssertionError:
-            logger.error(f'Updown script {self.updown_script} exitted with error.')
+            logger.error('Updown script %s exitted with error.', self.updown_script)
             sys.exit(1)
 
     def start(self, local_ip, remote_ip, routes, updown_script):
@@ -298,7 +298,7 @@ class SsmTunnel(SsmTalker):
                 l2r_avg = r2l_avg = 0.0
 
             # Trim the oldest points
-            del(stat_history[stat_history_len+1:])
+            del stat_history[stat_history_len+1:]
 
             uptime = seconds_to_human(time.time()-start_ts, decimal=0)
             l2r_t_h, l2r_t_u = bytes_to_human(stat_history[1]['l2r'])
@@ -323,7 +323,7 @@ def main():
     if sys.platform != "linux":
         print("The 'ssm-tunnel' program only works on Linux at the moment!", file=sys.stderr)
         print("In other systems you are welcome to install it in VirtualBox or in a similar virtual environment running Linux.", file=sys.stderr)
-        quit(1)
+        sys.exit(1)
 
     ## Split command line args
     args = parse_args()
@@ -335,13 +335,13 @@ def main():
         if args.list:
             # --list
             InstanceResolver(args).print_list()
-            quit(0)
+            sys.exit(0)
 
         instance_id = InstanceResolver(args).resolve_instance(args.INSTANCE)
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
             logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
-            quit(1)
+            sys.exit(1)
 
         local_ip, remote_ip = random_ips(args.tunnel_cidr)
         tunnel = SsmTunnel(instance_id, profile=args.profile, region=args.region)
@@ -350,7 +350,7 @@ def main():
     except (botocore.exceptions.BotoCoreError,
             botocore.exceptions.ClientError) as e:
         logger.error(e)
-        quit(1)
+        sys.exit(1)
 
     finally:
         if tunnel:

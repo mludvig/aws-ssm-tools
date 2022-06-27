@@ -80,14 +80,14 @@ def main():
     configure_logging(args.log_level)
 
     if not verify_plugin_version("1.1.23", logger):
-        quit(1)
+        sys.exit(1)
 
     try:
         instance_resolver = InstanceResolver(args)
 
         if args.list:
             instance_resolver.print_list()
-            quit(0)
+            sys.exit(0)
 
         # Loop through all possible instance names and try to resolve them.
         ssh_args = []
@@ -117,7 +117,7 @@ def main():
                 continue
 
             # Woohoo we've got an instance id!
-            logger.info(f"Resolved instance name '{instance}' to '{instance_id}'")
+            logger.info("Resolved instance name '%s' to '%s'", instance, instance_id)
             ssh_args.append(instance_id)
 
             if login_name:
@@ -126,14 +126,14 @@ def main():
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", instance)
             logger.warning("Perhaps the '%s' is not registered in SSM?", instance)
-            quit(1)
+            sys.exit(1)
 
         start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region)
 
     except (botocore.exceptions.BotoCoreError,
             botocore.exceptions.ClientError) as e:
         logger.error(e)
-        quit(1)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

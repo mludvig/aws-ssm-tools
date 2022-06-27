@@ -88,20 +88,20 @@ def main():
     try:
         if args.list:
             ContainerResolver(args).print_list()
-            quit(0)
+            sys.exit(0)
 
         container = ContainerResolver(args).resolve_container(args.CONTAINER)
 
         if not container:
             logger.warning("Could not find any container matching '%s'", args.CONTAINER)
-            quit(1)
+            sys.exit(1)
 
         start_session(container, args, args.command)
 
     except (botocore.exceptions.BotoCoreError,
             botocore.exceptions.ClientError) as e:
         logger.error(e)
-        quit(1)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

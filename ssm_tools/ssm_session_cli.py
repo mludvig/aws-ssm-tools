@@ -105,21 +105,21 @@ def main():
         instance = None
         if args.list:
             InstanceResolver(args).print_list()
-            quit(0)
+            sys.exit(0)
 
         instance_id = InstanceResolver(args).resolve_instance(args.INSTANCE)
 
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
             logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
-            quit(1)
+            sys.exit(1)
 
         start_session(instance_id, args)
 
     except (botocore.exceptions.BotoCoreError,
             botocore.exceptions.ClientError) as e:
         logger.error(e)
-        quit(1)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

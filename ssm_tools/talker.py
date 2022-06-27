@@ -16,13 +16,12 @@ class SsmTalker():
         if region:
             extra_args += f"--region {region} "
         command = f'aws {extra_args} ssm start-session --target {instance_id}'
-        logger.debug(f"Spawning: {command}")
+        logger.debug("Spawning: %s", command)
         self._child = pexpect.spawn(command, echo=False, encoding='utf-8', timeout=10)
-        #self._child.logfile_read = sys.stderr
-        logger.debug(f"PID: {self._child.pid}")
+        logger.debug("PID: %s", self._child.pid)
 
         self.wait_for_prompt()
-        logger.debug(f"{self._child.before.strip()}")
+        logger.debug(self._child.before.strip())
         self.shell_prompt = self._child.after
 
         # Turn off input echo
@@ -48,5 +47,3 @@ class SsmTalker():
         As of now a typical SSM prompt is 'sh-4.2$ '
         """
         self._child.expect('sh.*\$ $')
-
-
