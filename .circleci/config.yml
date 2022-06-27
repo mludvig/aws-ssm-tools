@@ -27,8 +27,9 @@ jobs:
       - run:
           name: Install prerequisities
           command: |
-            sudo pip install pylint pytest
-            pip install --user -r requirements.txt
+            python3 -m pip install pylint
+            python3 -m pip install -r requirements.txt
+            pyenv rehash
 
       - run:
           name: Check syntax and style
@@ -47,7 +48,7 @@ jobs:
       - run:
           name: Verify git tag vs. version
           command: |
-            python setup.py verify
+            python3 setup.py verify
 
       - run:
           name: Init .pypirc
@@ -63,7 +64,8 @@ jobs:
       - run:
           name: Install twine
           command: |
-            sudo pip install twine
+            python3 -m pip install twine
+            pyenv rehash
 
       - run:
           name: Upload to PyPI
