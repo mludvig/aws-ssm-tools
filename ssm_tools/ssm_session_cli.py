@@ -21,7 +21,7 @@ import botocore.exceptions
 from .common import *
 from .resolver import InstanceResolver
 
-logger = logging.getLogger()
+logger = logging.getLogger("ssm-tools.ssm-session")
 
 signal.signal(signal.SIGTSTP, signal.SIG_IGN)   # Ignore Ctrl-Z - pass it on to the shell
 
@@ -99,8 +99,7 @@ def main():
     ## Split command line to main args and optional command to run
     args, extras = parse_args(sys.argv[1:])
 
-    global logger
-    logger = configure_logging("ssm-session", args.log_level)
+    configure_logging(args.log_level)
 
     try:
         instance = None

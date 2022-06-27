@@ -20,7 +20,7 @@ import botocore.exceptions
 from .common import *
 from .resolver import ContainerResolver
 
-logger = logging.getLogger()
+logger = logging.getLogger("ssm-tools.ecs-session")
 
 def parse_args(argv):
     """
@@ -83,8 +83,7 @@ def main():
     ## Split command line to main args and optional command to run
     args, extras = parse_args(sys.argv[1:])
 
-    global logger
-    logger = configure_logging("ecs-session", args.log_level)
+    configure_logging(args.log_level)
 
     try:
         if args.list:

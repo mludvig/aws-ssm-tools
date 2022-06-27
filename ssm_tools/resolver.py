@@ -7,7 +7,7 @@ import botocore.credentials
 import botocore.session
 import boto3
 
-logger = logging.getLogger("ssm-session")
+logger = logging.getLogger("ssm-tools.resolver")
 
 class CommonResolver():
     def __init__(self, args):

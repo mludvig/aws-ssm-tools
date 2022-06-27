@@ -2,10 +2,11 @@ import time
 import logging
 import pexpect
 
+logger = logging.getLogger("ssm-tools.talker")
+
 class SsmTalker():
-    def __init__(self, instance_id, profile, region, logger_name):
+    def __init__(self, instance_id, profile, region):
         self._instance_id = instance_id
-        self._logger = logging.getLogger(logger_name)
         self.connect(instance_id, profile, region)
 
     def connect(self, instance_id, profile, region):
@@ -15,13 +16,13 @@ class SsmTalker():
         if region:
             extra_args += f"--region {region} "
         command = f'aws {extra_args} ssm start-session --target {instance_id}'
-        self._logger.debug(f"Spawning: {command}")
+        logger.debug(f"Spawning: {command}")
         self._child = pexpect.spawn(command, echo=False, encoding='utf-8', timeout=10)
         #self._child.logfile_read = sys.stderr
-        self._logger.debug(f"PID: {self._child.pid}")
+        logger.debug(f"PID: {self._child.pid}")
 
         self.wait_for_prompt()
-        self._logger.debug(f"{self._child.before.strip()}")
+        logger.debug(f"{self._child.before.strip()}")
         self.shell_prompt = self._child.after
 
         # Turn off input echo
@@ -33,7 +34,7 @@ class SsmTalker():
         self.wait_for_prompt()
 
     def exit(self):
-        self._logger.debug("Closing session")
+        logger.debug("Closing session")
         self._child.sendcontrol('c')
         time.sleep(0.5)
         self._child.sendline('exit')

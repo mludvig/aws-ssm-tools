@@ -11,6 +11,7 @@ import sys
 import time
 import copy
 import errno
+import logging
 import threading
 import random
 import struct
@@ -27,7 +28,8 @@ from .common import *
 from .talker import SsmTalker
 from .resolver import InstanceResolver
 
-logger_name = "ssm-tunnel"
+logger = logging.getLogger("ssm-tools.ssm-tunnel")
+
 tunnel_cidr = "100.64.0.0/16"
 keepalive_sec = 10
 
@@ -95,24 +97,24 @@ class SsmTunnel(SsmTalker):
         self.updown_script = self.updown_up_success = None
 
     def run_command(self, command, assert_0=True):
-        self._logger.debug("command: %s", command)
+        logger.debug("command: %s", command)
         ret = os.system(command)
         if assert_0:
             assert ret == 0
 
     def open_remote_tunnel(self):
-        self._logger.debug('Creating tunnel')
+        logger.debug('Creating tunnel')
 
         # Open remote tun0 device
         self._child.sendline(f"ssm-tunnel-agent {self.remote_ip} {self.local_ip}")
         patterns = ['# Agent device .* is ready', 'command not found']
         match = self._child.expect(patterns)
         if match != 0:  # Index matched in the 'patterns'
-            self._logger.error("Unable to establish the tunnel!")
-            self._logger.error("ssm-tunnel-agent: command not found on the target instance %s.", self._instance_id)
-            self._logger.error("Use 'ssm-session %s' and then run 'sudo pip install aws-ssm-tunnel-agent' to install it.", self._instance_id)
+            logger.error("Unable to establish the tunnel!")
+            logger.error("ssm-tunnel-agent: command not found on the target instance %s.", self._instance_id)
+            logger.error("Use 'ssm-session %s' and then run 'sudo pip install aws-ssm-tunnel-agent' to install it.", self._instance_id)
             quit(1)
-        self._logger.debug(self._child.after)
+        logger.debug(self._child.after)
 
     def open_local_tunnel(self):
         tun_suffix = ".".join(self.local_ip.split(".")[2:])
@@ -121,8 +123,8 @@ class SsmTunnel(SsmTalker):
         self.create_tun()
         self._tun_fd = self.open_tun()
 
-        self._logger.debug(f"# Local device {self.tun_name} is ready")
-        self._logger.info(f"Local IP: {self.local_ip} / Remote IP: {self.remote_ip}")
+        logger.debug(f"# Local device {self.tun_name} is ready")
+        logger.info(f"Local IP: {self.local_ip} / Remote IP: {self.remote_ip}")
 
     def create_tun(self):
         try:
@@ -137,7 +139,7 @@ class SsmTunnel(SsmTalker):
             self.delete_tun()
             quit(1)
         except Exception as e:
-            self._logger.exception(e)
+            logger.exception(e)
             self.delete_tun()
             raise
 
@@ -148,7 +150,7 @@ class SsmTunnel(SsmTalker):
                 os.close(self._tun_fd)
                 self._tun_fd = None
             except Exception as e:
-                self._logger.exception(e)
+                logger.exception(e)
         if self.tun_name is not None:
             self.run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
             self.run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
@@ -191,7 +193,7 @@ class SsmTunnel(SsmTalker):
             self.stats['l2r'] += len(buf)
             self.stats_lock.release()
 
-        self._logger.debug("local_to_remote() has exited.")
+        logger.debug("local_to_remote() has exited.")
 
     def remote_to_local(self):
         while True:
@@ -203,7 +205,7 @@ class SsmTunnel(SsmTalker):
                 # This is a long timeout, 30 sec, not very useful
                 continue
             if type(self._child.after) == pexpect.exceptions.EOF:
-                self._logger.warn("Received unexpected EOF - tunnel went down?")
+                logger.warn("Received unexpected EOF - tunnel went down?")
                 self._exiting = True
                 break
             if not line or line[0] != '%':
@@ -216,7 +218,7 @@ class SsmTunnel(SsmTalker):
             self.stats['r2l'] += len(buf)
             self.stats_lock.release()
 
-        self._logger.debug("remote_to_local() has exited.")
+        logger.debug("remote_to_local() has exited.")
 
     def process_traffic(self):
         tr_l2r = threading.Thread(target=self.local_to_remote, args=[])
@@ -244,11 +246,11 @@ class SsmTunnel(SsmTalker):
         routes = " ".join(self.routes)
         try:
             cmd = f"{self.updown_script} {status} {self.tun_name} {self.local_ip} {self.remote_ip} {routes}"
-            self._logger.info(f"Running --up-down script: {cmd}")
+            logger.info(f"Running --up-down script: {cmd}")
             self.run_command(cmd)
             self.updown_up_success = True
         except AssertionError:
-            self._logger.error(f'Updown script {self.updown_script} exitted with error.')
+            logger.error(f'Updown script {self.updown_script} exitted with error.')
             sys.exit(1)
 
     def start(self, local_ip, remote_ip, routes, updown_script):
@@ -264,7 +266,7 @@ class SsmTunnel(SsmTalker):
             self.process_traffic()
 
         finally:
-            self._logger.info('Closing tunnel, please wait...')
+            logger.info('Closing tunnel, please wait...')
             self.run_updown("down")
             self.exit()
             self._exiting = True
@@ -326,7 +328,7 @@ def main():
     ## Split command line args
     args = parse_args()
 
-    logger = configure_logging(logger_name, args.log_level)
+    configure_logging(args.log_level)
 
     tunnel = None
     try:
@@ -342,7 +344,7 @@ def main():
             quit(1)
 
         local_ip, remote_ip = random_ips(args.tunnel_cidr)
-        tunnel = SsmTunnel(instance_id, profile=args.profile, region=args.region, logger_name=logger_name)
+        tunnel = SsmTunnel(instance_id, profile=args.profile, region=args.region)
         tunnel.start(local_ip, remote_ip, args.routes or [], args.updown_script)
 
     except (botocore.exceptions.BotoCoreError,

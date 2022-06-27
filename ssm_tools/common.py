@@ -10,21 +10,19 @@ __all__ = []
 # ---------------------------------------------------------
 
 __all__.append("configure_logging")
-def configure_logging(logger_name, level):
+def configure_logging(level):
     """
     Configure logging format and level.
     """
-    streamHandler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "[%(name)s] %(levelname)s: %(message)s"
-    )
-    streamHandler.setFormatter(formatter)
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(level)
-    logger.addHandler(streamHandler)
-    logger.debug("Logging level set to DEBUG")
+    if level == logging.DEBUG:
+        logging_format = "[%(name)s] %(levelname)s: %(message)s"
+    else:
+        logging_format = "%(levelname)s: %(message)s"
 
-    return logger
+    # Default log level is set to WARNING
+    logging.basicConfig(level=logging.WARNING, format=logging_format)
+    # Except for our modules
+    logging.getLogger("ssm-tools").setLevel(level)
 
 # ---------------------------------------------------------
 

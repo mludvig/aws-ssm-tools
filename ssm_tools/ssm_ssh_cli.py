@@ -19,7 +19,7 @@ import botocore.exceptions
 from .common import *
 from .resolver import InstanceResolver
 
-logger = logging.getLogger()
+logger = logging.getLogger("ssm-tools.ssm-ssh")
 
 def parse_args(argv):
     """
@@ -69,8 +69,6 @@ def start_ssh_session(ssh_args, profile=None, region=None):
     os.execvp(command[0], command)
 
 def main():
-    global logger
-
     ## Split command line to main args and optional command to run
     args, extra_args = parse_args(sys.argv[1:])
 
@@ -79,7 +77,7 @@ def main():
     if args.log_level == logging.DEBUG:
         extra_args.append('-vv')
 
-    logger = configure_logging("ssm-ssh", args.log_level)
+    configure_logging(args.log_level)
 
     if not verify_plugin_version("1.1.23", logger):
         quit(1)
