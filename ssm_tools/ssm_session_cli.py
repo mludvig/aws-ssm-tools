@@ -40,6 +40,7 @@ def parse_args(argv):
 
     group_session = parser.add_argument_group('Session Parameters')
     group_session.add_argument('--user', '-u', '--sudo', dest='user', metavar="USER", help='SUDO to USER after opening the session. Can\'t be used together with --document-name / --parameters. (optional)')
+    group_session.add_argument('--command', '-c', dest='command', metavar='COMMAND', help='Command to run in the SSM Session. Can\'t be used together with --user. If you need to run the COMMAND as a different USER prepend the command with the appropriate "sudo -u USER ...". (optional)')
     group_session.add_argument('--document-name', dest='document_name', help='Document to execute, e.g. AWS-StartInteractiveCommand (optional)')
     group_session.add_argument('--parameters', dest='parameters', help='Parameters for the --document-name, e.g. \'command=["sudo -i -u ec2-user"]\' (optional)')
 
@@ -68,8 +69,10 @@ Author: Michael Ludvig
     if args.parameters and not args.document_name:
         parser.error("--parameters can only be used together with --document-name")
 
-    if args.user and args.document_name:
-            parser.error("--user can't used used together with --document-name")
+    if bool(args.user) + bool(args.command) + bool(args.document_name) > 1:
+            parser.error("Use only one of --user / --command / --document-name\n"
+            "If you need to run the COMMAND as a specific USER then prepend\n"
+            "the command with the appropriate: sudo -i -u USER COMMAND")
 
     return args, extras
 
@@ -84,6 +87,10 @@ def start_session(instance_id, args):
         # Fake --document-name / --parameters for --user
         exec_args += [ "--document-name", "AWS-StartInteractiveCommand",
                        "--parameters", f"command=[\"sudo -i -u {args.user}\"]" ]
+    if args.command:
+        # Fake --document-name / --parameters for --command
+        exec_args += [ "--document-name", "AWS-StartInteractiveCommand",
+                       "--parameters", f"command={args.command}" ]
     else:
         # Or use the provided values
         if args.document_name:
