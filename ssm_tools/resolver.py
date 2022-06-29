@@ -41,18 +41,19 @@ class InstanceResolver(CommonResolver):
         response_iterator = paginator.paginate()
         for inventory in response_iterator:
             for entity in inventory["Entities"]:
+                logger.debug(entity)
                 try:
                     content = entity['Data']['AWS:InstanceInformation']["Content"][0]
 
                     # At the moment we only support EC2 Instances and ManagedInstances
                     if content["ResourceType"] not in [ "EC2Instance", "ManagedInstance" ]:
                         logger.warning("Unknown instance type: %s: %s", entity['Id'], content['ResourceType'])
-                        logger.debug(entity)
                         continue
 
                     # Ignore Terminated instances
-                    if content.get("InstanceStatus") == "Terminated":
-                        logger.debug("Ignoring terminated instance: %s", entity)
+                    instance_status = content.get("InstanceStatus")
+                    if instance_status in ("Terminated", "Stopped", "ConnectionLost"):
+                        logger.debug("Ignoring instance: %s [%s]", entity['Id'], instance_status)
                         continue
 
                     # Add to the list
