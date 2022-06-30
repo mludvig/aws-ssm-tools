@@ -32,7 +32,7 @@ def parse_args(argv):
     add_general_parameters(parser)
 
     group_container = parser.add_argument_group('Container Selection')
-    group_container.add_argument('CONTAINER', nargs='?', help='Task ID, Container Name or IP address')
+    group_container.add_argument('CONTAINER', nargs=argparse.ZERO_OR_MORE, help='Task ID, Container Name or IP address. Use multiple keywords (e.g. Task Name and IP) to narrow down ambiguous selections.')
     group_container.add_argument('--list', '-l', dest='list', action="store_true", help='List available containers configured for ECS RunTask')
     group_container.add_argument('--cluster', dest='cluster', metavar='CLUSTER', help='Specify an ECS cluster. (optional)')
 
@@ -90,10 +90,10 @@ def main():
             ContainerResolver(args).print_list()
             sys.exit(0)
 
-        container = ContainerResolver(args).resolve_container(args.CONTAINER)
+        container = ContainerResolver(args).resolve_container(keywords=args.CONTAINER)
 
         if not container:
-            logger.warning("Could not find any container matching '%s'", args.CONTAINER)
+            logger.warning("Could not find any container matching: %s", " AND ".join(args.CONTAINER))
             sys.exit(1)
 
         start_session(container, args, args.command)

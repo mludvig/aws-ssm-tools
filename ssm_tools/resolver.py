@@ -227,6 +227,7 @@ class ContainerResolver(CommonResolver):
 
                 # Filter containers that have a running ExecuteCommandAgent
                 for task in response['tasks']:
+                    logger.debug(task)
                     self._tasks[task['taskArn']] = task
                     for container in task['containers']:
                         if not 'managedAgents' in container:
@@ -258,21 +259,27 @@ class ContainerResolver(CommonResolver):
 
         self.print_containers(containers)
 
-    def resolve_container(self, keyword):
+    def resolve_container(self, keywords):
         containers = self.get_list()
 
         if not containers:
             logger.warning("No Execute-Command capable contaianers found!")
             sys.exit(1)
 
-        logger.debug("Searching for: %s", keyword)
+        logger.debug("Searching for containers matching all keywords: %s", " ".join(keywords))
 
         candidates = []
         for container in containers:
-            if keyword in (container['group_name'], container['task_id'], container['container_name'], container['container_ip']):
+            for keyword in keywords:
+                if keyword not in (container['group_name'], container['task_id'], container['container_name'], container['container_ip']):
+                    logger.debug("IGNORED: Container %s/%s doesn't match keyword: %s", container['task_id'], container['container_name'], keyword)
+                    container = None
+                    break
+            if container:
+                logger.debug("ADDED: Container %s/%s matches all keywords: %s", container['task_id'], container['container_name'], " ".join(keywords))
                 candidates.append(container)
         if not candidates:
-            logger.warning("No container found for: %s", keyword)
+            logger.warning("No container matches: %s", " AND ".join(keywords))
             sys.exit(1)
         elif len(candidates) == 1:
             self.print_containers(candidates)
