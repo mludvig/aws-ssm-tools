@@ -40,7 +40,7 @@ Parameters:
 
   NumTasks:
     Type: Number
-    Default: 1
+    Default: 2
 
   ContainerName:
     Type: String
@@ -51,7 +51,7 @@ Parameters:
     Default: docker.io/nginx:latest
 
 Resources:
-  EcsCluster:
+  Cluster:
     Type: AWS::ECS::Cluster
 
   TaskDefinition:
@@ -78,10 +78,10 @@ Resources:
         - ContainerPort: 80
           HostPort: 80
 
-  TaskService:
+  Service:
     Type: AWS::ECS::Service
     Properties:
-      Cluster: !Ref EcsCluster
+      Cluster: !Ref Cluster
       DesiredCount: !Ref NumTasks
       DeploymentConfiguration:
         MinimumHealthyPercent: 100
