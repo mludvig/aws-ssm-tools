@@ -10,7 +10,7 @@ They include the required IAM roles, ECS configurations, etc.
 CloudFormation template that spins up an ECS cluster with a sample
 ECS service (nginx container) to which you can login with `ecs-session`.
 
-## terraform/ecs.tf
+## [terraform/ecs.tf](terraform/ecs.tf)
 
 Terraform configuration that spins up an ECS cluster with a sample
 ECS service (Apache httpd container) to which you can login with `ecs-session`.
