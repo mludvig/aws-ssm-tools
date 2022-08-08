@@ -1,0 +1,155 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: ECS Execute configuration demo
+
+Metadata:
+  Author: Michael Ludvig (https://aws.nz)
+  RepoUrl: https://github.com/mludvig/aws-ssm-tools
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Task Configuration
+        Parameters:
+        - ContainerName
+        - ContainerImage
+        - NumTasks
+
+      - Label:
+          default: Network Configuration
+        Parameters:
+        - VpcId
+        - SubnetIds
+        - PublicIp
+
+Parameters:
+  VpcId:
+    Description: VPC where you want the containers deployed
+    Type: AWS::EC2::VPC::Id
+
+  SubnetIds:
+    Description: All subnets must be public or all must be private. Don't mix.
+    Type: List<AWS::EC2::Subnet::Id>
+
+  PublicIp:
+    Description: Select ENABLED when deploying to public subnets, or DISABLED when using private subnets.
+    Type: String
+    AllowedValues:
+    - ENABLED
+    - DISABLED
+
+  NumTasks:
+    Type: Number
+    Default: 2
+
+  ContainerName:
+    Type: String
+    Default: nginx
+
+  ContainerImage:
+    Type: String
+    Default: docker.io/nginx:latest
+
+Resources:
+  Cluster:
+    Type: AWS::ECS::Cluster
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      NetworkMode: awsvpc           # Needed for NLB (because NLB doesn't support SG)
+      TaskRoleArn: !Ref TaskRole
+      ExecutionRoleArn: !Ref TaskExecutionRole
+      RequiresCompatibilities:
+      - FARGATE
+      Cpu: 256
+      Memory: 512
+      ContainerDefinitions:
+      - Name: !Ref ContainerName
+        Essential: true
+        Image: !Ref ContainerImage
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-region: !Ref AWS::Region
+            awslogs-group: !Ref TaskLogsGroup
+            awslogs-stream-prefix: !Ref ContainerName
+        PortMappings:
+        - ContainerPort: 80
+          HostPort: 80
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref Cluster
+      DesiredCount: !Ref NumTasks
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      EnableExecuteCommand: true    # ECS Execute Command enabled
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: FARGATE
+      PlatformVersion: LATEST       # LATEST is 1.4 as of now, that's compatible with ECS Exec
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: !Ref PublicIp
+          Subnets: !Ref SubnetIds
+          SecurityGroups:
+          - !Ref TaskSecurityGroup
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-service"
+
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${AWS::StackName}-task"
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0     # Required for SSM service access
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0     # Only for demo purposes, not needed for SSM
+      VpcId: !Ref VpcId
+      Tags:
+      - Key: Name
+        Value: !Sub "${AWS::StackName}-task"
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ ecs-tasks.amazonaws.com ]
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore  # Required to use SSM
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ ecs-tasks.amazonaws.com ]
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+
+  TaskLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref AWS::StackName
+      RetentionInDays: 400
