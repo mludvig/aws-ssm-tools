@@ -5,7 +5,7 @@ configured for use with `ssm-session` and `ecs-session`.
 
 They include the required IAM roles, ECS configurations, etc.
 
-## template-ecs-task.yml
+## [template-ecs-task.yml](template-ecs-task.yml)
 
 CloudFormation template that spins up an ECS cluster with a sample
 ECS service (nginx container) to which you can login with `ecs-session`.
