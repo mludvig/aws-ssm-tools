@@ -65,8 +65,7 @@ class InstanceResolver(CommonResolver):
     def update_list_cache(self):
         try:
             os.remove(self.instance_cache)
-        except Exception as e:
-            print(e)
+        except:
             logger.warning('Failed to delete instance cache')
         self.get_list()
 
