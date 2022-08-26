@@ -92,6 +92,19 @@ and for ECS Docker Exec: `ecs-session`
     i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
     ```
 
+    If you don't see your instance in the list, there is a possibility
+    that is not stored in the local cache. You can update the local cache
+    with the flag `--update-cache`. *The cache expires after 1 day*.
+
+    ```
+    ~ $ ssm-session --list
+    i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
+
+    ~ $ ssm-session --list --update-cache
+    i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
+    i-094df06d3633f3267   tunnel-test.aws.nz tunnel-test  192.168.44.95
+    ```
+
 2. **Open SSM session** to an instance:
 
     This opens an interactive shell session over SSM without the need for
