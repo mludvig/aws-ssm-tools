@@ -7,6 +7,9 @@ import logging
 import botocore.credentials
 import botocore.session
 import boto3
+import tempfile
+import time
+import json
 
 logger = logging.getLogger("ssm-tools.resolver")
 
@@ -19,19 +22,64 @@ class CommonResolver():
         self.session = boto3.session.Session(profile_name=args.profile, region_name=args.region)
         self.session._session.get_component('credential_provider').get_provider('assume-role').cache = botocore.credentials.JSONFileCache(cli_cache)
 
+        # Cache for ssm_tools
+        self.cache_dir = tempfile.gettempdir()
 
 class InstanceResolver(CommonResolver):
+    RESOLVER_CACHE_DURATION = 86400 # seconds
+
     def __init__(self, args):
         super().__init__(args)
 
         # Create boto3 clients from session
         self.ssm_client = self.session.client('ssm')
         self.ec2_client = self.session.client('ec2')
+        
+        self.instance_cache = os.path.join(self.cache_dir, 'ssm_instances')
+
+    def get_list_cache(self):
+        if not os.path.exists(self.instance_cache):
+            logger.debug('Did not load cache because cache file does not exist')
+            return None
+
+        if time.time() - os.path.getmtime(self.instance_cache) > self.RESOLVER_CACHE_DURATION:
+            logger.debug('Did not load cache because file is older that one day')
+            return None
+
+        with open(self.instance_cache, 'r') as fd:
+            try:
+                cache_content = json.load(fd)
+            except IOError:
+                logger.warning('Failed to load instance list cache due to IOError')
+                return None
+
+        return cache_content
+    
+    def store_list_cache(self, ssm_list):
+        with open(self.instance_cache, 'w') as fd:
+            try:
+                json.dump(ssm_list, fd, indent=4)
+            except IOError:
+                logger.warning('Failed to update instance list cache due to IOError')
+
+    def update_list_cache(self):
+        try:
+            os.remove(self.instance_cache)
+        except Exception as e:
+            print(e)
+            logger.warning('Failed to delete instance cache')
+        self.get_list()
+
+
 
     def get_list(self):
         def _try_append(_list, _dict, _key):
             if _key in _dict:
                 _list.append(_dict[_key])
+
+        items = self.get_list_cache()
+        if items is not None:
+            return items
 
         items = {}
 
@@ -102,6 +150,7 @@ class InstanceResolver(CommonResolver):
                                     items[instance_id]['InstanceName'] = tag['Value']
 
                             logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
+                    self.store_list_cache(items)
                     return items
 
             except botocore.exceptions.ClientError as ex:
@@ -120,6 +169,7 @@ class InstanceResolver(CommonResolver):
         if not tries:
             logger.warning("Unable to list instance details. Some instance names and IPs may be missing.")
 
+        self.store_list_cache(items)
         return items
 
     def print_list(self):
