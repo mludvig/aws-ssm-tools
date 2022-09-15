@@ -38,36 +38,39 @@ class InstanceResolver(CommonResolver):
         # List instances from SSM
         logger.debug("Fetching SSM inventory")
         paginator = self.ssm_client.get_paginator('get_inventory')
-        response_iterator = paginator.paginate()
+        response_iterator = paginator.paginate(
+            Filters=[
+                {
+                    "Key": "AWS:InstanceInformation.ResourceType",
+                    "Values": [
+                        "EC2Instance", "ManagedInstance"
+                    ],
+                    "Type": "Equal"
+                },
+                {
+                    "Key": "AWS:InstanceInformation.InstanceStatus",
+                    "Values": [
+                        "Terminated",
+                        "Stopped",
+                        "ConnectionLost"
+                    ],
+                    "Type": "NotEqual"
+                }
+            ]
+        )
+
         for inventory in response_iterator:
             for entity in inventory["Entities"]:
                 logger.debug(entity)
-                try:
-                    content = entity['Data']['AWS:InstanceInformation']["Content"][0]
-
-                    # At the moment we only support EC2 Instances and ManagedInstances
-                    if content["ResourceType"] not in [ "EC2Instance", "ManagedInstance" ]:
-                        logger.warning("Unknown instance type: %s: %s", entity['Id'], content['ResourceType'])
-                        continue
-
-                    # Ignore Terminated instances
-                    instance_status = content.get("InstanceStatus")
-                    if instance_status in ("Terminated", "Stopped", "ConnectionLost"):
-                        logger.debug("Ignoring instance: %s [%s]", entity['Id'], instance_status)
-                        continue
-
-                    # Add to the list
-                    instance_id = content['InstanceId']
-                    items[instance_id] = {
-                        "InstanceId": instance_id,
-                        "InstanceName": "",
-                        "HostName": content.get("ComputerName", ""),
-                        "Addresses": [ content.get("IpAddress") ],
-                    }
-                    logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
-                except (KeyError, ValueError):
-                    logger.debug("SSM inventory entity not recognised: %s", entity)
-                    continue
+                content = entity['Data']['AWS:InstanceInformation']["Content"][0]
+                instance_id = content['InstanceId']
+                items[instance_id] = {
+                    "InstanceId": instance_id,
+                    "InstanceName": "",
+                    "HostName": content.get("ComputerName", ""),
+                    "Addresses": [content.get("IpAddress")],
+                }
+                logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
 
         # Add attributes from EC2
         paginator = self.ec2_client.get_paginator('describe_instances')
