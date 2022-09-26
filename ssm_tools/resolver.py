@@ -7,7 +7,7 @@ import logging
 import botocore.credentials
 import botocore.session
 import boto3
-import tempfile
+import appdirs
 import time
 import json
 
@@ -21,9 +21,14 @@ class CommonResolver():
         # Construct boto3 session with MFA cache
         self.session = boto3.session.Session(profile_name=args.profile, region_name=args.region)
         self.session._session.get_component('credential_provider').get_provider('assume-role').cache = botocore.credentials.JSONFileCache(cli_cache)
+        
+        self.account_region = self.session.region_name
+        self.account_id = self.session.resource('iam').CurrentUser().user_id
 
         # Cache for ssm_tools
-        self.cache_dir = tempfile.gettempdir()
+        self.cache_dir = appdirs.user_cache_dir(appname="aws-ssm-tools")
+        if not os.path.isdir(self.cache_dir):
+            os.mkdir(self.cache_dir)
 
 class InstanceResolver(CommonResolver):
     RESOLVER_CACHE_DURATION = 86400 # seconds
@@ -35,7 +40,7 @@ class InstanceResolver(CommonResolver):
         self.ssm_client = self.session.client('ssm')
         self.ec2_client = self.session.client('ec2')
         
-        self.instance_cache = os.path.join(self.cache_dir, 'ssm_instances')
+        self.instance_cache = os.path.join(self.cache_dir, f'ssm_instances_{self.account_id}_{self.account_region}')
 
     def get_list_cache(self):
         if not os.path.exists(self.instance_cache):
