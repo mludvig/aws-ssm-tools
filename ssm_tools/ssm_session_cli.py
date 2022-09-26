@@ -37,6 +37,9 @@ def parse_args(argv):
     group_instance = parser.add_argument_group('Instance Selection')
     group_instance.add_argument('INSTANCE', nargs='?', help='Instance ID, Name, Host name or IP address')
     group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances available for SSM Session')
+    group_instance.add_argument('--update-cache', dest='update_cache', action="store_true", help='Updates local cache of instances available for SSM Session')
+    group_instance.add_argument('--use-cache', dest='use_cache', action="store_true", help='Use locally stored cache of instances instead of hitting the AWS API')
+    group_instance.add_argument('--cache-file', dest='cache_file', help='Custom path for the instance cache file')
 
     group_session = parser.add_argument_group('Session Parameters')
     group_session.add_argument('--user', '-u', '--sudo', dest='user', metavar="USER", help='SUDO to USER after opening the session. Can\'t be used together with --document-name / --parameters. (optional)')
@@ -62,8 +65,9 @@ Author: Michael Ludvig
     if args.show_version:
         show_version(args)
 
-    # Require exactly one of INSTANCE or --list
-    if bool(args.INSTANCE) + bool(args.list) != 1:
+    # Require exactly one of INSTANCE or --list and allow to do only cache update
+    if bool(args.INSTANCE) and bool(args.list) or \
+                not args.update_cache and not bool(args.INSTANCE) and not bool(args.list):
         parser.error("Specify either INSTANCE or --list")
 
     if args.parameters and not args.document_name:
@@ -110,8 +114,17 @@ def main():
 
     try:
         instance = None
+
+        if args.update_cache:
+            args.use_cache = True
+            InstanceResolver(args).update_list_cache()
+
         if args.list:
             InstanceResolver(args).print_list()
+            sys.exit(0)
+
+        # If user wants to only update cache, no instance is specified and we should exit
+        if args.INSTANCE is None:
             sys.exit(0)
 
         instance_id = InstanceResolver(args).resolve_instance(args.INSTANCE)

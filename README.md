@@ -92,6 +92,48 @@ and for ECS Docker Exec: `ecs-session`
     i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
     ```
 
+    You can also store the fetched instances in your local cache to avoid
+    consecutive requests to AWS API. Cache is explicitly enabled with the
+    `--use-cache` flag.
+    If you don't see your instance in the list, there is a possibility
+    that is not stored in the local cache. You can update the local cache
+    with the flag `--update-cache`. *The cache expires after 1 day*.
+    By default cache file is stored under the default user cache 
+    directory of your operating system. You can specify your own cache
+    file with `--cache-file`.
+
+    ```
+    ~ $ ssm-session --list
+    i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
+
+    ~ $ ssm-session --list --update-cache
+    i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
+    i-094df06d3633f3267   tunnel-test.aws.nz tunnel-test  192.168.44.95
+
+    ~ $ ssm-session --list --cache-file my_aws_cache
+    i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
+    i-094df06d3633f3267   tunnel-test.aws.nz tunnel-test  192.168.44.95
+    ~ $ cat my_aws_cache
+    {
+       "i-00cebf196bfa083ed": {
+           "InstanceId": "i-07c189021bc56e042",
+           "InstanceName": "test1",
+           "HostName": "test1.aws.nz",
+           "Addresses": [
+               "192.168.45.158"
+           ]
+       },
+       "i-00cebf196bfa083ed": {
+         "InstanceId": "i-094df06d3633f3267",
+         "InstanceName": "tunnel-test",
+         "HostName": "tunnel-test.aws.nz",
+         "Addresses": [
+             "192.168.44.95"
+         ]
+       }
+    }
+    ```
+
 2. **Open SSM session** to an instance:
 
     This opens an interactive shell session over SSM without the need for
@@ -115,6 +157,8 @@ and for ECS Docker Exec: `ecs-session`
 
     You can specify other SSM documents to run with `--document-name AWS-...`
     to customise your session. Refer to AWS docs for details.
+
+    You can also use your local cache to speed up instance resolving with `--use-cache`.
 
 3. **Open SSH session** over SSM with *port forwarding*.
 

@@ -7,6 +7,9 @@ import logging
 import botocore.credentials
 import botocore.session
 import boto3
+import appdirs
+import time
+import json
 
 logger = logging.getLogger("ssm-tools.resolver")
 
@@ -18,20 +21,83 @@ class CommonResolver():
         # Construct boto3 session with MFA cache
         self.session = boto3.session.Session(profile_name=args.profile, region_name=args.region)
         self.session._session.get_component('credential_provider').get_provider('assume-role').cache = botocore.credentials.JSONFileCache(cli_cache)
+        
+        self.account_region = self.session.region_name
+        self.account_id = self.session.resource('iam').CurrentUser().user_id
+
+        # Cache for ssm_tools
+        self.use_cache = args.use_cache
+        self.cache_file = args.cache_file
+
+        if self.use_cache:
+            if self.cache_file is None:
+                self.cache_dir = appdirs.user_cache_dir(appname="aws-ssm-tools")
+                if not os.path.isdir(self.cache_dir):
+                    os.mkdir(self.cache_dir)
+            else:
+                self.cache_dir = os.path.dirname(self.cache_file)
 
 
 class InstanceResolver(CommonResolver):
+    RESOLVER_CACHE_DURATION = 86400 # seconds
+
     def __init__(self, args):
         super().__init__(args)
 
         # Create boto3 clients from session
         self.ssm_client = self.session.client('ssm')
         self.ec2_client = self.session.client('ec2')
+        
+
+        if self.use_cache:
+            if self.cache_file is None:
+                self.instance_cache = os.path.join(self.cache_dir, f'ssm_instances_{self.account_id}_{self.account_region}')
+            else:
+                self.instance_cache = self.cache_file
+
+    def get_list_cache(self):
+        if not os.path.exists(self.instance_cache):
+            logger.debug('Did not load cache because cache file does not exist')
+            return None
+
+        if time.time() - os.path.getmtime(self.instance_cache) > self.RESOLVER_CACHE_DURATION:
+            logger.debug('Did not load cache because file is older that one day')
+            return None
+
+        with open(self.instance_cache, 'r') as fd:
+            try:
+                cache_content = json.load(fd)
+            except IOError:
+                logger.warning('Failed to load instance list cache due to IOError')
+                return None
+
+        return cache_content
+    
+    def store_list_cache(self, ssm_list):
+        with open(self.instance_cache, 'w') as fd:
+            try:
+                json.dump(ssm_list, fd, indent=4)
+            except IOError:
+                logger.warning('Failed to update instance list cache due to IOError')
+
+    def update_list_cache(self):
+        try:
+            os.remove(self.instance_cache)
+        except:
+            logger.warning('Failed to delete instance cache')
+        self.get_list()
+
+
 
     def get_list(self):
         def _try_append(_list, _dict, _key):
             if _key in _dict:
                 _list.append(_dict[_key])
+
+        if self.use_cache:
+            items = self.get_list_cache()
+            if items is not None:
+                return items
 
         items = {}
 
@@ -105,6 +171,8 @@ class InstanceResolver(CommonResolver):
                                     items[instance_id]['InstanceName'] = tag['Value']
 
                             logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
+                    if self.use_cache:
+                        self.store_list_cache(items)
                     return items
 
             except botocore.exceptions.ClientError as ex:
@@ -123,6 +191,8 @@ class InstanceResolver(CommonResolver):
         if not tries:
             logger.warning("Unable to list instance details. Some instance names and IPs may be missing.")
 
+        if self.use_cache:
+            self.store_list_cache(items)
         return items
 
     def print_list(self):
