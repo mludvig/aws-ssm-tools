@@ -1,5 +1,6 @@
 pexpect
 packaging
+appdirs
 
 # AWS Stuff
 botocore
