@@ -26,9 +26,11 @@ class CommonResolver():
         self.account_id = self.session.resource('iam').CurrentUser().user_id
 
         # Cache for ssm_tools
-        self.cache_dir = appdirs.user_cache_dir(appname="aws-ssm-tools")
-        if not os.path.isdir(self.cache_dir):
-            os.mkdir(self.cache_dir)
+        self.use_cache = args.use_cache
+        if self.use_cache:
+            self.cache_dir = appdirs.user_cache_dir(appname="aws-ssm-tools")
+            if not os.path.isdir(self.cache_dir):
+                os.mkdir(self.cache_dir)
 
 class InstanceResolver(CommonResolver):
     RESOLVER_CACHE_DURATION = 86400 # seconds
@@ -40,7 +42,8 @@ class InstanceResolver(CommonResolver):
         self.ssm_client = self.session.client('ssm')
         self.ec2_client = self.session.client('ec2')
         
-        self.instance_cache = os.path.join(self.cache_dir, f'ssm_instances_{self.account_id}_{self.account_region}')
+        if self.use_cache:
+            self.instance_cache = os.path.join(self.cache_dir, f'ssm_instances_{self.account_id}_{self.account_region}')
 
     def get_list_cache(self):
         if not os.path.exists(self.instance_cache):
@@ -81,9 +84,10 @@ class InstanceResolver(CommonResolver):
             if _key in _dict:
                 _list.append(_dict[_key])
 
-        items = self.get_list_cache()
-        if items is not None:
-            return items
+        if self.use_cache:
+            items = self.get_list_cache()
+            if items is not None:
+                return items
 
         items = {}
 
@@ -157,7 +161,8 @@ class InstanceResolver(CommonResolver):
                                     items[instance_id]['InstanceName'] = tag['Value']
 
                             logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
-                    self.store_list_cache(items)
+                    if self.use_cache:
+                        self.store_list_cache(items)
                     return items
 
             except botocore.exceptions.ClientError as ex:
@@ -176,7 +181,8 @@ class InstanceResolver(CommonResolver):
         if not tries:
             logger.warning("Unable to list instance details. Some instance names and IPs may be missing.")
 
-        self.store_list_cache(items)
+        if self.use_cache:
+            self.store_list_cache(items)
         return items
 
     def print_list(self):

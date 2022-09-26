@@ -44,7 +44,7 @@ def parse_args(argv):
     group_session.add_argument('--command', '-c', dest='command', metavar='COMMAND', help='Command to run in the SSM Session. Can\'t be used together with --user. If you need to run the COMMAND as a different USER prepend the command with the appropriate "sudo -u USER ...". (optional)')
     group_session.add_argument('--document-name', dest='document_name', help='Document to execute, e.g. AWS-StartInteractiveCommand (optional)')
     group_session.add_argument('--parameters', dest='parameters', help='Parameters for the --document-name, e.g. \'command=["sudo -i -u ec2-user"]\' (optional)')
-
+    group_session.add_argument('--use-cache', dest='use_cache', action="store_true", help='Use locally stored cache of instances instead of hitting the AWS API')
     parser.description = 'Start SSM Shell Session to a given instance'
     parser.epilog = f'''
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
@@ -114,6 +114,7 @@ def main():
         instance = None
 
         if args.update_cache:
+            args.use_cache = True
             InstanceResolver(args).update_list_cache()
 
         if args.list:
