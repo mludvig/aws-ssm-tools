@@ -27,10 +27,16 @@ class CommonResolver():
 
         # Cache for ssm_tools
         self.use_cache = args.use_cache
+        self.cache_file = args.cache_file
+
         if self.use_cache:
-            self.cache_dir = appdirs.user_cache_dir(appname="aws-ssm-tools")
-            if not os.path.isdir(self.cache_dir):
-                os.mkdir(self.cache_dir)
+            if self.cache_file is None:
+                self.cache_dir = appdirs.user_cache_dir(appname="aws-ssm-tools")
+                if not os.path.isdir(self.cache_dir):
+                    os.mkdir(self.cache_dir)
+            else:
+                self.cache_dir = os.path.dirname(self.cache_file)
+
 
 class InstanceResolver(CommonResolver):
     RESOLVER_CACHE_DURATION = 86400 # seconds
@@ -42,8 +48,12 @@ class InstanceResolver(CommonResolver):
         self.ssm_client = self.session.client('ssm')
         self.ec2_client = self.session.client('ec2')
         
+
         if self.use_cache:
-            self.instance_cache = os.path.join(self.cache_dir, f'ssm_instances_{self.account_id}_{self.account_region}')
+            if self.cache_file is None:
+                self.instance_cache = os.path.join(self.cache_dir, f'ssm_instances_{self.account_id}_{self.account_region}')
+            else:
+                self.instance_cache = self.cache_file
 
     def get_list_cache(self):
         if not os.path.exists(self.instance_cache):
