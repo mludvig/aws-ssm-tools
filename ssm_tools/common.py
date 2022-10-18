@@ -1,7 +1,11 @@
 import sys
+import pathlib
 import logging
 import subprocess
+
 import boto3
+import botocore.credentials
+
 import packaging.version
 from . import __version__ as ssm_tools_version
 
@@ -129,3 +133,15 @@ def verify_plugin_version(version_required, logger):
     logger.error("ERROR: Check out https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html for instructions")
 
     return False
+
+# ---------------------------------------------------------
+
+__all__.append("AWSSessionBase")
+class AWSSessionBase:
+    def __init__(self, args):
+        # aws-cli compatible MFA cache
+        cli_cache = pathlib.Path('~/.aws/cli/cache').expanduser().name
+
+        # Construct boto3 session with MFA cache
+        self.session = boto3.session.Session(profile_name=args.profile, region_name=args.region)
+        self.session._session.get_component('credential_provider').get_provider('assume-role').cache = botocore.credentials.JSONFileCache(cli_cache)

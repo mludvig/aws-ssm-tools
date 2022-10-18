@@ -1,26 +1,14 @@
 #!/usr/bin/env python3
 
-import os
 import sys
 import re
 import logging
-import botocore.credentials
 import botocore.session
-import boto3
+from .common import AWSSessionBase
 
 logger = logging.getLogger("ssm-tools.resolver")
 
-class CommonResolver():
-    def __init__(self, args):
-        # aws-cli compatible MFA cache
-        cli_cache = os.path.join(os.path.expanduser('~'),'.aws/cli/cache')
-
-        # Construct boto3 session with MFA cache
-        self.session = boto3.session.Session(profile_name=args.profile, region_name=args.region)
-        self.session._session.get_component('credential_provider').get_provider('assume-role').cache = botocore.credentials.JSONFileCache(cli_cache)
-
-
-class InstanceResolver(CommonResolver):
+class InstanceResolver(AWSSessionBase):
     def __init__(self, args):
         super().__init__(args)
 
@@ -170,7 +158,7 @@ class InstanceResolver(CommonResolver):
         # Found only one instance - return it
         return instances[0]
 
-class ContainerResolver(CommonResolver):
+class ContainerResolver(AWSSessionBase):
     def __init__(self, args):
         super().__init__(args)
 
