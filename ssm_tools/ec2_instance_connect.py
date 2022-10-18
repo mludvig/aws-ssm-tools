@@ -19,16 +19,21 @@ class EC2InstanceConnectHelper(AWSSessionBase):
 
     def obtain_ssh_key(self, key_file_name: str) -> str:
         def _read_ssh_agent_keys() -> List[str]:
-            cp = subprocess.run(["ssh-add", "-L"], stdout=subprocess.PIPE)
+            cp = subprocess.run(["ssh-add", "-L"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if cp.returncode != 0:
-                logger.debug("Failed to run: ssh-add -L")
+                logger.debug("Failed to run: ssh-add -L: %s", cp.stderr.decode('utf-8').strip().replace('\n', ' '))
                 return []
             return cp.stdout.decode('utf-8').split('\n')
 
         def _read_ssh_public_key(key_file_name_pub: str) -> str:
             try:
-                pub_key_raw = pathlib.Path(key_file_name_pub).expanduser().read_text().split("\n")
+                key_path = pathlib.Path(key_file_name_pub).expanduser()
+                logger.debug("Going to read key from: %s", key_path)
+                pub_key_raw = key_path.read_text().split("\n")
                 for line in pub_key_raw:
+                    if line.startswith("ecdsa-sha2-"):
+                        logger.error("ECDSA keys are not yet supported by EC2 Instance Connect: %s", key_file_name_pub)
+                        sys.exit(1)
                     if line.startswith("ssh-"):
                         return line
             except (FileNotFoundError, PermissionError) as ex:
