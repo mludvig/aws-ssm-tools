@@ -14,14 +14,18 @@ import os
 import sys
 import logging
 import argparse
+
+from typing import Tuple, List
+
 import botocore.exceptions
 
-from .common import *
+from .common import add_general_parameters, show_version, configure_logging, verify_plugin_version
 from .resolver import InstanceResolver
+from .ec2_instance_connect import EC2InstanceConnectHelper
 
 logger = logging.getLogger("ssm-tools.ssm-ssh")
 
-def parse_args(argv):
+def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     """
     Parse command line arguments.
     """
@@ -32,6 +36,9 @@ def parse_args(argv):
 
     group_instance = parser.add_argument_group('Instance Selection')
     group_instance.add_argument('--list', dest='list', action="store_true", help='List instances available for SSM Session')
+
+    group_ec2ic = parser.add_argument_group('EC2 Instance Connect')
+    group_ec2ic.add_argument('--send-key', action="store_true", help='Send the SSH key to instance metadata using EC2 Instance Connect')
 
     parser.description = 'Open SSH connection through Session Manager'
     parser.epilog = f'''
@@ -57,7 +64,8 @@ Author: Michael Ludvig
 
     return args, extra_args
 
-def start_ssh_session(ssh_args, profile=None, region=None):
+
+def start_ssh_session(ssh_args: list, profile: str = None, region: str = None):
     aws_args = ""
     if profile:
         aws_args += f"--profile {profile} "
@@ -89,10 +97,37 @@ def main():
             instance_resolver.print_list()
             sys.exit(0)
 
-        # Loop through all possible instance names and try to resolve them.
+        # Loop through all SSH args to find:
+        # - instance name
+        # - user name (for use with --send-key)
+        # - key name (for use with --send-key)
         ssh_args = []
         instance_id = None
+        login_name = None
+        key_file_name = None
+
+        extra_args = iter(extra_args)
         for arg in extra_args:
+            # User name argument
+            if arg.startswith('-l'):
+                ssh_args.append(arg)
+                if len(arg) > 2:
+                    login_name = arg[2:]
+                else:
+                    login_name = next(extra_args)
+                    ssh_args.append(login_name)
+                continue
+
+            # SSH key argument
+            if arg.startswith('-i'):
+                ssh_args.append(arg)
+                if len(arg) > 2:
+                    key_file_name = arg[2:]
+                else:
+                    key_file_name = next(extra_args)
+                    ssh_args.append(key_file_name)
+                continue
+
             # If we already have instance id just copy the args
             if instance_id:
                 ssh_args.append(arg)
@@ -104,9 +139,9 @@ def main():
                 continue
 
             # This may be an instance name - try to resolve it
-            login_name = None
+            maybe_login_name = None
             if arg.find('@') > -1:  # username@hostname format
-                login_name, instance = arg.split('@', 1)
+                maybe_login_name, instance = arg.split('@', 1)
             else:
                 instance = arg
 
@@ -114,7 +149,12 @@ def main():
             if not instance_id:
                 # Not resolved as an instance name - put back to args
                 ssh_args.append(arg)
+                maybe_login_name = None
                 continue
+
+            # We got a login name from 'login_name@instance'
+            if maybe_login_name:
+                login_name = maybe_login_name
 
             # Woohoo we've got an instance id!
             logger.info("Resolved instance name '%s' to '%s'", instance, instance_id)
@@ -127,6 +167,10 @@ def main():
             logger.warning("Could not resolve Instance ID for '%s'", instance)
             logger.warning("Perhaps the '%s' is not registered in SSM?", instance)
             sys.exit(1)
+
+        # We may need some extra info for --send-key
+        if args.send_key:
+            EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, key_file_name)
 
         start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region)
 
