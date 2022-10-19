@@ -3,4 +3,4 @@ packaging
 
 # AWS Stuff
 botocore
-boto3
+boto3 >= 1.22.0
