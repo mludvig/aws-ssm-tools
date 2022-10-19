@@ -46,8 +46,9 @@ def add_general_parameters(parser, long_only = False):
     group_general = parser.add_argument_group('General Options')
     group_general.add_argument(*_get_opts('--profile', '-p'), dest='profile', type=str, help='Configuration profile from ~/.aws/{credentials,config}')
     group_general.add_argument(*_get_opts('--region',  '-g'), dest='region', type=str, help='Set / override AWS region.')
-    group_general.add_argument(*_get_opts('--verbose', '-v'), action='store_const', dest='log_level', const=logging.INFO, default=logging.WARN, help='Increase log_level level')
-    group_general.add_argument(*_get_opts('--debug',   '-d'), action='store_const', dest='log_level', const=logging.DEBUG, help='Increase log_level level')
+    group_general.add_argument(*_get_opts('--verbose', '-v'), action='store_const', dest='log_level', const=logging.INFO, default=logging.INFO, help='Default log level. Show informational messages only.')
+    group_general.add_argument(*_get_opts('--debug',   '-d'), action='store_const', dest='log_level', const=logging.DEBUG, help='Increase log level.')
+    group_general.add_argument(*_get_opts('--quiet',   '-q'), action='store_const', dest='log_level', const=logging.WARNING, help='Decrease log level. Only show warnings and errors.')
     group_general.add_argument(*_get_opts('--version', '-V'), action='store_true', dest='show_version', help=f'Show package version and exit. Version is {ssm_tools_version}')
     group_general.add_argument(*_get_opts('--help',    '-h'), action="help", help='Print this help and exit')
 

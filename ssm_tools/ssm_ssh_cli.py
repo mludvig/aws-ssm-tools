@@ -80,10 +80,8 @@ def main():
     ## Split command line to main args and optional command to run
     args, extra_args = parse_args(sys.argv[1:])
 
-    if args.log_level == logging.INFO:
-        extra_args.append('-v')
     if args.log_level == logging.DEBUG:
-        extra_args.append('-vv')
+        extra_args.append('-v')
 
     configure_logging(args.log_level)
 
