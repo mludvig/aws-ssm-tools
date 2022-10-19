@@ -140,7 +140,7 @@ __all__.append("AWSSessionBase")
 class AWSSessionBase:
     def __init__(self, args):
         # aws-cli compatible MFA cache
-        cli_cache = pathlib.Path('~/.aws/cli/cache').expanduser().name
+        cli_cache = pathlib.Path('~/.aws/cli/cache').expanduser()
 
         # Construct boto3 session with MFA cache
         self.session = boto3.session.Session(profile_name=args.profile, region_name=args.region)
