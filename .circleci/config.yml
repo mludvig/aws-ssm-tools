@@ -27,6 +27,7 @@ jobs:
       - run:
           name: Install prerequisities
           command: |
+            set -x
             python3 -m pip install pylint mypy black
             python3 -m pip install -r requirements.txt
             pyenv rehash
@@ -34,11 +35,12 @@ jobs:
       - run:
           name: Check syntax and style
           command: |
+            set -x
             PYTHON_SCRIPTS="$(grep -l '#!/usr/bin/env python3' ssm-* ecs-*) setup.py"
             black --line-length 250 --check --diff ${PYTHON_SCRIPTS} ssm_tools/*.py
             pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ${PYTHON_SCRIPTS} ssm_tools/*.py ssm-tunnel-agent
             pylint --errors-only ${PYTHON_SCRIPTS} ssm_tools/*.py ssm-tunnel-agent
-            mypy --scripts-are-modules --ignore-missing-imports ${PYTHON3_SCRIPTS}
+            mypy --scripts-are-modules --ignore-missing-imports ${PYTHON_SCRIPTS}
 
   publish:
     docker:
