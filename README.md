@@ -60,9 +60,8 @@ and for ECS Docker Exec: `ecs-session`
   doesn't require a special agent on the instance, other than the standard
   AWS SSM agent.
 
-* **ssm-copy**
-
-  **DEPRECATED and REMOVED** - use `rsync` with `ssm-ssh` instead.
+  Also supports pushing your SSH key to the instance with `--send-key` (aka
+  *EC2 Instance Connect*, although that's an odd name for this function).
 
 ## Usage
 
