@@ -15,6 +15,9 @@ import sys
 import logging
 import signal
 import argparse
+
+from typing import Tuple, List, Dict, Any
+
 import botocore.exceptions
 
 from .common import *
@@ -22,7 +25,7 @@ from .resolver import ContainerResolver
 
 logger = logging.getLogger("ssm-tools.ecs-session")
 
-def parse_args(argv):
+def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     """
     Parse command line arguments.
     """
@@ -62,7 +65,7 @@ Author: Michael Ludvig
 
     return args, extras
 
-def start_session(container, args, command):
+def start_session(container: Dict[str, Any], args: argparse.Namespace, command: str) -> None:
     exec_args = [ "aws", "ecs", "execute-command" ]
     if args.profile:
         exec_args += ["--profile", args.profile]
@@ -79,7 +82,7 @@ def start_session(container, args, command):
     logger.debug("Running: %s", exec_args)
     os.execvp(exec_args[0], exec_args)
 
-def main():
+def main() -> int:
     ## Split command line to main args and optional command to run
     args, extras = parse_args(sys.argv[1:])
 
@@ -102,6 +105,8 @@ def main():
             botocore.exceptions.ClientError) as e:
         logger.error(e)
         sys.exit(1)
+
+    return 0
 
 if __name__ == "__main__":
     main()

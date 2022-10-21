@@ -37,7 +37,8 @@ jobs:
             PYTHON_SCRIPTS="$(grep -l '#!/usr/bin/env python' ssm-* ecs-*) setup.py"
             pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ${PYTHON_SCRIPTS} ssm_tools/*.py
             pylint --errors-only ${PYTHON_SCRIPTS} ssm_tools/*.py
-            mypy --scripts-are-modules --ignore-missing-imports ${PYTHON_SCRIPTS}
+            PYTHON3_SCRIPTS="$(grep -l '#!/usr/bin/env python3' ssm-* ecs-*) setup.py"
+            mypy --scripts-are-modules --ignore-missing-imports ${PYTHON3_SCRIPTS}
 
   publish:
     docker:

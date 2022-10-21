@@ -65,7 +65,7 @@ Author: Michael Ludvig
     return args, extra_args
 
 
-def start_ssh_session(ssh_args: list, profile: str = None, region: str = None):
+def start_ssh_session(ssh_args: list, profile: str = None, region: str = None) -> None:
     aws_args = ""
     if profile:
         aws_args += f"--profile {profile} "
@@ -76,7 +76,7 @@ def start_ssh_session(ssh_args: list, profile: str = None, region: str = None):
     logger.debug("Running: %s", command)
     os.execvp(command[0], command)
 
-def main():
+def main() -> int:
     ## Split command line to main args and optional command to run
     args, extra_args = parse_args(sys.argv[1:])
 
@@ -100,19 +100,19 @@ def main():
         # - user name (for use with --send-key)
         # - key name (for use with --send-key)
         ssh_args = []
-        instance_id = None
-        login_name = None
-        key_file_name = None
+        instance_id = ""
+        login_name = ""
+        key_file_name = ""
 
-        extra_args = iter(extra_args)
-        for arg in extra_args:
+        extra_args_iter = iter(extra_args)
+        for arg in extra_args_iter:
             # User name argument
             if arg.startswith('-l'):
                 ssh_args.append(arg)
                 if len(arg) > 2:
                     login_name = arg[2:]
                 else:
-                    login_name = next(extra_args)
+                    login_name = next(extra_args_iter)
                     ssh_args.append(login_name)
                 continue
 
@@ -122,7 +122,7 @@ def main():
                 if len(arg) > 2:
                     key_file_name = arg[2:]
                 else:
-                    key_file_name = next(extra_args)
+                    key_file_name = next(extra_args_iter)
                     ssh_args.append(key_file_name)
                 continue
 
@@ -166,7 +166,6 @@ def main():
             logger.warning("Perhaps the '%s' is not registered in SSM?", instance)
             sys.exit(1)
 
-        # We may need some extra info for --send-key
         if args.send_key:
             EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, key_file_name)
 
@@ -176,6 +175,8 @@ def main():
             botocore.exceptions.ClientError) as e:
         logger.error(e)
         sys.exit(1)
+
+    return 0
 
 if __name__ == "__main__":
     main()

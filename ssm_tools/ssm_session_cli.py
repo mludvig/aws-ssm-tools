@@ -18,6 +18,8 @@ import signal
 import argparse
 import botocore.exceptions
 
+from typing import Tuple, List
+
 from .common import *
 from .resolver import InstanceResolver
 
@@ -25,7 +27,7 @@ logger = logging.getLogger("ssm-tools.ssm-session")
 
 signal.signal(signal.SIGTSTP, signal.SIG_IGN)   # Ignore Ctrl-Z - pass it on to the shell
 
-def parse_args(argv):
+def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     """
     Parse command line arguments.
     """
@@ -76,7 +78,7 @@ Author: Michael Ludvig
 
     return args, extras
 
-def start_session(instance_id, args):
+def start_session(instance_id: str, args: argparse.Namespace) -> None:
     exec_args = [ "aws", "ssm", "start-session" ]
     if args.profile:
         exec_args += ["--profile", args.profile]
@@ -102,7 +104,7 @@ def start_session(instance_id, args):
     logger.debug("Running: %s", exec_args)
     os.execvp(exec_args[0], exec_args)
 
-def main():
+def main() -> int:
     ## Split command line to main args and optional command to run
     args, extras = parse_args(sys.argv[1:])
 
@@ -127,6 +129,8 @@ def main():
             botocore.exceptions.ClientError) as e:
         logger.error(e)
         sys.exit(1)
+
+    return 0
 
 if __name__ == "__main__":
     main()

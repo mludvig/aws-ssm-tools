@@ -22,7 +22,7 @@ class InstanceResolver(AWSSessionBase):
         self.ec2_client = self.session.client('ec2')
 
     def get_list(self) -> Dict[str, Dict[str, Any]]:
-        def _try_append(_list, _dict, _key):
+        def _try_append(_list: list, _dict: dict, _key: str) -> None:
             if _key in _dict:
                 _list.append(_dict[_key])
 
@@ -139,7 +139,7 @@ class InstanceResolver(AWSSessionBase):
         for item in items_list:
             print(f"{item['InstanceId']:20}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
 
-    def resolve_instance(self, instance: str) -> Optional[str]:
+    def resolve_instance(self, instance: str) -> str:
         # Is it a valid Instance ID?
         if re.match('^m?i-[a-f0-9]+$', instance):
             return instance
@@ -154,7 +154,7 @@ class InstanceResolver(AWSSessionBase):
                 instances.append(instance_id)
 
         if not instances:
-            return None
+            return ""
 
         if len(instances) > 1:
             logger.warning("Found %d instances for '%s': %s", len(instances), instance, " ".join(instances))
@@ -188,7 +188,7 @@ class ContainerResolver(AWSSessionBase):
         })
 
     def get_list(self) -> List[Dict[str, Any]]:
-        def _try_append(_list: list, _dict: dict, _key: str):
+        def _try_append(_list: list, _dict: dict, _key: str) -> None:
             if _key in _dict:
                 _list.append(_dict[_key])
 

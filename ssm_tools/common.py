@@ -40,7 +40,7 @@ def add_general_parameters(parser: argparse.ArgumentParser, long_only: bool = Fa
     """
 
     # Remove short options if long_only==True
-    def _get_opts(opt_long, opt_short):
+    def _get_opts(opt_long: str, opt_short: str) -> List[str]:
         opts = [ opt_long ]
         if not long_only:
             opts.append(opt_short)
