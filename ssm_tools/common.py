@@ -1,7 +1,10 @@
 import sys
 import pathlib
 import logging
+import argparse
 import subprocess
+
+from typing import List, Tuple
 
 import boto3
 import botocore.credentials
@@ -14,7 +17,7 @@ __all__ = []
 # ---------------------------------------------------------
 
 __all__.append("configure_logging")
-def configure_logging(level):
+def configure_logging(level: int) -> None:
     """
     Configure logging format and level.
     """
@@ -31,13 +34,13 @@ def configure_logging(level):
 # ---------------------------------------------------------
 
 __all__.append("add_general_parameters")
-def add_general_parameters(parser, long_only = False):
+def add_general_parameters(parser: argparse.ArgumentParser, long_only: bool = False) -> argparse._ArgumentGroup:
     """
     Add General Options used by all ssm-* tools.
     """
 
     # Remove short options if long_only==True
-    def _get_opts(opt_long, opt_short):
+    def _get_opts(opt_long: str, opt_short: str) -> List[str]:
         opts = [ opt_long ]
         if not long_only:
             opts.append(opt_short)
@@ -57,7 +60,7 @@ def add_general_parameters(parser, long_only = False):
 # ---------------------------------------------------------
 
 __all__.append("show_version")
-def show_version(args):
+def show_version(args: argparse.Namespace) -> None:
     """
     Show package version and exit.
     """
@@ -71,7 +74,7 @@ def show_version(args):
 # ---------------------------------------------------------
 
 __all__.append("bytes_to_human")
-def bytes_to_human(size):
+def bytes_to_human(size: float) -> Tuple[float, str]:
     """
     Convert Bytes to more readable units
     """
@@ -87,7 +90,7 @@ def bytes_to_human(size):
 # ---------------------------------------------------------
 
 __all__.append("seconds_to_human")
-def seconds_to_human(seconds, decimal=3):
+def seconds_to_human(seconds: float, decimal: int = 3) -> str:
     """
     Convert seconds to HH:MM:SS[.SSS]
 
@@ -112,7 +115,7 @@ def seconds_to_human(seconds, decimal=3):
 # ---------------------------------------------------------
 
 __all__.append("verify_plugin_version")
-def verify_plugin_version(version_required, logger):
+def verify_plugin_version(version_required: str, logger: logging.Logger) -> bool:
     """
     Verify that a session-manager-plugin is installed
     and is of a required version or newer.
@@ -120,7 +123,7 @@ def verify_plugin_version(version_required, logger):
     session_manager_plugin = 'session-manager-plugin'
 
     try:
-        result = subprocess.run([session_manager_plugin, '--version'], stdout=subprocess.PIPE)
+        result = subprocess.run([session_manager_plugin, '--version'], stdout=subprocess.PIPE, check=False)
         plugin_version = result.stdout.decode('ascii').strip()
         logger.debug(f"{session_manager_plugin} version {plugin_version}")
 
@@ -128,7 +131,7 @@ def verify_plugin_version(version_required, logger):
             return True
 
         logger.error(f"ERROR: session-manager-plugin version {plugin_version} is installed, {version_required} is required")
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         logger.error(f"ERROR: {session_manager_plugin} not installed")
 
     logger.error("ERROR: Check out https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html for instructions")
@@ -139,7 +142,7 @@ def verify_plugin_version(version_required, logger):
 
 __all__.append("AWSSessionBase")
 class AWSSessionBase:
-    def __init__(self, args):
+    def __init__(self, args: argparse.Namespace) -> None:
         # aws-cli compatible MFA cache
         cli_cache = pathlib.Path('~/.aws/cli/cache').expanduser()
 

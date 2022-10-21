@@ -21,10 +21,12 @@ import argparse
 import ipaddress
 from base64 import b64encode, b64decode
 
+from typing import List, Any, Tuple
+
 import pexpect
 import botocore.exceptions
 
-from .common import *
+from .common import add_general_parameters, show_version, configure_logging, bytes_to_human, seconds_to_human
 from .talker import SsmTalker
 from .resolver import InstanceResolver
 
@@ -33,21 +35,21 @@ logger = logging.getLogger("ssm-tools.ssm-tunnel")
 tunnel_cidr = "100.64.0.0/16"
 keepalive_sec = 10
 
-def parse_args():
+def parse_args(argv: list) -> argparse.Namespace:
     """
     Parse command line arguments.
     """
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
 
-    group_general = add_general_parameters(parser)
+    add_general_parameters(parser)
 
     group_instance = parser.add_argument_group('Instance Selection')
     group_instance.add_argument('INSTANCE', nargs='?', help='Instance ID, Name, Host name or IP address')
     group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances registered in SSM.')
 
     group_network = parser.add_argument_group('Networking Options')
-    group_network.add_argument('--route', '-r', metavar="ROUTE", dest="routes", type=str, action="append",
+    group_network.add_argument('--route', '-r', metavar="ROUTE", dest="routes", type=str, action="append", default=[],
                                help='CIDR(s) to route through this tunnel. May be used multiple times.')
     group_network.add_argument('--tunnel-cidr', metavar="CIDR", type=str, default=tunnel_cidr, help=f'''By default
         the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598).
@@ -68,7 +70,7 @@ Author: Michael Ludvig
 '''
 
     # Parse supplied arguments
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # If --version do it now and exit
     if args.show_version:
@@ -81,28 +83,31 @@ Author: Michael Ludvig
     return args
 
 class SsmTunnel(SsmTalker):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
         # Stats structure
-        self.stats = { 'ts': 0, 'l2r': 0, 'r2l': 0 }
+        self.stats = { 'ts': 0.0, 'l2r': 0, 'r2l': 0 }
         self.stats_lock = threading.Lock()
         self.stats_secs = 10
         self.stats_refresh = 0.5        # Print stats every this many seconds
 
         self._exiting = False
 
-        self.tun_name = self._tun_fd = None
-        self.local_ip = self.remote_ip = self.routes = None
-        self.updown_script = self.updown_up_success = None
+        self.tun_name = ""
+        self._tun_fd = -1
+        self.local_ip = self.remote_ip = ""
+        self.routes: List[str] = []
+        self.updown_script = ""
+        self.updown_up_success = False
 
-    def run_command(self, command, assert_0=True):
+    def run_command(self, command: str, assert_0: bool = True) -> None:
         logger.debug("command: %s", command)
         ret = os.system(command)
         if assert_0:
             assert ret == 0
 
-    def open_remote_tunnel(self):
+    def open_remote_tunnel(self) -> None:
         logger.debug('Creating tunnel')
 
         # Open remote tun0 device
@@ -116,7 +121,7 @@ class SsmTunnel(SsmTalker):
             sys.exit(1)
         logger.debug(self._child.after)
 
-    def open_local_tunnel(self):
+    def open_local_tunnel(self) -> None:
         tun_suffix = ".".join(self.local_ip.split(".")[2:])
         self.tun_name = f"tunSSM.{tun_suffix}"
 
@@ -126,7 +131,7 @@ class SsmTunnel(SsmTalker):
         logger.debug("# Local device %s is ready", self.tun_name)
         logger.info("Local IP: %s / Remote IP: %s", self.local_ip, self.remote_ip)
 
-    def create_tun(self):
+    def create_tun(self) -> None:
         try:
             user_id = os.getuid()
             self.run_command(f"sudo ip tuntap add {self.tun_name} mode tun user {user_id}")
@@ -143,20 +148,20 @@ class SsmTunnel(SsmTalker):
             self.delete_tun()
             raise
 
-    def delete_tun(self):
+    def delete_tun(self) -> None:
         # We don't check return code here - best effort to close and delete the device
-        if self._tun_fd is not None:
+        if self._tun_fd >= 0:
             try:
                 os.close(self._tun_fd)
-                self._tun_fd = None
+                self._tun_fd = -1
             except Exception as e:
                 logger.exception(e)
-        if self.tun_name is not None:
+        if self.tun_name:
             self.run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
             self.run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
-            self.tun_name = None
+            self.tun_name = ""
 
-    def open_tun(self):
+    def open_tun(self) -> int:
         TUNSETIFF = 0x400454ca
         IFF_TUN = 0x0001
 
@@ -168,7 +173,7 @@ class SsmTunnel(SsmTalker):
 
         return tun_fd
 
-    def local_to_remote(self):
+    def local_to_remote(self) -> None:
         last_ts = time.time()
         while True:
             if self._exiting:
@@ -195,7 +200,7 @@ class SsmTunnel(SsmTalker):
 
         logger.debug("local_to_remote() has exited.")
 
-    def remote_to_local(self):
+    def remote_to_local(self) -> None:
         while True:
             if self._exiting:
                 break
@@ -205,7 +210,7 @@ class SsmTunnel(SsmTalker):
                 # This is a long timeout, 30 sec, not very useful
                 continue
             if type(self._child.after) == pexpect.exceptions.EOF:
-                logger.warn("Received unexpected EOF - tunnel went down?")
+                logger.warning("Received unexpected EOF - tunnel went down?")
                 self._exiting = True
                 break
             if not line or line[0] != '%':
@@ -220,7 +225,7 @@ class SsmTunnel(SsmTalker):
 
         logger.debug("remote_to_local() has exited.")
 
-    def process_traffic(self):
+    def process_traffic(self) -> None:
         tr_l2r = threading.Thread(target=self.local_to_remote, args=[])
         tr_l2r.daemon = True
         tr_l2r.start()
@@ -235,7 +240,7 @@ class SsmTunnel(SsmTalker):
         except KeyboardInterrupt:
             print("")   # Just to avoid "^C" at the end of line
 
-    def run_updown(self, status):
+    def run_updown(self, status: str) -> None:
         if not self.updown_script:
             return
 
@@ -253,7 +258,7 @@ class SsmTunnel(SsmTalker):
             logger.error('Updown script %s exitted with error.', self.updown_script)
             sys.exit(1)
 
-    def start(self, local_ip, remote_ip, routes, updown_script):
+    def start(self, local_ip: str, remote_ip: str, routes: List[str], updown_script: str) -> None:
         self.local_ip = local_ip
         self.remote_ip = remote_ip
         self.routes = routes
@@ -273,8 +278,8 @@ class SsmTunnel(SsmTalker):
             self.delete_tun()
 
 
-    def display_stats(self):
-        def _erase_line():
+    def display_stats(self) -> None:
+        def _erase_line() -> None:
             print('\r\x1B[K', end="")   # Erase line
 
         stat_history = [self.stats]
@@ -309,7 +314,7 @@ class SsmTunnel(SsmTalker):
             _erase_line()
             print(f"{uptime} | In: {r2l_t_h:6.1f}{r2l_t_u:>2s} @ {r2l_a_h:6.1f}{r2l_a_u:>2s}/s | Out: {l2r_t_h:6.1f}{l2r_t_u:>2s} @ {l2r_a_h:6.1f}{l2r_a_u:>2s}/s", end="", flush=True)
 
-def random_ips(network):
+def random_ips(network: str) -> Tuple[str, str]:
     # Network address
     net = ipaddress.ip_network(network)
     # Random host-part
@@ -319,14 +324,14 @@ def random_ips(network):
     remote_ip = net.network_address + host_bytes + 1
     return local_ip.compressed, remote_ip.compressed
 
-def main():
+def main() -> int:
     if sys.platform != "linux":
         print("The 'ssm-tunnel' program only works on Linux at the moment!", file=sys.stderr)
         print("In other systems you are welcome to install it in VirtualBox or in a similar virtual environment running Linux.", file=sys.stderr)
         sys.exit(1)
 
     ## Split command line args
-    args = parse_args()
+    args = parse_args(sys.argv[1:])
 
     configure_logging(args.log_level)
 
@@ -345,7 +350,7 @@ def main():
 
         local_ip, remote_ip = random_ips(args.tunnel_cidr)
         tunnel = SsmTunnel(instance_id, profile=args.profile, region=args.region)
-        tunnel.start(local_ip, remote_ip, args.routes or [], args.updown_script)
+        tunnel.start(local_ip, remote_ip, list(args.routes) or [], args.updown_script)
 
     except (botocore.exceptions.BotoCoreError,
             botocore.exceptions.ClientError) as e:
@@ -355,6 +360,8 @@ def main():
     finally:
         if tunnel:
             tunnel.delete_tun()
+
+    return 0
 
 if __name__ == "__main__":
     main()

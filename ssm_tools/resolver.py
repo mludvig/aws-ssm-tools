@@ -3,21 +3,24 @@
 import sys
 import re
 import logging
+import argparse
+
 import botocore.session
+
 from .common import AWSSessionBase
 
 logger = logging.getLogger("ssm-tools.resolver")
 
 class InstanceResolver(AWSSessionBase):
-    def __init__(self, args):
+    def __init__(self, args: argparse.Namespace) -> None:
         super().__init__(args)
 
         # Create boto3 clients from session
         self.ssm_client = self.session.client('ssm')
         self.ec2_client = self.session.client('ec2')
 
-    def get_list(self):
-        def _try_append(_list, _dict, _key):
+    def get_list(self) -> Dict[str, Dict[str, Any]]:
+        def _try_append(_list: list, _dict: dict, _key: str) -> None:
             if _key in _dict:
                 _list.append(_dict[_key])
 
@@ -113,7 +116,7 @@ class InstanceResolver(AWSSessionBase):
 
         return items
 
-    def print_list(self):
+    def print_list(self) -> None:
         hostname_len = 1    # Minimum of 1 char, otherwise f-string below fails for empty hostnames
         instname_len = 1
 
@@ -123,17 +126,18 @@ class InstanceResolver(AWSSessionBase):
             logger.warning("No instances registered in SSM!")
             return
 
-        items = list(items)
-        items.sort(key=lambda x: x.get('InstanceName') or x.get('HostName'))
+        items_list = list(items)
+        del items
+        items_list.sort(key=lambda x: x.get('InstanceName') or x.get('HostName'))   # type: ignore
 
-        for item in items:
+        for item in items_list:
             hostname_len = max(hostname_len, len(item['HostName']))
             instname_len = max(instname_len, len(item['InstanceName']))
 
-        for item in items:
+        for item in items_list:
             print(f"{item['InstanceId']:20}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
 
-    def resolve_instance(self, instance):
+    def resolve_instance(self, instance: str) -> str:
         # Is it a valid Instance ID?
         if re.match('^m?i-[a-f0-9]+$', instance):
             return instance
@@ -148,7 +152,7 @@ class InstanceResolver(AWSSessionBase):
                 instances.append(instance_id)
 
         if not instances:
-            return None
+            return ""
 
         if len(instances) > 1:
             logger.warning("Found %d instances for '%s': %s", len(instances), instance, " ".join(instances))
@@ -159,17 +163,17 @@ class InstanceResolver(AWSSessionBase):
         return instances[0]
 
 class ContainerResolver(AWSSessionBase):
-    def __init__(self, args):
+    def __init__(self, args: argparse.Namespace) -> None:
         super().__init__(args)
 
         # Create boto3 clients from session
         self.ecs_client = self.session.client('ecs')
 
         self.args = args
-        self.containers = []
-        self._tasks = {}
+        self.containers: List[Dict[str, Any]] = []
+        self._tasks: Dict[str, Any] = {}
 
-    def add_container(self, container):
+    def add_container(self, container: Dict[str, Any]) -> None:
         _task_parsed = container['taskArn'].split(":")[-1].split("/")
         self.containers.append({
             "cluster_name": _task_parsed[1],
@@ -181,12 +185,10 @@ class ContainerResolver(AWSSessionBase):
             "container_ip": container['networkInterfaces'][0]['privateIpv4Address'],
         })
 
-    def get_list(self):
-        def _try_append(_list, _dict, _key):
+    def get_list(self) -> List[Dict[str, Any]]:
+        def _try_append(_list: list, _dict: dict, _key: str) -> None:
             if _key in _dict:
                 _list.append(_dict[_key])
-
-        items = {}
 
         # List ECS Clusters
         clusters = []
@@ -229,7 +231,7 @@ class ContainerResolver(AWSSessionBase):
 
         return self.containers
 
-    def print_containers(self, containers):
+    def print_containers(self, containers: List[Dict[str, Any]]) -> None:
         max_len = {}
         for container in containers:
             for key in container.keys():
@@ -241,7 +243,7 @@ class ContainerResolver(AWSSessionBase):
         for container in containers:
             print(f"{container['cluster_name']:{max_len['cluster_name']}}  {container['group_name']:{max_len['group_name']}}  {container['task_id']:{max_len['task_id']}}  {container['container_name']:{max_len['container_name']}}  {container['container_ip']:{max_len['container_ip']}}")
 
-    def print_list(self):
+    def print_list(self) -> None:
         containers = self.get_list()
 
         if not containers:
@@ -250,7 +252,7 @@ class ContainerResolver(AWSSessionBase):
 
         self.print_containers(containers)
 
-    def resolve_container(self, keywords):
+    def resolve_container(self, keywords: List[str]) -> Dict[str, Any]:
         containers = self.get_list()
 
         if not containers:
@@ -259,12 +261,12 @@ class ContainerResolver(AWSSessionBase):
 
         logger.debug("Searching for containers matching all keywords: %s", " ".join(keywords))
 
-        candidates = []
+        candidates: List[Dict[str, Any]] = []
         for container in containers:
             for keyword in keywords:
                 if keyword not in (container['group_name'], container['task_id'], container['container_name'], container['container_ip']):
                     logger.debug("IGNORED: Container %s/%s doesn't match keyword: %s", container['task_id'], container['container_name'], keyword)
-                    container = None
+                    container = {}
                     break
             if container:
                 logger.debug("ADDED: Container %s/%s matches all keywords: %s", container['task_id'], container['container_name'], " ".join(keywords))

@@ -28,7 +28,7 @@ class VerifyVersionCommand(install):
     """Custom command to verify that the git tag matches our version"""
     description = 'verify that the git tag matches our version'
 
-    def run(self):
+    def run(self) -> None:
         tag = os.getenv('CIRCLE_TAG')
         if not tag:
             sys.exit("Env var $CIRCLE_TAG is not defined - are we running a CircleCI build?")
