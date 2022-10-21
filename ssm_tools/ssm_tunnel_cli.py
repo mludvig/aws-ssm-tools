@@ -45,22 +45,23 @@ def parse_args(argv: list) -> argparse.Namespace:
 
     add_general_parameters(parser)
 
-    group_instance = parser.add_argument_group('Instance Selection')
-    group_instance.add_argument('INSTANCE', nargs='?', help='Instance ID, Name, Host name or IP address')
-    group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances registered in SSM.')
+    # fmt: off
+    group_instance = parser.add_argument_group("Instance Selection")
+    group_instance.add_argument("INSTANCE", nargs="?", help="Instance ID, Name, Host name or IP address")
+    group_instance.add_argument("--list", "-l", dest="list", action="store_true", help="List instances registered in SSM.")
 
-    group_network = parser.add_argument_group('Networking Options')
-    group_network.add_argument('--route', '-r', metavar="ROUTE", dest="routes", type=str, action="append", default=[],
-                               help='CIDR(s) to route through this tunnel. May be used multiple times.')
-    group_network.add_argument('--tunnel-cidr', metavar="CIDR", type=str, default=tunnel_cidr, help=f'''By default
-        the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598).
-        This should be ok for most users.''')
-    group_network.add_argument('--up-down', metavar="SCRIPT", dest='updown_script', type=str, help='''Script to call
-        during tunnel start up and close down. Check out 'ssm-tunnel-updown.dns-example' that
-        supports setting a custom DNS server when the tunnel goes up.''')
+    group_network = parser.add_argument_group("Networking Options")
+    group_network.add_argument("--route", "-r", metavar="ROUTE", dest="routes", type=str, action="append", default=[], help="CIDR(s) to route through this tunnel. May be used multiple times.")
+    group_network.add_argument("--tunnel-cidr", metavar="CIDR", type=str, default=tunnel_cidr,
+        help=f"By default the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598). This should be ok for most users."
+    )
+    group_network.add_argument("--up-down", metavar="SCRIPT", dest="updown_script", type=str,
+        help="Script to call during tunnel start up and close down. Check out 'ssm-tunnel-updown.dns-example' that supports setting a custom DNS server when the tunnel goes up."
+    )
+    # fmt: on
 
-    parser.description = 'Start IP tunnel to a given SSM instance'
-    parser.epilog = f'''
+    parser.description = "Start IP tunnel to a given SSM instance"
+    parser.epilog = f"""
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
 before you can copy files to/from them! Instances not registered in SSM
 will not be recognised by {parser.prog} nor show up in --list output.
@@ -68,7 +69,7 @@ will not be recognised by {parser.prog} nor show up in --list output.
 Visit https://aws.nz/aws-utils/ssm-tunnel for more info and usage examples.
 
 Author: Michael Ludvig
-'''
+"""
 
     # Parse supplied arguments
     args = parser.parse_args(argv)

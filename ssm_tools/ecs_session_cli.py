@@ -42,7 +42,7 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     group_session = parser.add_argument_group("Session Parameters")
     group_session.add_argument("--command", dest="command", metavar="COMMAND", default="/bin/sh", help="Command to run inside the container. Default: /bin/sh")
 
-    parser.description = 'Execute "ECS Run Task" on a given container'
+    parser.description = "Execute 'ECS Run Task' in a given container"
     parser.epilog = f"""
 IMPORTANT: containers must have "execute-command" setting enabled or they
 will not be recognised by {parser.prog} nor show up in --list output.
@@ -73,12 +73,15 @@ def start_session(container: Dict[str, Any], args: argparse.Namespace, command: 
     if args.region:
         exec_args += ["--region", args.region]
 
+    # fmt: off
     exec_args += [
         "--cluster", container["cluster_arn"],
         "--task", container["task_arn"],
         "--container", container["container_name"],
-        "--command", command, "--interactive",
+        "--command", command,
+        "--interactive",
     ]
+    # fmt: on
 
     logger.debug("Running: %s", exec_args)
     os.execvp(exec_args[0], exec_args)
