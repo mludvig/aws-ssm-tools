@@ -76,7 +76,7 @@ def start_session(container, args, command):
         "--command", command, "--interactive",
     ]
 
-    logger.info("Running: %s", exec_args)
+    logger.debug("Running: %s", exec_args)
     os.execvp(exec_args[0], exec_args)
 
 def main():

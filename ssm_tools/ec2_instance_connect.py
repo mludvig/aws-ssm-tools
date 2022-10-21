@@ -3,6 +3,8 @@ import logging
 import pathlib
 import subprocess
 
+# Needed for type hints
+import argparse
 from typing import List
 
 import botocore.exceptions
@@ -11,7 +13,7 @@ from .common import AWSSessionBase
 logger = logging.getLogger("ssm-tools.ec2-instance-connect")
 
 class EC2InstanceConnectHelper(AWSSessionBase):
-    def __init__(self, args: list):
+    def __init__(self, args: argparse.Namespace) -> None:
         super().__init__(args)
 
         # Create boto3 client from session

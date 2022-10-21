@@ -99,7 +99,7 @@ def start_session(instance_id, args):
             exec_args += [ "--parameters", args.parameters ]
 
     exec_args += ["--target", instance_id]
-    logger.info("Running: %s", exec_args)
+    logger.debug("Running: %s", exec_args)
     os.execvp(exec_args[0], exec_args)
 
 def main():

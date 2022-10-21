@@ -1,7 +1,10 @@
 import sys
 import pathlib
 import logging
+import argparse
 import subprocess
+
+from typing import List, Tuple
 
 import boto3
 import botocore.credentials
@@ -14,7 +17,7 @@ __all__ = []
 # ---------------------------------------------------------
 
 __all__.append("configure_logging")
-def configure_logging(level):
+def configure_logging(level: int) -> None:
     """
     Configure logging format and level.
     """
@@ -31,7 +34,7 @@ def configure_logging(level):
 # ---------------------------------------------------------
 
 __all__.append("add_general_parameters")
-def add_general_parameters(parser, long_only = False):
+def add_general_parameters(parser: argparse.ArgumentParser, long_only: bool = False) -> argparse._ArgumentGroup:
     """
     Add General Options used by all ssm-* tools.
     """
@@ -57,7 +60,7 @@ def add_general_parameters(parser, long_only = False):
 # ---------------------------------------------------------
 
 __all__.append("show_version")
-def show_version(args):
+def show_version(args: argparse.Namespace) -> None:
     """
     Show package version and exit.
     """
@@ -71,7 +74,7 @@ def show_version(args):
 # ---------------------------------------------------------
 
 __all__.append("bytes_to_human")
-def bytes_to_human(size):
+def bytes_to_human(size: float) -> Tuple[float, str]:
     """
     Convert Bytes to more readable units
     """
@@ -87,7 +90,7 @@ def bytes_to_human(size):
 # ---------------------------------------------------------
 
 __all__.append("seconds_to_human")
-def seconds_to_human(seconds, decimal=3):
+def seconds_to_human(seconds: float, decimal: int = 3) -> str:
     """
     Convert seconds to HH:MM:SS[.SSS]
 
@@ -112,7 +115,7 @@ def seconds_to_human(seconds, decimal=3):
 # ---------------------------------------------------------
 
 __all__.append("verify_plugin_version")
-def verify_plugin_version(version_required, logger):
+def verify_plugin_version(version_required: str, logger: logging.Logger) -> bool:
     """
     Verify that a session-manager-plugin is installed
     and is of a required version or newer.
@@ -139,7 +142,7 @@ def verify_plugin_version(version_required, logger):
 
 __all__.append("AWSSessionBase")
 class AWSSessionBase:
-    def __init__(self, args):
+    def __init__(self, args: argparse.Namespace) -> None:
         # aws-cli compatible MFA cache
         cli_cache = pathlib.Path('~/.aws/cli/cache').expanduser()
 
