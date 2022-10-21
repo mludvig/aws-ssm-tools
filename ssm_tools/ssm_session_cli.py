@@ -26,7 +26,8 @@ from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ssm-session")
 
-signal.signal(signal.SIGTSTP, signal.SIG_IGN)   # Ignore Ctrl-Z - pass it on to the shell
+signal.signal(signal.SIGTSTP, signal.SIG_IGN)  # Ignore Ctrl-Z - pass it on to the shell
+
 
 def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     """
@@ -79,8 +80,9 @@ Author: Michael Ludvig
 
     return args, extras
 
+
 def start_session(instance_id: str, args: argparse.Namespace) -> None:
-    exec_args = [ "aws", "ssm", "start-session" ]
+    exec_args = ["aws", "ssm", "start-session"]
     if args.profile:
         exec_args += ["--profile", args.profile]
     if args.region:
@@ -88,22 +90,21 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
 
     if args.user:
         # Fake --document-name / --parameters for --user
-        exec_args += [ "--document-name", "AWS-StartInteractiveCommand",
-                       "--parameters", f"command=[\"sudo -i -u {args.user}\"]" ]
+        exec_args += ["--document-name", "AWS-StartInteractiveCommand", "--parameters", f'command=["sudo -i -u {args.user}"]']
     if args.command:
         # Fake --document-name / --parameters for --command
-        exec_args += [ "--document-name", "AWS-StartInteractiveCommand",
-                       "--parameters", f"command={args.command}" ]
+        exec_args += ["--document-name", "AWS-StartInteractiveCommand", "--parameters", f"command={args.command}"]
     else:
         # Or use the provided values
         if args.document_name:
-            exec_args += [ "--document-name", args.document_name ]
+            exec_args += ["--document-name", args.document_name]
         if args.parameters:
-            exec_args += [ "--parameters", args.parameters ]
+            exec_args += ["--parameters", args.parameters]
 
     exec_args += ["--target", instance_id]
     logger.debug("Running: %s", exec_args)
     os.execvp(exec_args[0], exec_args)
+
 
 def main() -> int:
     ## Split command line to main args and optional command to run
@@ -125,12 +126,12 @@ def main() -> int:
 
         start_session(instance_id, args)
 
-    except (botocore.exceptions.BotoCoreError,
-            botocore.exceptions.ClientError) as e:
+    except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)
         sys.exit(1)
 
     return 0
+
 
 if __name__ == "__main__":
     main()

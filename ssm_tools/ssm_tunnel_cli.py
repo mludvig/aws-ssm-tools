@@ -35,6 +35,7 @@ logger = logging.getLogger("ssm-tools.ssm-tunnel")
 tunnel_cidr = "100.64.0.0/16"
 keepalive_sec = 10
 
+
 def parse_args(argv: list) -> argparse.Namespace:
     """
     Parse command line arguments.
@@ -82,15 +83,16 @@ Author: Michael Ludvig
 
     return args
 
+
 class SsmTunnel(SsmTalker):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
         # Stats structure
-        self.stats = { 'ts': 0.0, 'l2r': 0, 'r2l': 0 }
+        self.stats = {"ts": 0.0, "l2r": 0, "r2l": 0}
         self.stats_lock = threading.Lock()
         self.stats_secs = 10
-        self.stats_refresh = 0.5        # Print stats every this many seconds
+        self.stats_refresh = 0.5  # Print stats every this many seconds
 
         self._exiting = False
 
@@ -108,11 +110,11 @@ class SsmTunnel(SsmTalker):
             assert ret == 0
 
     def open_remote_tunnel(self) -> None:
-        logger.debug('Creating tunnel')
+        logger.debug("Creating tunnel")
 
         # Open remote tun0 device
         self._child.sendline(f"ssm-tunnel-agent {self.remote_ip} {self.local_ip}")
-        patterns = ['# Agent device .* is ready', 'command not found']
+        patterns = ["# Agent device .* is ready", "command not found"]
         match = self._child.expect(patterns)
         if match != 0:  # Index matched in the 'patterns'
             logger.error("Unable to establish the tunnel!")
@@ -162,13 +164,13 @@ class SsmTunnel(SsmTalker):
             self.tun_name = ""
 
     def open_tun(self) -> int:
-        TUNSETIFF = 0x400454ca
+        TUNSETIFF = 0x400454CA
         IFF_TUN = 0x0001
 
         tun_fd = os.open("/dev/net/tun", os.O_RDWR)
 
         flags = IFF_TUN
-        ifr = struct.pack('16sH22s', self.tun_name.encode(), flags, b'\x00'*22)
+        ifr = struct.pack("16sH22s", self.tun_name.encode(), flags, b"\x00" * 22)
         fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
 
         return tun_fd
@@ -186,8 +188,8 @@ class SsmTunnel(SsmTalker):
                         self._child.sendline("#")
                         last_ts = time.time()
                     continue
-                buf = os.read(self._tun_fd, 1504)     # Virtual GRE header adds 4 bytes
-                self._child.sendline("%{}".format(b64encode(buf).decode('ascii')))
+                buf = os.read(self._tun_fd, 1504)  # Virtual GRE header adds 4 bytes
+                self._child.sendline("%{}".format(b64encode(buf).decode("ascii")))
             except OSError as e:
                 if e.errno == errno.EBADF and self._exiting:
                     break
@@ -195,7 +197,7 @@ class SsmTunnel(SsmTalker):
             last_ts = time.time()
             # Update stats
             self.stats_lock.acquire()
-            self.stats['l2r'] += len(buf)
+            self.stats["l2r"] += len(buf)
             self.stats_lock.release()
 
         logger.debug("local_to_remote() has exited.")
@@ -213,14 +215,14 @@ class SsmTunnel(SsmTalker):
                 logger.warning("Received unexpected EOF - tunnel went down?")
                 self._exiting = True
                 break
-            if not line or line[0] != '%':
+            if not line or line[0] != "%":
                 continue
 
-            buf = b64decode(line[1:].strip('\r\n'))
+            buf = b64decode(line[1:].strip("\r\n"))
             os.write(self._tun_fd, buf)
             # Update stats
             self.stats_lock.acquire()
-            self.stats['r2l'] += len(buf)
+            self.stats["r2l"] += len(buf)
             self.stats_lock.release()
 
         logger.debug("remote_to_local() has exited.")
@@ -238,7 +240,7 @@ class SsmTunnel(SsmTalker):
             self.display_stats()
 
         except KeyboardInterrupt:
-            print("")   # Just to avoid "^C" at the end of line
+            print("")  # Just to avoid "^C" at the end of line
 
     def run_updown(self, status: str) -> None:
         if not self.updown_script:
@@ -255,7 +257,7 @@ class SsmTunnel(SsmTalker):
             self.run_command(cmd)
             self.updown_up_success = True
         except AssertionError:
-            logger.error('Updown script %s exitted with error.', self.updown_script)
+            logger.error("Updown script %s exitted with error.", self.updown_script)
             sys.exit(1)
 
     def start(self, local_ip: str, remote_ip: str, routes: List[str], updown_script: str) -> None:
@@ -271,16 +273,15 @@ class SsmTunnel(SsmTalker):
             self.process_traffic()
 
         finally:
-            logger.info('Closing tunnel, please wait...')
+            logger.info("Closing tunnel, please wait...")
             self.run_updown("down")
             self.exit()
             self._exiting = True
             self.delete_tun()
 
-
     def display_stats(self) -> None:
         def _erase_line() -> None:
-            print('\r\x1B[K', end="")   # Erase line
+            print("\r\x1B[K", end="")  # Erase line
 
         stat_history = [self.stats]
         stat_history_len = int(self.stats_secs / self.stats_refresh)
@@ -293,36 +294,38 @@ class SsmTunnel(SsmTalker):
             self.stats_lock.acquire()
             stat_history.insert(1, copy.copy(self.stats))
             self.stats_lock.release()
-            stat_history[1]['ts'] = time.time()
+            stat_history[1]["ts"] = time.time()
 
             # Calculate sliding window average
-            if stat_history[1]['ts'] > stat_history[-1]['ts']:
-                l2r_avg = (stat_history[1]['l2r'] - stat_history[-1]['l2r'])/(stat_history[1]['ts'] - stat_history[-1]['ts'])
-                r2l_avg = (stat_history[1]['r2l'] - stat_history[-1]['r2l'])/(stat_history[1]['ts'] - stat_history[-1]['ts'])
+            if stat_history[1]["ts"] > stat_history[-1]["ts"]:
+                l2r_avg = (stat_history[1]["l2r"] - stat_history[-1]["l2r"]) / (stat_history[1]["ts"] - stat_history[-1]["ts"])
+                r2l_avg = (stat_history[1]["r2l"] - stat_history[-1]["r2l"]) / (stat_history[1]["ts"] - stat_history[-1]["ts"])
             else:
                 l2r_avg = r2l_avg = 0.0
 
             # Trim the oldest points
-            del stat_history[stat_history_len+1:]
+            del stat_history[stat_history_len + 1 :]
 
-            uptime = seconds_to_human(time.time()-start_ts, decimal=0)
-            l2r_t_h, l2r_t_u = bytes_to_human(stat_history[1]['l2r'])
-            r2l_t_h, r2l_t_u = bytes_to_human(stat_history[1]['r2l'])
+            uptime = seconds_to_human(time.time() - start_ts, decimal=0)
+            l2r_t_h, l2r_t_u = bytes_to_human(stat_history[1]["l2r"])
+            r2l_t_h, r2l_t_u = bytes_to_human(stat_history[1]["r2l"])
             l2r_a_h, l2r_a_u = bytes_to_human(l2r_avg)
             r2l_a_h, r2l_a_u = bytes_to_human(r2l_avg)
 
             _erase_line()
             print(f"{uptime} | In: {r2l_t_h:6.1f}{r2l_t_u:>2s} @ {r2l_a_h:6.1f}{r2l_a_u:>2s}/s | Out: {l2r_t_h:6.1f}{l2r_t_u:>2s} @ {l2r_a_h:6.1f}{l2r_a_u:>2s}/s", end="", flush=True)
 
+
 def random_ips(network: str) -> Tuple[str, str]:
     # Network address
     net = ipaddress.ip_network(network)
     # Random host-part
-    host_bytes = int(random.uniform(2, 2**(net.max_prefixlen-net.prefixlen)-4))&0xFFFFFFFE
+    host_bytes = int(random.uniform(2, 2 ** (net.max_prefixlen - net.prefixlen) - 4)) & 0xFFFFFFFE
     # Construct local/remote IP
     local_ip = net.network_address + host_bytes
     remote_ip = net.network_address + host_bytes + 1
     return local_ip.compressed, remote_ip.compressed
+
 
 def main() -> int:
     if sys.platform != "linux":
@@ -352,8 +355,7 @@ def main() -> int:
         tunnel = SsmTunnel(instance_id, profile=args.profile, region=args.region)
         tunnel.start(local_ip, remote_ip, list(args.routes) or [], args.updown_script)
 
-    except (botocore.exceptions.BotoCoreError,
-            botocore.exceptions.ClientError) as e:
+    except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)
         sys.exit(1)
 
@@ -362,6 +364,7 @@ def main() -> int:
             tunnel.delete_tun()
 
     return 0
+
 
 if __name__ == "__main__":
     main()

@@ -11,20 +11,21 @@ from .common import AWSSessionBase
 
 logger = logging.getLogger("ssm-tools.ec2-instance-connect")
 
+
 class EC2InstanceConnectHelper(AWSSessionBase):
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__(args)
 
         # Create boto3 client from session
-        self.ec2ic_client = self.session.client('ec2-instance-connect')
+        self.ec2ic_client = self.session.client("ec2-instance-connect")
 
     def obtain_ssh_key(self, key_file_name: str) -> str:
         def _read_ssh_agent_keys() -> List[str]:
             cp = subprocess.run(["ssh-add", "-L"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
             if cp.returncode != 0:
-                logger.debug("Failed to run: ssh-add -L: %s", cp.stderr.decode('utf-8').strip().replace('\n', ' '))
+                logger.debug("Failed to run: ssh-add -L: %s", cp.stderr.decode("utf-8").strip().replace("\n", " "))
                 return []
-            return cp.stdout.decode('utf-8').split('\n')
+            return cp.stdout.decode("utf-8").split("\n")
 
         def _read_ssh_public_key(key_file_name_pub: str) -> str:
             try:
@@ -61,7 +62,7 @@ class EC2InstanceConnectHelper(AWSSessionBase):
                 logger.info("Using SSH key from ~/.ssh/id_dsa.pub - should work in most cases")
                 return ssh_key
 
-        else:   # i.e. key_file_name is set
+        else:  # i.e. key_file_name is set
             logger.info("Looking for a public key matching: %s", key_file_name)
 
             # Try reading the public key file (key_file_name + ".pub" suffix)
@@ -83,17 +84,16 @@ class EC2InstanceConnectHelper(AWSSessionBase):
             cp = subprocess.run(["ssh-keygen", "-y", "-f", key_file_name], stdout=subprocess.PIPE, check=False)
             if cp.returncode == 0:
                 logger.info("Extracted the public key from: %s", key_file_name)
-                return cp.stdout.decode('utf-8').split('\n')[0]
+                return cp.stdout.decode("utf-8").split("\n")[0]
             logger.debug("Could not extract the public key from %s", key_file_name)
 
         logger.warning("Unable to find SSH public key from any available source.")
         logger.warning("Use --debug for more details on what we tried.")
         sys.exit(1)
 
-
     def send_ssh_key(self, instance_id: str, login_name: str, key_file_name: str) -> None:
         if not login_name:
-            logger.error("Unable to figure out the EC2 login name. Use \"-l {user}\" or {user}@{instance}.")
+            logger.error('Unable to figure out the EC2 login name. Use "-l {user}" or {user}@{instance}.')
             sys.exit(1)
 
         ssh_key = self.obtain_ssh_key(key_file_name)
@@ -105,6 +105,6 @@ class EC2InstanceConnectHelper(AWSSessionBase):
             SSHPublicKey=ssh_key,
         )
 
-        if not result['Success']:
+        if not result["Success"]:
             logger.error("Failed to send SSH Key to %s", instance_id)
             sys.exit(1)

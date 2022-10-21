@@ -25,6 +25,7 @@ from .ec2_instance_connect import EC2InstanceConnectHelper
 
 logger = logging.getLogger("ssm-tools.ssm-ssh")
 
+
 def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     """
     Parse command line arguments.
@@ -34,14 +35,14 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
 
     add_general_parameters(parser, long_only=True)
 
-    group_instance = parser.add_argument_group('Instance Selection')
-    group_instance.add_argument('--list', dest='list', action="store_true", help='List instances available for SSM Session')
+    group_instance = parser.add_argument_group("Instance Selection")
+    group_instance.add_argument("--list", dest="list", action="store_true", help="List instances available for SSM Session")
 
-    group_ec2ic = parser.add_argument_group('EC2 Instance Connect')
-    group_ec2ic.add_argument('--send-key', action="store_true", help='Send the SSH key to instance metadata using EC2 Instance Connect')
+    group_ec2ic = parser.add_argument_group("EC2 Instance Connect")
+    group_ec2ic.add_argument("--send-key", action="store_true", help="Send the SSH key to instance metadata using EC2 Instance Connect")
 
-    parser.description = 'Open SSH connection through Session Manager'
-    parser.epilog = f'''
+    parser.description = "Open SSH connection through Session Manager"
+    parser.epilog = f"""
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
 before you can start a shell session! Instances not registered in SSM
 will not be recognised by {parser.prog} nor show up in --list output.
@@ -49,7 +50,7 @@ will not be recognised by {parser.prog} nor show up in --list output.
 Visit https://aws.nz/aws-utils/ssm-ssh for more info and usage examples.
 
 Author: Michael Ludvig
-'''
+"""
 
     # Parse supplied arguments
     args, extra_args = parser.parse_known_args(argv)
@@ -76,12 +77,13 @@ def start_ssh_session(ssh_args: list, profile: str = None, region: str = None) -
     logger.debug("Running: %s", command)
     os.execvp(command[0], command)
 
+
 def main() -> int:
     ## Split command line to main args and optional command to run
     args, extra_args = parse_args(sys.argv[1:])
 
     if args.log_level == logging.DEBUG:
-        extra_args.append('-v')
+        extra_args.append("-v")
 
     configure_logging(args.log_level)
 
@@ -107,7 +109,7 @@ def main() -> int:
         extra_args_iter = iter(extra_args)
         for arg in extra_args_iter:
             # User name argument
-            if arg.startswith('-l'):
+            if arg.startswith("-l"):
                 ssh_args.append(arg)
                 if len(arg) > 2:
                     login_name = arg[2:]
@@ -117,7 +119,7 @@ def main() -> int:
                 continue
 
             # SSH key argument
-            if arg.startswith('-i'):
+            if arg.startswith("-i"):
                 ssh_args.append(arg)
                 if len(arg) > 2:
                     key_file_name = arg[2:]
@@ -132,14 +134,14 @@ def main() -> int:
                 continue
 
             # Some args that can't be an instance name
-            if arg.startswith('-') or arg.find(':') > -1 or arg.find(os.path.sep) > -1:
+            if arg.startswith("-") or arg.find(":") > -1 or arg.find(os.path.sep) > -1:
                 ssh_args.append(arg)
                 continue
 
             # This may be an instance name - try to resolve it
             maybe_login_name = None
-            if arg.find('@') > -1:  # username@hostname format
-                maybe_login_name, instance = arg.split('@', 1)
+            if arg.find("@") > -1:  # username@hostname format
+                maybe_login_name, instance = arg.split("@", 1)
             else:
                 instance = arg
 
@@ -159,7 +161,7 @@ def main() -> int:
             ssh_args.append(instance_id)
 
             if login_name:
-                ssh_args.extend(['-l', login_name])
+                ssh_args.extend(["-l", login_name])
 
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", instance)
@@ -171,12 +173,12 @@ def main() -> int:
 
         start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region)
 
-    except (botocore.exceptions.BotoCoreError,
-            botocore.exceptions.ClientError) as e:
+    except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)
         sys.exit(1)
 
     return 0
+
 
 if __name__ == "__main__":
     main()
