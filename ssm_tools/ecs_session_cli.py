@@ -13,14 +13,13 @@
 import os
 import sys
 import logging
-import signal
 import argparse
 
 from typing import Tuple, List, Dict, Any
 
 import botocore.exceptions
 
-from .common import *
+from .common import add_general_parameters, configure_logging, show_version
 from .resolver import ContainerResolver
 
 logger = logging.getLogger("ssm-tools.ecs-session")
@@ -84,7 +83,7 @@ def start_session(container: Dict[str, Any], args: argparse.Namespace, command: 
 
 def main() -> int:
     ## Split command line to main args and optional command to run
-    args, extras = parse_args(sys.argv[1:])
+    args, _ = parse_args(sys.argv[1:])
 
     configure_logging(args.log_level)
 

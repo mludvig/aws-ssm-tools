@@ -7,7 +7,6 @@ import subprocess
 import argparse
 from typing import List
 
-import botocore.exceptions
 from .common import AWSSessionBase
 
 logger = logging.getLogger("ssm-tools.ec2-instance-connect")
@@ -21,7 +20,7 @@ class EC2InstanceConnectHelper(AWSSessionBase):
 
     def obtain_ssh_key(self, key_file_name: str) -> str:
         def _read_ssh_agent_keys() -> List[str]:
-            cp = subprocess.run(["ssh-add", "-L"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            cp = subprocess.run(["ssh-add", "-L"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
             if cp.returncode != 0:
                 logger.debug("Failed to run: ssh-add -L: %s", cp.stderr.decode('utf-8').strip().replace('\n', ' '))
                 return []
@@ -81,7 +80,7 @@ class EC2InstanceConnectHelper(AWSSessionBase):
 
             # Try extracting the public key from the provided private key
             logger.warning("Trying to extract the public key from %s - you may be asked for a passphrase!", key_file_name)
-            cp = subprocess.run(["ssh-keygen", "-y", "-f", key_file_name], stdout=subprocess.PIPE)
+            cp = subprocess.run(["ssh-keygen", "-y", "-f", key_file_name], stdout=subprocess.PIPE, check=False)
             if cp.returncode == 0:
                 logger.info("Extracted the public key from: %s", key_file_name)
                 return cp.stdout.decode('utf-8').split('\n')[0]

@@ -21,12 +21,12 @@ import argparse
 import ipaddress
 from base64 import b64encode, b64decode
 
-from typing import List, Any, Optional, Tuple
+from typing import List, Any, Tuple
 
 import pexpect
 import botocore.exceptions
 
-from .common import *
+from .common import add_general_parameters, show_version, configure_logging, bytes_to_human, seconds_to_human
 from .talker import SsmTalker
 from .resolver import InstanceResolver
 
@@ -42,7 +42,7 @@ def parse_args(argv: list) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
 
-    group_general = add_general_parameters(parser)
+    add_general_parameters(parser)
 
     group_instance = parser.add_argument_group('Instance Selection')
     group_instance.add_argument('INSTANCE', nargs='?', help='Instance ID, Name, Host name or IP address')
@@ -210,7 +210,7 @@ class SsmTunnel(SsmTalker):
                 # This is a long timeout, 30 sec, not very useful
                 continue
             if type(self._child.after) == pexpect.exceptions.EOF:
-                logger.warn("Received unexpected EOF - tunnel went down?")
+                logger.warning("Received unexpected EOF - tunnel went down?")
                 self._exiting = True
                 break
             if not line or line[0] != '%':

@@ -123,7 +123,7 @@ def verify_plugin_version(version_required: str, logger: logging.Logger) -> bool
     session_manager_plugin = 'session-manager-plugin'
 
     try:
-        result = subprocess.run([session_manager_plugin, '--version'], stdout=subprocess.PIPE)
+        result = subprocess.run([session_manager_plugin, '--version'], stdout=subprocess.PIPE, check=False)
         plugin_version = result.stdout.decode('ascii').strip()
         logger.debug(f"{session_manager_plugin} version {plugin_version}")
 
@@ -131,7 +131,7 @@ def verify_plugin_version(version_required: str, logger: logging.Logger) -> bool
             return True
 
         logger.error(f"ERROR: session-manager-plugin version {plugin_version} is installed, {version_required} is required")
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         logger.error(f"ERROR: {session_manager_plugin} not installed")
 
     logger.error("ERROR: Check out https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html for instructions")

@@ -5,8 +5,6 @@ import re
 import logging
 import argparse
 
-from typing import Optional, List, Dict, Any
-
 import botocore.session
 
 from .common import AWSSessionBase
