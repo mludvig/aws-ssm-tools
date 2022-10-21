@@ -27,17 +27,17 @@ jobs:
       - run:
           name: Install prerequisities
           command: |
-            python3 -m pip install pylint mypy
+            python3 -m pip install pylint mypy black
             python3 -m pip install -r requirements.txt
             pyenv rehash
 
       - run:
           name: Check syntax and style
           command: |
-            PYTHON_SCRIPTS="$(grep -l '#!/usr/bin/env python' ssm-* ecs-*) setup.py"
-            pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ${PYTHON_SCRIPTS} ssm_tools/*.py
-            pylint --errors-only ${PYTHON_SCRIPTS} ssm_tools/*.py
-            PYTHON3_SCRIPTS="$(grep -l '#!/usr/bin/env python3' ssm-* ecs-*) setup.py"
+            PYTHON_SCRIPTS="$(grep -l '#!/usr/bin/env python3' ssm-* ecs-*) setup.py"
+            black --line-length 250 --check --diff ${PYTHON_SCRIPTS} ssm_tools/*.py
+            pylint --exit-zero --disable=invalid-name,missing-docstring,line-too-long ${PYTHON_SCRIPTS} ssm_tools/*.py ssm-tunnel-agent
+            pylint --errors-only ${PYTHON_SCRIPTS} ssm_tools/*.py ssm-tunnel-agent
             mypy --scripts-are-modules --ignore-missing-imports ${PYTHON3_SCRIPTS}
 
   publish:

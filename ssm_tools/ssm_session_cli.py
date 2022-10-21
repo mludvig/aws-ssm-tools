@@ -26,7 +26,8 @@ from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ssm-session")
 
-signal.signal(signal.SIGTSTP, signal.SIG_IGN)   # Ignore Ctrl-Z - pass it on to the shell
+signal.signal(signal.SIGTSTP, signal.SIG_IGN)  # Ignore Ctrl-Z - pass it on to the shell
+
 
 def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     """
@@ -37,18 +38,21 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
 
     add_general_parameters(parser)
 
-    group_instance = parser.add_argument_group('Instance Selection')
-    group_instance.add_argument('INSTANCE', nargs='?', help='Instance ID, Name, Host name or IP address')
-    group_instance.add_argument('--list', '-l', dest='list', action="store_true", help='List instances available for SSM Session')
+    # fmt: off
+    group_instance = parser.add_argument_group("Instance Selection")
+    group_instance.add_argument("INSTANCE", nargs="?", help="Instance ID, Name, Host name or IP address")
+    group_instance.add_argument("--list", "-l", dest="list", action="store_true", help="List instances available for SSM Session")
 
-    group_session = parser.add_argument_group('Session Parameters')
-    group_session.add_argument('--user', '-u', '--sudo', dest='user', metavar="USER", help='SUDO to USER after opening the session. Can\'t be used together with --document-name / --parameters. (optional)')
-    group_session.add_argument('--command', '-c', dest='command', metavar='COMMAND', help='Command to run in the SSM Session. Can\'t be used together with --user. If you need to run the COMMAND as a different USER prepend the command with the appropriate "sudo -u USER ...". (optional)')
-    group_session.add_argument('--document-name', dest='document_name', help='Document to execute, e.g. AWS-StartInteractiveCommand (optional)')
-    group_session.add_argument('--parameters', dest='parameters', help='Parameters for the --document-name, e.g. \'command=["sudo -i -u ec2-user"]\' (optional)')
+    group_session = parser.add_argument_group("Session Parameters")
+    group_session.add_argument("--user", "-u", "--sudo", dest="user", metavar="USER", help="SUDO to USER after opening the session. Can't be used together with --document-name / --parameters. (optional)")
+    group_session.add_argument("--command", "-c", dest="command", metavar="COMMAND", help="Command to run in the SSM Session. Can't be used together with --user. "
+                               "If you need to run the COMMAND as a different USER prepend the command with the appropriate 'sudo -u USER ...'. (optional)")
+    group_session.add_argument("--document-name", dest="document_name", help="Document to execute, e.g. AWS-StartInteractiveCommand (optional)")
+    group_session.add_argument("--parameters", dest="parameters", help="Parameters for the --document-name, e.g. 'command=[\"sudo -i -u ec2-user\"]' (optional)")
+    # fmt: on
 
-    parser.description = 'Start SSM Shell Session to a given instance'
-    parser.epilog = f'''
+    parser.description = "Start SSM Shell Session to a given instance"
+    parser.epilog = f"""
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
 before you can start a shell session! Instances not registered in SSM
 will not be recognised by {parser.prog} nor show up in --list output.
@@ -56,7 +60,7 @@ will not be recognised by {parser.prog} nor show up in --list output.
 Visit https://aws.nz/aws-utils/ssm-session for more info and usage examples.
 
 Author: Michael Ludvig
-'''
+"""
 
     # Parse supplied arguments
     args, extras = parser.parse_known_args(argv)
@@ -73,14 +77,19 @@ Author: Michael Ludvig
         parser.error("--parameters can only be used together with --document-name")
 
     if bool(args.user) + bool(args.command) + bool(args.document_name) > 1:
-        parser.error("Use only one of --user / --command / --document-name\n"
-        "If you need to run the COMMAND as a specific USER then prepend\n"
-        "the command with the appropriate: sudo -i -u USER COMMAND")
+        parser.error(
+            """
+Use only one of --user / --command / --document-name
+If you need to run the COMMAND as a specific USER then prepend
+the command with the appropriate: sudo -i -u USER COMMAND
+"""
+        )
 
     return args, extras
 
+
 def start_session(instance_id: str, args: argparse.Namespace) -> None:
-    exec_args = [ "aws", "ssm", "start-session" ]
+    exec_args = ["aws", "ssm", "start-session"]
     if args.profile:
         exec_args += ["--profile", args.profile]
     if args.region:
@@ -88,22 +97,21 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
 
     if args.user:
         # Fake --document-name / --parameters for --user
-        exec_args += [ "--document-name", "AWS-StartInteractiveCommand",
-                       "--parameters", f"command=[\"sudo -i -u {args.user}\"]" ]
+        exec_args += ["--document-name", "AWS-StartInteractiveCommand", "--parameters", f'command=["sudo -i -u {args.user}"]']
     if args.command:
         # Fake --document-name / --parameters for --command
-        exec_args += [ "--document-name", "AWS-StartInteractiveCommand",
-                       "--parameters", f"command={args.command}" ]
+        exec_args += ["--document-name", "AWS-StartInteractiveCommand", "--parameters", f"command={args.command}"]
     else:
         # Or use the provided values
         if args.document_name:
-            exec_args += [ "--document-name", args.document_name ]
+            exec_args += ["--document-name", args.document_name]
         if args.parameters:
-            exec_args += [ "--parameters", args.parameters ]
+            exec_args += ["--parameters", args.parameters]
 
     exec_args += ["--target", instance_id]
     logger.debug("Running: %s", exec_args)
     os.execvp(exec_args[0], exec_args)
+
 
 def main() -> int:
     ## Split command line to main args and optional command to run
@@ -125,12 +133,12 @@ def main() -> int:
 
         start_session(instance_id, args)
 
-    except (botocore.exceptions.BotoCoreError,
-            botocore.exceptions.ClientError) as e:
+    except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)
         sys.exit(1)
 
     return 0
+
 
 if __name__ == "__main__":
     main()
