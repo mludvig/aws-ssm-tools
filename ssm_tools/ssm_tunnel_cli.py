@@ -120,7 +120,8 @@ class SsmTunnel(SsmTalker):
         if match != 0:  # Index matched in the 'patterns'
             logger.error("Unable to establish the tunnel!")
             logger.error("ssm-tunnel-agent: command not found on the target instance %s.", self._instance_id)
-            logger.error("Use 'ssm-session %s' and then run 'sudo pip install aws-ssm-tunnel-agent' to install it.", self._instance_id)
+            logger.error("Install with: ssm-session %s --command 'sudo pip install aws-ssm-tunnel-agent'", self._instance_id)
+            logger.error("(replace 'pip' with 'pip3' above if the former doesn't work)")
             sys.exit(1)
         logger.debug(self._child.after)
 
