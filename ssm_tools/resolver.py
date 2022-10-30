@@ -5,7 +5,7 @@ import re
 import logging
 import argparse
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 
 import botocore.session
 
@@ -79,6 +79,9 @@ class InstanceResolver(AWSSessionBase):
                             _try_append(items[instance_id]["Addresses"], instance, "PrivateIpAddress")
                             _try_append(items[instance_id]["Addresses"], instance, "PublicIpAddress")
 
+                            # Store instance AZ - useful for EC2 Instance Connect
+                            items[instance_id]["AvailabilityZone"] = instance["Placement"]["AvailabilityZone"]
+
                             # Find instance name from tag Name
                             for tag in instance.get("Tags", []):
                                 if tag["Key"] == "Name" and tag["Value"]:
@@ -126,10 +129,10 @@ class InstanceResolver(AWSSessionBase):
         for item in items_list:
             print(f"{item['InstanceId']:20}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
 
-    def resolve_instance(self, instance: str) -> str:
+    def resolve_instance(self, instance: str) -> Tuple[str, Dict[str, Any]]:
         # Is it a valid Instance ID?
         if re.match("^m?i-[a-f0-9]+$", instance):
-            return instance
+            return instance, {}
 
         # It is not - find it in the list
         instances = []
@@ -141,7 +144,7 @@ class InstanceResolver(AWSSessionBase):
                 instances.append(instance_id)
 
         if not instances:
-            return ""
+            return "", {}
 
         if len(instances) > 1:
             logger.warning("Found %d instances for '%s': %s", len(instances), instance, " ".join(instances))
@@ -149,7 +152,7 @@ class InstanceResolver(AWSSessionBase):
             sys.exit(1)
 
         # Found only one instance - return it
-        return instances[0]
+        return instances[0], items[instances[0]]
 
 
 class ContainerResolver(AWSSessionBase):

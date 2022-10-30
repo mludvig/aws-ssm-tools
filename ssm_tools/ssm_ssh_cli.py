@@ -145,7 +145,7 @@ def main() -> int:
             else:
                 instance = arg
 
-            instance_id = instance_resolver.resolve_instance(instance)
+            instance_id, _ = instance_resolver.resolve_instance(instance)
             if not instance_id:
                 # Not resolved as an instance name - put back to args
                 ssh_args.append(arg)

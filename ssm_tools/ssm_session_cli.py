@@ -29,7 +29,7 @@ logger = logging.getLogger("ssm-tools.ssm-session")
 signal.signal(signal.SIGTSTP, signal.SIG_IGN)  # Ignore Ctrl-Z - pass it on to the shell
 
 
-def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
+def parse_args(argv: list) -> argparse.Namespace:
     """
     Parse command line arguments.
     """
@@ -63,7 +63,7 @@ Author: Michael Ludvig
 """
 
     # Parse supplied arguments
-    args, extras = parser.parse_known_args(argv)
+    args = parser.parse_args(argv)
 
     # If --version do it now and exit
     if args.show_version:
@@ -85,7 +85,7 @@ the command with the appropriate: sudo -i -u USER COMMAND
 """
         )
 
-    return args, extras
+    return args
 
 
 def start_session(instance_id: str, args: argparse.Namespace) -> None:
@@ -115,7 +115,7 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
 
 def main() -> int:
     ## Split command line to main args and optional command to run
-    args, _ = parse_args(sys.argv[1:])
+    args = parse_args(sys.argv[1:])
 
     configure_logging(args.log_level)
 
@@ -124,7 +124,7 @@ def main() -> int:
             InstanceResolver(args).print_list()
             sys.exit(0)
 
-        instance_id = InstanceResolver(args).resolve_instance(args.INSTANCE)
+        instance_id, _ = InstanceResolver(args).resolve_instance(args.INSTANCE)
 
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)

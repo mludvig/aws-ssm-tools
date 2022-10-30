@@ -347,7 +347,7 @@ def main() -> int:
             InstanceResolver(args).print_list()
             sys.exit(0)
 
-        instance_id = InstanceResolver(args).resolve_instance(args.INSTANCE)
+        instance_id, _ = InstanceResolver(args).resolve_instance(args.INSTANCE)
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
             logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
