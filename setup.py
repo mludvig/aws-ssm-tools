@@ -17,6 +17,9 @@ SCRIPTS = [
     "ecs-session",
     "ec2-ssh",
     "ssm-tunnel",
+    # Renamed, deprecated and soon to be removed...
+    "ssm-session",
+    "ssm-ssh",
 ]
 VERSION = ssm_tools.__version__
 
@@ -43,17 +46,24 @@ class VerifyVersionCommand(install):
             sys.exit(info)
 
 
+def console_scripts():
+    scripts = []
+    for script in SCRIPTS:
+        # All script entries must be in this format:
+        # "ec2-session = ssm_tools.ec2_session_cli:main"
+        if script in ["ec2-session", "ec2-ssh"]:
+            scripts.append(f"{script} = ssm_tools.{script.replace('-','_').replace('ec2','ssm')}_cli:main")
+        else:
+            scripts.append(f"{script} = ssm_tools.{script.replace('-','_')}_cli:main")
+    return scripts
+
+
 setup(
     name="aws-ssm-tools",
     version=VERSION,
     packages=find_packages(),
     entry_points={
-        "console_scripts": [
-            # All script entries must be in this format:
-            # "ssm-session = ssm_tools.ssm_session_cli:main"
-            f"{script} = ssm_tools.{script.replace('-','_')}_cli:main"
-            for script in SCRIPTS
-        ]
+        "console_scripts": console_scripts(),
     },
     python_requires=">=3.6",
     install_requires=reqs,

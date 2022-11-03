@@ -79,6 +79,12 @@ def start_ssh_session(ssh_args: list, profile: str = None, region: str = None) -
 
 
 def main() -> int:
+    ## Deprecate old script name
+    if sys.argv[0].endswith('/ssm-ssh'):
+        print('\033[31;1mWARNING:\033[33;1m "ssm-session" has been renamed to "ec2-session" - please update your scripts.\033[0m', file=sys.stderr)
+        time.sleep(3)
+        print(file=sys.stderr)
+
     ## Split command line to main args and optional command to run
     args, extra_args = parse_args(sys.argv[1:])
 
