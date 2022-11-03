@@ -46,7 +46,7 @@ class VerifyVersionCommand(install):
             sys.exit(info)
 
 
-def console_scripts():
+def console_scripts() -> list:
     scripts = []
     for script in SCRIPTS:
         # All script entries must be in this format:
