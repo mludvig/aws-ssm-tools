@@ -2,7 +2,7 @@
 
 # Open SSH connections through AWS Session Manager
 #
-# See https://aws.nz/aws-utils/ssm-ssh for more info.
+# See https://aws.nz/aws-utils/ec2-ssh for more info.
 #
 # Author: Michael Ludvig (https://aws.nz)
 
@@ -23,7 +23,7 @@ from .common import add_general_parameters, show_version, configure_logging, ver
 from .resolver import InstanceResolver
 from .ec2_instance_connect import EC2InstanceConnectHelper
 
-logger = logging.getLogger("ssm-tools.ssm-ssh")
+logger = logging.getLogger("ssm-tools.ec2-ssh")
 
 
 def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
@@ -47,7 +47,7 @@ IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
 before you can start a shell session! Instances not registered in SSM
 will not be recognised by {parser.prog} nor show up in --list output.
 
-Visit https://aws.nz/aws-utils/ssm-ssh for more info and usage examples.
+Visit https://aws.nz/aws-utils/ec2-ssh for more info and usage examples.
 
 Author: Michael Ludvig
 """

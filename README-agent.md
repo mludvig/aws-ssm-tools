@@ -24,7 +24,7 @@ sudo curl -o /usr/local/bin/ssm-tunnel-agent https://raw.githubusercontent.com/m
 sudo chmod +x /usr/local/bin/ssm-tunnel-agent
 ```
 
-Hint: these commands can be *copy & pasted* to a **[ssm-session](https://raw.githubusercontent.com/mludvig/aws-ssm-tools)** command prompt :)
+Hint: these commands can be *copy & pasted* to an **[ec2-session](https://raw.githubusercontent.com/mludvig/aws-ssm-tools)** command prompt :)
 
 ## Author and License
 

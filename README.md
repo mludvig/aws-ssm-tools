@@ -4,12 +4,12 @@
 [![PyPI](https://img.shields.io/pypi/v/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
 
-Helper tools for AWS Systems Manager: `ssm-session`, `ssm-ssh` and `ssm-tunnel`,
+Helper tools for AWS Systems Manager: `ec2-session`, `ec2-ssh` and `ssm-tunnel`,
 and for ECS Docker Exec: `ecs-session`
 
 ## Scripts included
 
-* **ssm-session**
+* **ec2-session** (formerly _ssm-session_)
 
   Wrapper around `aws ssm start-session` that can open
   SSM Session to an instance specified by *Name* or *IP Address*.
@@ -33,20 +33,7 @@ and for ECS Docker Exec: `ecs-session`
   Check out *[Interactive shell in ECS Containers](https://aws.nz/projects/ecs-session/)*
   for an example use.
 
-* **ssm-tunnel**
-
-  Open *IP tunnel* to the SSM instance and to enable *network access*
-  to the instance VPC. This requires [ssm-tunnel-agent](README-agent.md)
-  installed on the instance.
-
-  Works with *Amazon Linux 2* instances and probably other recent Linux
-  EC2 instances. Requires *Linux* on the client side - if you are on Mac
-  or Windows you can install a Linux VM in a [VirtualBox](https://virtualbox.org).
-
-  Requires `ssm-tunnel-agent` installed on the instance - see below for
-  instructions.
-
-* **ssm-ssh**
+* **ec2-ssh** (formerly _ssm-ssh_)
 
   Open an SSH connection to the remote server through *Systems Manager*
   without the need for open firewall or direct internet access. SSH can
@@ -63,12 +50,25 @@ and for ECS Docker Exec: `ecs-session`
   Also supports pushing your SSH key to the instance with `--send-key` (aka
   *EC2 Instance Connect*, although that's an odd name for this function).
 
+* **ssm-tunnel**
+
+  Open *IP tunnel* to the SSM instance and to enable *network access*
+  to the instance VPC. This requires [ssm-tunnel-agent](README-agent.md)
+  installed on the instance.
+
+  Works with *Amazon Linux 2* instances and probably other recent Linux
+  EC2 instances. Requires *Linux* on the client side - if you are on Mac
+  or Windows you can install a Linux VM in a [VirtualBox](https://virtualbox.org).
+
+  Requires `ssm-tunnel-agent` installed on the instance - see below for
+  instructions.
+
 ## Usage
 
 1. **List instances** available for connection
 
     ```
-    ~ $ ssm-session --list
+    ~ $ ec2-session --list
     i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
     i-094df06d3633f3267   tunnel-test.aws.nz tunnel-test  192.168.44.95
     i-02689d593e17f2b75   winbox.aws.nz      winbox       192.168.45.5    13.11.22.33
@@ -78,7 +78,7 @@ and for ECS Docker Exec: `ecs-session`
     can select the right one with `--profile` and / or change the `--region`:
 
     ```
-    ~ $ ssm-session --profile aws-sandpit --region us-west-2 --list
+    ~ $ ec2-session --profile aws-sandpit --region us-west-2 --list
     i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
     ```
 
@@ -87,7 +87,7 @@ and for ECS Docker Exec: `ecs-session`
     ```
     ~ $ export AWS_DEFAULT_PROFILE=aws-sandpit
     ~ $ export AWS_DEFAULT_REGION=us-west-2
-    ~ $ ssm-session --list
+    ~ $ ec2-session --list
     i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
     ```
 
@@ -99,7 +99,7 @@ and for ECS Docker Exec: `ecs-session`
     even `--user root`.
 
     ```
-    ~ $ ssm-session -v test1 --user ec2-user
+    ~ $ ec2-session -v test1 --user ec2-user
     Starting session with SessionId: botocore-session-0d381a3ef740153ac
     [ec2-user@ip-192-168-45-158] ~ $ hostname
     test1.aws.nz
@@ -117,7 +117,7 @@ and for ECS Docker Exec: `ecs-session`
 
 3. **Open SSH session** over SSM with *port forwarding*.
 
-    The `ssm-ssh` tool provides a connection and authentication mechanism
+    The `ec2-ssh` tool provides a connection and authentication mechanism
     for running SSH over Systems Manager.
 
     The target instance *does not need* a public IP address, it also does
@@ -129,9 +129,9 @@ and for ECS Docker Exec: `ecs-session`
     `-L 3306:mysql-rds.aws.nz:3306` SSH port forwarding method.
 
     ```
-    ~ $ ssm-ssh ec2-user@test1 -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
-    [ssm-ssh] INFO: Resolved instance name 'test1' to 'i-07c189021bc56e042'
-    [ssm-ssh] INFO: Running: ssh -o ProxyCommand='aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p' i-07c189021bc56e042 -l ec2-user -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
+    ~ $ ec2-ssh ec2-user@test1 -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
+    [ec2-ssh] INFO: Resolved instance name 'test1' to 'i-07c189021bc56e042'
+    [ec2-ssh] INFO: Running: ssh -o ProxyCommand='aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p' i-07c189021bc56e042 -l ec2-user -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
     OpenSSH_7.6p1 Ubuntu-4ubuntu0.3, OpenSSL 1.0.2n  7 Dec 2017
     ...
     Last login: Sun Apr 12 20:05:09 2020 from localhost
@@ -163,14 +163,14 @@ and for ECS Docker Exec: `ecs-session`
     2 rows in set (0.04 sec)
     ```
 
-4. **Use `rsync` with `ssm-ssh`** to copy files to/from EC2 instance.
+4. **Use `rsync` with `ec2-ssh`** to copy files to/from EC2 instance.
 
     Since in the end we run a standard `ssh` client we can use it with
     [rsync](https://en.wikipedia.org/wiki/Rsync) to copy files to/from the
     EC2 instance.
 
     ```
-    ~ $ rsync -e ssm-ssh -Prv ec2-user@test1:some-file.tar.gz .
+    ~ $ rsync -e ec2-ssh -Prv ec2-user@test1:some-file.tar.gz .
     some-file.tar.gz
          31,337,841 100%  889.58kB/s    0:00:34 (xfr#1, to-chk=0/1)
     sent 43 bytes  received 31,345,607 bytes  814,172.73 bytes/sec
@@ -180,7 +180,7 @@ and for ECS Docker Exec: `ecs-session`
     We can also select a different AWS profile and/or region:
 
     ```
-    ~ $ rsync -e "ssm-ssh --profile aws-sandpit --region us-west-2" -Prv ...
+    ~ $ rsync -e "ec2-ssh --profile aws-sandpit --region us-west-2" -Prv ...
     ```
 
     Alternatively set the profile and region through standard AWS
@@ -228,7 +228,7 @@ All these tools support `--help` and a set of common parameters:
     --verbose, -v       Increase log level.
     --debug, -d         Increase log level even more.
 
-`ssm-ssh` only supports the long options to prevent conflict with `ssh`'s
+`ec2-ssh` only supports the long options to prevent conflict with `ssh`'s
 own short options that are being passed through.
 
 Standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
@@ -266,7 +266,7 @@ guide](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html)
 and [session-manager-plugin
 installation guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) to install them if needed.
 
-Note that `ssm-ssh` needs `session-manager-plugin` version *1.1.23* or
+Note that `ec2-ssh` needs `session-manager-plugin` version *1.1.23* or
 newer. Upgrade if your version is older.
 
 ### Register your instances with Systems Manager

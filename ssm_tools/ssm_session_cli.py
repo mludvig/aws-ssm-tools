@@ -24,7 +24,7 @@ import botocore.exceptions
 from .common import add_general_parameters, show_version, configure_logging
 from .resolver import InstanceResolver
 
-logger = logging.getLogger("ssm-tools.ssm-session")
+logger = logging.getLogger("ssm-tools.ec2-session")
 
 signal.signal(signal.SIGTSTP, signal.SIG_IGN)  # Ignore Ctrl-Z - pass it on to the shell
 
@@ -51,7 +51,7 @@ def parse_args(argv: list) -> argparse.Namespace:
     group_session.add_argument("--parameters", dest="parameters", help="Parameters for the --document-name, e.g. 'command=[\"sudo -i -u ec2-user\"]' (optional)")
     # fmt: on
 
-    parser.description = "Start SSM Shell Session to a given instance"
+    parser.description = "Start SSM Shell Session to an EC2 instance"
     parser.epilog = f"""
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
 before you can start a shell session! Instances not registered in SSM

@@ -13,9 +13,9 @@ HERE = pathlib.Path(__file__).parent
 README = (HERE / "README.md").read_text()
 
 SCRIPTS = [
-    "ssm-session",
+    "ec2-session",
     "ecs-session",
-    "ssm-ssh",
+    "ec2-ssh",
     "ssm-tunnel",
 ]
 VERSION = ssm_tools.__version__
