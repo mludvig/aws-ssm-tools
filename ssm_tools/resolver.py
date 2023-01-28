@@ -147,8 +147,17 @@ class InstanceResolver(AWSSessionBase):
             return "", {}
 
         if len(instances) > 1:
-            logger.warning("Found %d instances for '%s': %s", len(instances), instance, " ".join(instances))
-            logger.warning("Use INSTANCE_ID to connect to a specific one")
+            inst_list = ""
+            for i in range(0, len(instances)):
+                inst_list += "\n" + str(i) + ": " + instances[i]
+            #logger.warning("Found %d instances for '%s': %s", len(instances), instance, " ".join(instances))
+            logger.warning("Found %d instances for '%s': %s", len(instances), instance, inst_list)
+            instance_select = input("Choose instance to connect: ")
+            if instance_select.isdigit() and int(instance_select) < len(instances):
+                return instances[int(instance_select)], items[instances[int(instance_select)]]
+            else:
+                logger.warning("Use INSTANCE_ID to connect to a specific one")
+
             sys.exit(1)
 
         # Found only one instance - return it
