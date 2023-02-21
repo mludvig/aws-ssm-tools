@@ -40,7 +40,8 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     group_instance.add_argument("--list", dest="list", action="store_true", help="List instances available for SSM Session")
 
     group_ec2ic = parser.add_argument_group("EC2 Instance Connect")
-    group_ec2ic.add_argument("--send-key", action="store_true", help="Send the SSH key to instance metadata using EC2 Instance Connect")
+    group_ec2ic.add_argument("--send-key", dest="send_key", action="store_true", default=True, help="Send the SSH key to instance metadata using EC2 Instance Connect (default and deprecated - use --no-send-key instead)")
+    group_ec2ic.add_argument("--no-send-key", dest="send_key", action="store_false", help="Send the SSH key to instance metadata using EC2 Instance Connect")
 
     parser.description = "Open SSH connection through Session Manager"
     parser.epilog = f"""
