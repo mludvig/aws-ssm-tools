@@ -27,7 +27,10 @@ from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ec2-session")
 
-signal.signal(signal.SIGTSTP, signal.SIG_IGN)  # Ignore Ctrl-Z - pass it on to the shell
+# Only on Linux / Unix / Mac because Windows don't interpret Ctrl-Z
+if os.name == "posix":
+    # Ignore Ctrl-Z - pass it to the shell
+    signal.signal(signal.SIGTSTP, signal.SIG_IGN)
 
 
 def parse_args(argv: list) -> argparse.Namespace:
