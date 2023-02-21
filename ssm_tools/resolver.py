@@ -211,6 +211,9 @@ class ContainerResolver(AWSSessionBase):
 
             # maxResults must be <= 100 because describe_tasks() doesn't accept more than that
             for page in paginator.paginate(cluster=cluster, maxResults=100):
+                if "taskArns" not in page or not page["taskArns"]:
+                    logger.debug(f"No tasks found in cluster {cluster}")
+                    break
                 response = self.ecs_client.describe_tasks(cluster=cluster, tasks=page["taskArns"])
 
                 # Filter containers that have a running ExecuteCommandAgent
