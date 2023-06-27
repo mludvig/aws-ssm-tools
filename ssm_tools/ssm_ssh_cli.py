@@ -20,7 +20,7 @@ from typing import Tuple, List
 
 import botocore.exceptions
 
-from .common import add_general_parameters, show_version, configure_logging, verify_plugin_version
+from .common import add_general_parameters, show_version, configure_logging, verify_plugin_version, verify_awscli_version
 from .resolver import InstanceResolver
 from .ec2_instance_connect import EC2InstanceConnectHelper
 
@@ -42,6 +42,7 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     group_ec2ic = parser.add_argument_group("EC2 Instance Connect")
     group_ec2ic.add_argument("--send-key", dest="send_key", action="store_true", default=True, help="Send the SSH key to instance metadata using EC2 Instance Connect (default and deprecated - use --no-send-key instead)")
     group_ec2ic.add_argument("--no-send-key", dest="send_key", action="store_false", help="Send the SSH key to instance metadata using EC2 Instance Connect")
+    group_ec2ic.add_argument("--use-endpoint", dest="use_endpoint", action="store_true", default=False, help="Connect using 'EC2 Instance Connect Endpoint'")
 
     parser.description = "Open SSH connection through Session Manager"
     parser.epilog = f"""
@@ -68,13 +69,21 @@ Author: Michael Ludvig
     return args, extra_args
 
 
-def start_ssh_session(ssh_args: list, profile: str = None, region: str = None) -> None:
+def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: bool) -> None:
     aws_args = ""
     if profile:
         aws_args += f"--profile {profile} "
     if region:
         aws_args += f"--region {region} "
-    proxy_option = ["-o", f"ProxyCommand=aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"]
+    if use_endpoint:
+        min_awscli_version = "2.12.0"
+        if not verify_awscli_version(min_awscli_version, logger):
+            logger.error(f"AWS CLI v{min_awscli_version} or newer is required for --use-endpoint, falling back to SSM Session Manager")
+            use_endpoint = False
+    if use_endpoint:
+        proxy_option = ["-o", f"ProxyCommand=aws {aws_args} ec2-instance-connect open-tunnel --instance-id %h"]
+    else:
+        proxy_option = ["-o", f"ProxyCommand=aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"]
     command = ["ssh"] + proxy_option + ssh_args
     logger.debug("Running: %s", command)
     os.execvp(command[0], command)
@@ -179,7 +188,7 @@ def main() -> int:
         if args.send_key:
             EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, key_file_name)
 
-        start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region)
+        start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region, use_endpoint=args.use_endpoint)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)

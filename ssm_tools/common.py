@@ -147,11 +147,38 @@ def verify_plugin_version(version_required: str, logger: logging.Logger) -> bool
         if packaging.version.parse(plugin_version) >= packaging.version.parse(version_required):
             return True
 
-        logger.error(f"ERROR: session-manager-plugin version {plugin_version} is installed, {version_required} is required")
+        logger.error(f"session-manager-plugin version {plugin_version} is installed, {version_required} is required")
     except FileNotFoundError:
-        logger.error(f"ERROR: {session_manager_plugin} not installed")
+        logger.error(f"{session_manager_plugin} not installed")
 
-    logger.error("ERROR: Check out https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html for instructions")
+    logger.error("Check out https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html for instructions")
+
+    return False
+
+
+# ---------------------------------------------------------
+
+
+__all__.append("verify_awscli_version")
+
+
+def verify_awscli_version(version_required: str, logger: logging.Logger) -> bool:
+    """
+    Verify that the aws-cli is installed and is of a required version or newer.
+    """
+    aws_cli = "aws"
+
+    try:
+        result = subprocess.run([aws_cli, "--version"], stdout=subprocess.PIPE, check=False)
+        plugin_version = result.stdout.decode("ascii").strip().split(" ")[0].split("/")[1]
+        logger.debug(f"AWS-CLI version {plugin_version}")
+
+        if packaging.version.parse(plugin_version) >= packaging.version.parse(version_required):
+            return True
+
+        logger.error(f"AWS-CLI version {plugin_version} is installed, {version_required} is required")
+    except FileNotFoundError:
+        logger.error("AWS-CLI is not installed")
 
     return False
 
