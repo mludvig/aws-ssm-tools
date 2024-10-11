@@ -30,25 +30,22 @@ class InstanceResolver(AWSSessionBase):
         items = {}
 
         # List instances from SSM
-        logger.debug("Fetching SSM inventory")
-        paginator = self.ssm_client.get_paginator("get_inventory")
+        logger.debug("Fetching SSM instance information")
+        paginator = self.ssm_client.get_paginator("describe_instance_information")
         response_iterator = paginator.paginate(
             Filters=[
-                {"Key": "AWS:InstanceInformation.ResourceType", "Values": ["EC2Instance", "ManagedInstance"], "Type": "Equal"},
-                {"Key": "AWS:InstanceInformation.InstanceStatus", "Values": ["Terminated", "Stopped", "ConnectionLost"], "Type": "NotEqual"},
+                {"Key": "PingStatus", "Values": ["Online"]},
             ]
         )
 
-        for inventory in response_iterator:
-            for entity in inventory["Entities"]:
-                logger.debug(entity)
-                content = entity["Data"]["AWS:InstanceInformation"]["Content"][0]
-                instance_id = content["InstanceId"]
+        for page in response_iterator:
+            for instance in page["InstanceInformationList"]:
+                instance_id = instance["InstanceId"]
                 items[instance_id] = {
                     "InstanceId": instance_id,
                     "InstanceName": "",
-                    "HostName": content.get("ComputerName", ""),
-                    "Addresses": [content.get("IpAddress")],
+                    "HostName": instance.get("Name", ""),
+                    "Addresses": [instance.get("IPAddress")],
                 }
                 logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
 
