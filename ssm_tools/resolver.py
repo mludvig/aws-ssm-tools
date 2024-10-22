@@ -229,7 +229,7 @@ class ContainerResolver(AWSSessionBase):
 
         return self.containers
 
-    def print_containers(self, containers: List[Dict[str, Any]]) -> None:
+    def print_containers(self, containers: List[Dict[str, Any]]) -> list:
         max_len = {}
         for container in containers:
             for key in container.keys():
@@ -238,19 +238,21 @@ class ContainerResolver(AWSSessionBase):
                 else:
                     max_len[key] = max(max_len[key], len(container[key]))
         containers.sort(key=lambda x: [x["cluster_name"], x["container_name"]])
-        for container in containers:
+        for count, container in enumerate(containers):
             print(
-                f"{container['cluster_name']:{max_len['cluster_name']}}  {container['group_name']:{max_len['group_name']}}  {container['task_id']:{max_len['task_id']}}  {container['container_name']:{max_len['container_name']}}  {container['container_ip']:{max_len['container_ip']}}"
+                f"{count}) {container['cluster_name']:{max_len['cluster_name']}}  {container['group_name']:{max_len['group_name']}}  {container['task_id']:{max_len['task_id']}}  {container['container_name']:{max_len['container_name']}}  {container['container_ip']:{max_len['container_ip']}}"
             )
 
-    def print_list(self) -> None:
+        return containers
+
+    def print_list(self) -> List:
         containers = self.get_list()
 
         if not containers:
             logger.warning("No Execute-Command capable contaianers found!")
             sys.exit(1)
 
-        self.print_containers(containers)
+        return self.print_containers(containers)
 
     def resolve_container(self, keywords: List[str]) -> Dict[str, Any]:
         containers = self.get_list()
@@ -282,3 +284,4 @@ class ContainerResolver(AWSSessionBase):
             logger.warning("Use Container IP or Task ID to connect to a specific one")
             self.print_containers(candidates)
             sys.exit(1)
+

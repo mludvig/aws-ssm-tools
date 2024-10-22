@@ -29,7 +29,7 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     """
     Parse command line arguments.
     """
-
+ 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
 
     add_general_parameters(parser)
@@ -40,7 +40,7 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     group_container.add_argument("--cluster", dest="cluster", metavar="CLUSTER", help="Specify an ECS cluster. (optional)")
 
     group_session = parser.add_argument_group("Session Parameters")
-    group_session.add_argument("--command", dest="command", metavar="COMMAND", default="/bin/sh", help="Command to run inside the container. Default: /bin/sh")
+    group_session.add_argument("--command", "-c", dest="command", metavar="COMMAND", default="/bin/sh", help="Command to run inside the container. Default: /bin/sh")
 
     parser.description = "Execute 'ECS Run Task' in a given container"
     parser.epilog = f"""
@@ -58,10 +58,6 @@ Author: Michael Ludvig
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
-
-    # Require exactly one of CONTAINER or --list
-    if bool(args.CONTAINER) + bool(args.list) != 1:
-        parser.error("Specify either CONTAINER or --list")
 
     return args, extras
 
@@ -94,7 +90,19 @@ def main() -> int:
     configure_logging(args.log_level)
 
     try:
-        if args.list:
+        if bool(args.CONTAINER) + bool(args.list) != 1:
+            containers = ContainerResolver(args).print_list()
+            while True:
+                try:
+                    session = int(input(f"Choose a container to connect to between 0-{len(containers)-1} or type quit: "))
+                    if 0 <= session < len(containers) -1:
+                        container = containers[session]
+                        break
+                except ValueError:
+                    print("Exiting")
+                    sys.exit(0)
+            args.CONTAINER = [container["task_id"], container["container_name"]]
+        elif args.list:
             ContainerResolver(args).print_list()
             sys.exit(0)
 
@@ -115,3 +123,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     main()
+
