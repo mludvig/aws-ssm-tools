@@ -74,8 +74,8 @@ Author: Michael Ludvig
         show_version(args)
 
     # Require exactly one of INSTANCE or --list
-    if bool(args.INSTANCE) + bool(args.list) != 1:
-        parser.error("Specify either INSTANCE or --list")
+    # if bool(args.INSTANCE) + bool(args.list) != 1:
+    #     parser.error("Specify either INSTANCE or --list")
 
     if args.parameters and not args.document_name:
         parser.error("--parameters can only be used together with --document-name")
@@ -130,7 +130,18 @@ def main() -> int:
     configure_logging(args.log_level)
 
     try:
-        if args.list:
+        if bool(args.INSTANCE) + bool(args.list) != 1:
+            session_details = InstanceResolver(args).print_list()
+            while True:
+                try:
+                    session = int(input(f"Choose a session to connect to between 0-{len(session_details)-1} or type quit: "))
+                    if 0 <= session < len(session_details) -1:
+                        args.INSTANCE = session_details[session]["InstanceId"]
+                        break
+                except ValueError:
+                    print("Exiting")
+                    sys.exit(0)
+        elif args.list:
             InstanceResolver(args).print_list()
             sys.exit(0)
 

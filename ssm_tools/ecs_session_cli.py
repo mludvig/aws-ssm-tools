@@ -96,13 +96,13 @@ def main() -> int:
                 try:
                     session = int(input(f"Choose a container to connect to between 0-{len(containers)-1} or type quit: "))
                     if 0 <= session < len(containers) -1:
-                        container = containers[session]
+                        args.CONTAINER = [containers[session]["task_id"], containers[session]["container_name"]]
                         break
                 except ValueError:
                     print("Exiting")
                     sys.exit(0)
-            args.CONTAINER = [container["task_id"], container["container_name"]]
-        elif args.list:
+            
+        if args.list:
             ContainerResolver(args).print_list()
             sys.exit(0)
 
@@ -123,4 +123,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     main()
-

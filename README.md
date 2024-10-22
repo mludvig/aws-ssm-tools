@@ -69,9 +69,9 @@ and for ECS Docker Exec: `ecs-session`
 
     ```
     ~ $ ec2-session --list
-    i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
-    i-094df06d3633f3267   tunnel-test.aws.nz tunnel-test  192.168.44.95
-    i-02689d593e17f2b75   winbox.aws.nz      winbox       192.168.45.5    13.11.22.33
+    0) i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
+    1) i-094df06d3633f3267   tunnel-test.aws.nz tunnel-test  192.168.44.95
+    2) i-02689d593e17f2b75   winbox.aws.nz      winbox       192.168.45.5    13.11.22.33
     ```
 
     If you're like me and have access to many different AWS accounts you
@@ -79,7 +79,7 @@ and for ECS Docker Exec: `ecs-session`
 
     ```
     ~ $ ec2-session --profile aws-sandpit --region us-west-2 --list
-    i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
+    0) i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
     ```
 
     Alternatively use the standard AWS *environment variables*:
@@ -88,7 +88,7 @@ and for ECS Docker Exec: `ecs-session`
     ~ $ export AWS_DEFAULT_PROFILE=aws-sandpit
     ~ $ export AWS_DEFAULT_REGION=us-west-2
     ~ $ ec2-session --list
-    i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
+    0) i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
     ```
 
 2. **Open SSM session** to an instance:

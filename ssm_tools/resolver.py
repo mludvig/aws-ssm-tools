@@ -108,7 +108,7 @@ class InstanceResolver(AWSSessionBase):
 
         return items
 
-    def print_list(self) -> None:
+    def print_list(self) -> List:
         hostname_len = 1  # Minimum of 1 char, otherwise f-string below fails for empty hostnames
         instname_len = 1
 
@@ -126,8 +126,10 @@ class InstanceResolver(AWSSessionBase):
             hostname_len = max(hostname_len, len(item["HostName"]))
             instname_len = max(instname_len, len(item["InstanceName"]))
 
-        for item in items_list:
-            print(f"{item['InstanceId']:20}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
+        for count, item in enumerate(items_list):
+            print(f"{count}) {item['InstanceId']:20}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
+
+        return items_list
 
     def resolve_instance(self, instance: str) -> Tuple[str, Dict[str, Any]]:
         # Is it a valid Instance ID?
@@ -242,7 +244,7 @@ class ContainerResolver(AWSSessionBase):
             print(
                 f"{count}) {container['cluster_name']:{max_len['cluster_name']}}  {container['group_name']:{max_len['group_name']}}  {container['task_id']:{max_len['task_id']}}  {container['container_name']:{max_len['container_name']}}  {container['container_ip']:{max_len['container_ip']}}"
             )
-
+        
         return containers
 
     def print_list(self) -> List:
@@ -284,4 +286,3 @@ class ContainerResolver(AWSSessionBase):
             logger.warning("Use Container IP or Task ID to connect to a specific one")
             self.print_containers(candidates)
             sys.exit(1)
-
