@@ -29,7 +29,7 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     """
     Parse command line arguments.
     """
- 
+
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
 
     add_general_parameters(parser)
