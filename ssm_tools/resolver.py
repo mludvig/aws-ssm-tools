@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
-import sys
-import re
-import logging
 import argparse
-
-from typing import Dict, List, Any, Tuple
+import logging
+import re
+import sys
+from typing import Any, Dict, List, Tuple
 
 import botocore.session
 
@@ -13,6 +12,8 @@ from .common import AWSSessionBase
 
 logger = logging.getLogger("ssm-tools.resolver")
 
+LIGHT_GREY = "\033[37;1m"
+DEFAULT_WHITE = "\033[0m"
 
 class InstanceResolver(AWSSessionBase):
     def __init__(self, args: argparse.Namespace) -> None:
@@ -36,7 +37,7 @@ class InstanceResolver(AWSSessionBase):
             Filters=[
                 {"Key": "AWS:InstanceInformation.ResourceType", "Values": ["EC2Instance", "ManagedInstance"], "Type": "Equal"},
                 {"Key": "AWS:InstanceInformation.InstanceStatus", "Values": ["Terminated", "Stopped", "ConnectionLost"], "Type": "NotEqual"},
-            ]
+            ],
         )
 
         for inventory in response_iterator:
@@ -71,7 +72,7 @@ class InstanceResolver(AWSSessionBase):
                     for reservation in reservations["Reservations"]:
                         for instance in reservation["Instances"]:
                             instance_id = instance["InstanceId"]
-                            if not instance_id in items:
+                            if instance_id not in items:
                                 continue
 
                             # Find instance IPs
@@ -116,7 +117,7 @@ class InstanceResolver(AWSSessionBase):
 
         if not items:
             logger.warning("No instances registered in SSM!")
-            return
+            return None
 
         items_list = list(items)
         del items
@@ -127,8 +128,21 @@ class InstanceResolver(AWSSessionBase):
             instname_len = max(instname_len, len(item["InstanceName"]))
 
         for count, item in enumerate(items_list):
-            print(f"{count}) {item['InstanceId']:20}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
-
+            print(
+                "{}{:<{}} {:<{}}  {:<{}} {:<{}}  {}{}".format(
+                    DEFAULT_WHITE if count % 2 == 0 else LIGHT_GREY,
+                    f"{count}) ",
+                    len(str(len(items_list))) +2,
+                    item['InstanceId'],
+                    20,
+                    item['HostName'],
+                    hostname_len,
+                    item['InstanceName'],
+                    instname_len,
+                    ' '.join(item['Addresses']),
+                    DEFAULT_WHITE,
+                ),
+            )
         return items_list
 
     def resolve_instance(self, instance: str) -> Tuple[str, Dict[str, Any]]:
@@ -179,7 +193,7 @@ class ContainerResolver(AWSSessionBase):
                 "group_name": self._tasks[container["taskArn"]]["group"],
                 "container_name": container["name"],
                 "container_ip": container["networkInterfaces"][0]["privateIpv4Address"],
-            }
+            },
         )
 
     def get_list(self) -> List[Dict[str, Any]]:
@@ -223,7 +237,7 @@ class ContainerResolver(AWSSessionBase):
                     logger.debug(task)
                     self._tasks[task["taskArn"]] = task
                     for container in task["containers"]:
-                        if not "managedAgents" in container:
+                        if "managedAgents" not in container:
                             continue
                         for agent in container["managedAgents"]:
                             if agent["name"] == "ExecuteCommandAgent" and agent["lastStatus"] == "RUNNING":
@@ -235,23 +249,33 @@ class ContainerResolver(AWSSessionBase):
         max_len = {}
         for container in containers:
             for key in container.keys():
-                if not key in max_len:
+                if key not in max_len:
                     max_len[key] = len(container[key])
                 else:
                     max_len[key] = max(max_len[key], len(container[key]))
         containers.sort(key=lambda x: [x["cluster_name"], x["container_name"]])
         for count, container in enumerate(containers):
             print(
-                f"{count}) {container['cluster_name']:{max_len['cluster_name']}}  {container['group_name']:{max_len['group_name']}}  {container['task_id']:{max_len['task_id']}}  {container['container_name']:{max_len['container_name']}}  {container['container_ip']:{max_len['container_ip']}}"
+                "{}{:<{}} {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}{}".format(
+                    DEFAULT_WHITE if count % 2 == 0 else LIGHT_GREY,
+                    f"{count}) " if len(containers) > 1 else "",
+                    len(str(len(containers))) +2,
+                    container["cluster_name"], max_len["cluster_name"],
+                    container["group_name"], max_len["group_name"],
+                    container["task_id"], max_len["task_id"],
+                    container["container_name"], max_len["container_name"],
+                    container["container_ip"], max_len["container_ip"],
+                    DEFAULT_WHITE,
+                ),
             )
-        
+
         return containers
 
     def print_list(self) -> List:
         containers = self.get_list()
 
         if not containers:
-            logger.warning("No Execute-Command capable contaianers found!")
+            logger.warning("No Execute-Command capable containers found!")
             sys.exit(1)
 
         return self.print_containers(containers)
@@ -260,7 +284,7 @@ class ContainerResolver(AWSSessionBase):
         containers = self.get_list()
 
         if not containers:
-            logger.warning("No Execute-Command capable contaianers found!")
+            logger.warning("No Execute-Command capable containers found!")
             sys.exit(1)
 
         logger.debug("Searching for containers matching all keywords: %s", " ".join(keywords))
