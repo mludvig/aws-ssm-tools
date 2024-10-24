@@ -73,10 +73,6 @@ Author: Michael Ludvig
     if args.show_version:
         show_version(args)
 
-    # Require exactly one of INSTANCE or --list
-    # if bool(args.INSTANCE) + bool(args.list) != 1:
-    #     parser.error("Specify either INSTANCE or --list")
-
     if args.parameters and not args.document_name:
         parser.error("--parameters can only be used together with --document-name")
 
