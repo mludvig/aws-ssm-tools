@@ -17,10 +17,10 @@ import time
 import logging
 import signal
 import argparse
-
 from typing import Tuple, List
 
 import botocore.exceptions
+from simple_term_menu import TerminalMenu
 
 from .common import add_general_parameters, show_version, configure_logging
 from .resolver import InstanceResolver
@@ -72,6 +72,10 @@ Author: Michael Ludvig
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
+
+    # Require exactly one of INSTANCE or --list
+    # if bool(args.INSTANCE) + bool(args.list) != 1:
+    #     parser.error("Specify either INSTANCE or --list")
 
     if args.parameters and not args.document_name:
         parser.error("--parameters can only be used together with --document-name")
@@ -127,16 +131,19 @@ def main() -> int:
 
     try:
         if bool(args.INSTANCE) + bool(args.list) != 1:
-            session_details = InstanceResolver(args).print_list()
-            while True:
-                try:
-                    session = int(input(f"Choose a session to connect to between 0-{len(session_details)-1} or type quit: "))
-                    if 0 <= session < len(session_details) -1:
-                        args.INSTANCE = session_details[session]["InstanceId"]
-                        break
-                except ValueError:
-                    print("Exiting")
-                    sys.exit(0)
+            session_details = InstanceResolver(args).print_list(quiet=True)
+            terminal_menu = TerminalMenu(
+                [text["summary"] for text in session_details],
+                title="Select a connection or press q to quit:",
+                show_search_hint=True,
+            )
+            selected_index = terminal_menu.show()
+            if selected_index:
+                selected_session = session_details[selected_index]
+                args.INSTANCE = selected_session["InstanceId"]
+            else:
+                sys.exit(0)
+
         elif args.list:
             InstanceResolver(args).print_list()
             sys.exit(0)

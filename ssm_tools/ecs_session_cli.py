@@ -14,10 +14,10 @@ import os
 import sys
 import logging
 import argparse
-
 from typing import Tuple, List, Dict, Any
 
 import botocore.exceptions
+from simple_term_menu import TerminalMenu
 
 from .common import add_general_parameters, configure_logging, show_version
 from .resolver import ContainerResolver
@@ -29,7 +29,7 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     """
     Parse command line arguments.
     """
-
+ 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
 
     add_general_parameters(parser)
@@ -91,18 +91,23 @@ def main() -> int:
 
     try:
         if bool(args.CONTAINER) + bool(args.list) != 1:
-            containers = ContainerResolver(args).print_list()
-            while True:
-                try:
-                    session = int(input(f"Choose a container to connect to between 0-{len(containers)-1} or type quit: "))
-                    if 0 <= session < len(containers) -1:
-                        args.CONTAINER = [containers[session]["task_id"], containers[session]["container_name"]]
-                        break
-                except ValueError:
-                    print("Exiting")
-                    sys.exit(0)
-            
-        if args.list:
+            containers = ContainerResolver(args).print_list(quiet=True)
+            terminal_menu = TerminalMenu(
+                [text["summary"] for text in containers],
+                title="Select a connection or press q to quit:",
+                show_search_hint=True,
+            )
+            selected_index = terminal_menu.show()
+            if selected_index:
+                selected_session = containers[selected_index]
+                args.CONTAINER = [
+                    selected_session["task_id"],
+                    selected_session["container_name"],
+                ]
+            else:
+                sys.exit(0)
+
+        elif args.list:
             ContainerResolver(args).print_list()
             sys.exit(0)
 

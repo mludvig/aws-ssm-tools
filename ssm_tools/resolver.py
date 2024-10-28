@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 
 import argparse
+import copy
 import logging
 import re
 import sys
 from typing import Any, Dict, List, Tuple
 
 import botocore.session
+from tabulate import tabulate
 
 from .common import AWSSessionBase
 
 logger = logging.getLogger("ssm-tools.resolver")
 
-LIGHT_GREY = "\033[37;1m"
-DEFAULT_WHITE = "\033[0m"
 
 class InstanceResolver(AWSSessionBase):
     def __init__(self, args: argparse.Namespace) -> None:
@@ -35,8 +35,16 @@ class InstanceResolver(AWSSessionBase):
         paginator = self.ssm_client.get_paginator("get_inventory")
         response_iterator = paginator.paginate(
             Filters=[
-                {"Key": "AWS:InstanceInformation.ResourceType", "Values": ["EC2Instance", "ManagedInstance"], "Type": "Equal"},
-                {"Key": "AWS:InstanceInformation.InstanceStatus", "Values": ["Terminated", "Stopped", "ConnectionLost"], "Type": "NotEqual"},
+                {
+                    "Key": "AWS:InstanceInformation.ResourceType",
+                    "Values": ["EC2Instance", "ManagedInstance"],
+                    "Type": "Equal",
+                },
+                {
+                    "Key": "AWS:InstanceInformation.InstanceStatus",
+                    "Values": ["Terminated", "Stopped", "ConnectionLost"],
+                    "Type": "NotEqual",
+                },
             ],
         )
 
@@ -109,10 +117,7 @@ class InstanceResolver(AWSSessionBase):
 
         return items
 
-    def print_list(self) -> List:
-        hostname_len = 1  # Minimum of 1 char, otherwise f-string below fails for empty hostnames
-        instname_len = 1
-
+    def print_list(self, quiet=False) -> List:
         items = self.get_list().values()
 
         if not items:
@@ -123,27 +128,20 @@ class InstanceResolver(AWSSessionBase):
         del items
         items_list.sort(key=lambda x: x.get("InstanceName") or x.get("HostName"))  # type: ignore
 
-        for item in items_list:
-            hostname_len = max(hostname_len, len(item["HostName"]))
-            instname_len = max(instname_len, len(item["InstanceName"]))
+        for instance in items_list:
+            instance['Addresses'] = ', '.join(instance['Addresses'])
+            del instance['AvailabilityZone']
 
-        for count, item in enumerate(items_list):
-            print(
-                "{}{:<{}} {:<{}}  {:<{}} {:<{}}  {}{}".format(
-                    DEFAULT_WHITE if count % 2 == 0 else LIGHT_GREY,
-                    f"{count}) ",
-                    len(str(len(items_list))) +2,
-                    item['InstanceId'],
-                    20,
-                    item['HostName'],
-                    hostname_len,
-                    item['InstanceName'],
-                    instname_len,
-                    ' '.join(item['Addresses']),
-                    DEFAULT_WHITE,
-                ),
-            )
-        return items_list
+        table = tabulate(items_list, headers="keys")
+        if not quit:
+            print(table)
+
+        menu_data = []
+        for container_data, container_text in zip(items_list, table.split("\n")[2:]):
+            menu_data.append({"summary": container_text, **container_data})
+
+        return menu_data
+
 
     def resolve_instance(self, instance: str) -> Tuple[str, Dict[str, Any]]:
         # Is it a valid Instance ID?
@@ -211,7 +209,9 @@ class ContainerResolver(AWSSessionBase):
         if self.args.cluster:
             filtered_clusters = []
             for cluster in clusters:
-                if (self.args.cluster.startswith("arn:") and cluster == self.args.cluster) or cluster.endswith(f"/{self.args.cluster}"):
+                if (self.args.cluster.startswith("arn:") and cluster == self.args.cluster) or cluster.endswith(
+                    f"/{self.args.cluster}",
+                ):
                     filtered_clusters.append(cluster)
                     break
             clusters = filtered_clusters
@@ -245,40 +245,32 @@ class ContainerResolver(AWSSessionBase):
 
         return self.containers
 
-    def print_containers(self, containers: List[Dict[str, Any]]) -> list:
-        max_len = {}
-        for container in containers:
-            for key in container.keys():
-                if key not in max_len:
-                    max_len[key] = len(container[key])
-                else:
-                    max_len[key] = max(max_len[key], len(container[key]))
-        containers.sort(key=lambda x: [x["cluster_name"], x["container_name"]])
-        for count, container in enumerate(containers):
-            print(
-                "{}{:<{}} {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}{}".format(
-                    DEFAULT_WHITE if count % 2 == 0 else LIGHT_GREY,
-                    f"{count}) " if len(containers) > 1 else "",
-                    len(str(len(containers))) +2,
-                    container["cluster_name"], max_len["cluster_name"],
-                    container["group_name"], max_len["group_name"],
-                    container["task_id"], max_len["task_id"],
-                    container["container_name"], max_len["container_name"],
-                    container["container_ip"], max_len["container_ip"],
-                    DEFAULT_WHITE,
-                ),
-            )
+    def print_containers(self, containers: List[Dict[str, Any]], quiet=False) -> list:
+        table_data = copy.deepcopy(containers)
 
-        return containers
+        table_data.sort(key=lambda x: [x["cluster_name"], x["container_name"]])
 
-    def print_list(self) -> List:
+        for container_details in table_data:
+            del container_details["cluster_arn"], container_details["task_arn"]
+
+        table = tabulate(table_data, headers="keys")
+        if not quiet:
+            print(table)
+
+        menu_data = []
+        for container_data, container_text in zip(table_data, table.split("\n")[2:]):
+            menu_data.append({"summary": container_text, **container_data})
+
+        return menu_data
+
+    def print_list(self, quiet=False) -> List:
         containers = self.get_list()
 
         if not containers:
             logger.warning("No Execute-Command capable containers found!")
             sys.exit(1)
 
-        return self.print_containers(containers)
+        return self.print_containers(containers, quiet=quiet)
 
     def resolve_container(self, keywords: List[str]) -> Dict[str, Any]:
         containers = self.get_list()
@@ -292,12 +284,27 @@ class ContainerResolver(AWSSessionBase):
         candidates: List[Dict[str, Any]] = []
         for container in containers:
             for keyword in keywords:
-                if keyword not in (container["group_name"], container["task_id"], container["container_name"], container["container_ip"]):
-                    logger.debug("IGNORED: Container %s/%s doesn't match keyword: %s", container["task_id"], container["container_name"], keyword)
+                if keyword not in (
+                    container["group_name"],
+                    container["task_id"],
+                    container["container_name"],
+                    container["container_ip"],
+                ):
+                    logger.debug(
+                        "IGNORED: Container %s/%s doesn't match keyword: %s",
+                        container["task_id"],
+                        container["container_name"],
+                        keyword,
+                    )
                     container = {}
                     break
             if container:
-                logger.debug("ADDED: Container %s/%s matches all keywords: %s", container["task_id"], container["container_name"], " ".join(keywords))
+                logger.debug(
+                    "ADDED: Container %s/%s matches all keywords: %s",
+                    container["task_id"],
+                    container["container_name"],
+                    " ".join(keywords),
+                )
                 candidates.append(container)
         if not candidates:
             logger.warning("No container matches: %s", " AND ".join(keywords))
