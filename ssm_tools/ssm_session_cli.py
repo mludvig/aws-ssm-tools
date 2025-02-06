@@ -53,6 +53,8 @@ def parse_args(argv: list) -> argparse.Namespace:
                                "If you need to run the COMMAND as a different USER prepend the command with the appropriate 'sudo -u USER ...'. (optional)")
     group_session.add_argument("--document-name", dest="document_name", help="Document to execute, e.g. AWS-StartInteractiveCommand (optional)")
     group_session.add_argument("--parameters", dest="parameters", help="Parameters for the --document-name, e.g. 'command=[\"sudo -i -u ec2-user\"]' (optional)")
+    group_session.add_argument("--port-map", "-pm", dest="port_map", metavar="LOCAL:REMOTE", 
+                             help="Port forwarding mapping in format LOCAL:REMOTE (e.g. 8899:8080). Enables port forwarding mode. (optional)")
     # fmt: on
 
     parser.description = "Start SSM Shell Session to an EC2 instance"
@@ -80,14 +82,23 @@ Author: Michael Ludvig
     if args.parameters and not args.document_name:
         parser.error("--parameters can only be used together with --document-name")
 
-    if bool(args.user) + bool(args.command) + bool(args.document_name) > 1:
+    if bool(args.user) + bool(args.command) + bool(args.document_name) + bool(args.port_map) > 1:
         parser.error(
             """
-Use only one of --user / --command / --document-name
+Use only one of --user / --command / --document-name / --port-map
 If you need to run the COMMAND as a specific USER then prepend
 the command with the appropriate: sudo -i -u USER COMMAND
 """
         )
+
+    if args.port_map:
+        try:
+            local_port, remote_port = args.port_map.split(":")
+            # Verify both ports are valid integers
+            int(local_port)
+            int(remote_port)
+        except ValueError:
+            parser.error("--port-map must be in format LOCAL:REMOTE (e.g. 8899:8080)")
 
     return args
 
@@ -99,10 +110,17 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
     if args.region:
         exec_args += ["--region", args.region]
 
-    if args.user:
+    if args.port_map:
+        # Handle port forwarding
+        local_port, remote_port = args.port_map.split(":")
+        exec_args += [
+            "--document-name", "AWS-StartPortForwardingSession",
+            "--parameters", f'{{"portNumber":["{remote_port}"],"localPortNumber":["{local_port}"]}}'
+        ]
+    elif args.user:
         # Fake --document-name / --parameters for --user
         exec_args += ["--document-name", "AWS-StartInteractiveCommand", "--parameters", f'command=["sudo -i -u {args.user}"]']
-    if args.command:
+    elif args.command:
         # Fake --document-name / --parameters for --command
         exec_args += ["--document-name", "AWS-StartInteractiveCommand", "--parameters", f"command={args.command}"]
     else:
