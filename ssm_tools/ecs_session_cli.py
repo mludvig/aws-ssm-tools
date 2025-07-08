@@ -62,7 +62,7 @@ Author: Michael Ludvig
     return args, extras
 
 
-def start_session(container: Dict[str, Any], args: argparse.Namespace, command: str) -> None:
+def execute_command(container: Dict[str, Any], args: argparse.Namespace, command: str) -> None:
     exec_args = ["aws", "ecs", "execute-command"]
     if args.profile:
         exec_args += ["--profile", args.profile]
@@ -117,7 +117,7 @@ def main() -> int:
             logger.warning("Could not find any container matching: %s", " AND ".join(args.CONTAINER))
             sys.exit(1)
 
-        start_session(container, args, args.command)
+        execute_command(container, args, args.command)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)

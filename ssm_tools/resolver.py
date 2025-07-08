@@ -133,7 +133,7 @@ class InstanceResolver(AWSSessionBase):
             del instance['AvailabilityZone']
 
         table = tabulate(items_list, headers="keys")
-        if not quit:
+        if not quiet:
             print(table)
 
         menu_data = []

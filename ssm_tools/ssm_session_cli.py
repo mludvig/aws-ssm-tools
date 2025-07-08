@@ -49,6 +49,7 @@ def parse_args(argv: list) -> argparse.Namespace:
 
     group_session = parser.add_argument_group("Session Parameters")
     group_session.add_argument("--user", "-u", "--sudo", dest="user", metavar="USER", help="SUDO to USER after opening the session. Can't be used together with --document-name / --parameters. (optional)")
+    group_session.add_argument("--reason", "-r", help="The reason for connecting to the instance.")
     group_session.add_argument("--command", "-c", dest="command", metavar="COMMAND", help="Command to run in the SSM Session. Can't be used together with --user. "
                                "If you need to run the COMMAND as a different USER prepend the command with the appropriate 'sudo -u USER ...'. (optional)")
     group_session.add_argument("--document-name", dest="document_name", help="Document to execute, e.g. AWS-StartInteractiveCommand (optional)")
@@ -98,6 +99,8 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
         exec_args += ["--profile", args.profile]
     if args.region:
         exec_args += ["--region", args.region]
+    if args.reason:
+        exec_args += ["--reason", args.reason]
 
     if args.user:
         # Fake --document-name / --parameters for --user
