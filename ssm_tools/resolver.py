@@ -129,8 +129,8 @@ class InstanceResolver(AWSSessionBase):
         items_list.sort(key=lambda x: x.get("InstanceName") or x.get("HostName"))  # type: ignore
 
         for instance in items_list:
-            instance['Addresses'] = ', '.join(instance['Addresses'])
-            del instance['AvailabilityZone']
+            instance["Addresses"] = ", ".join(instance["Addresses"])
+            del instance["AvailabilityZone"]
 
         table = tabulate(items_list, headers="keys")
         if not quiet:
@@ -141,7 +141,6 @@ class InstanceResolver(AWSSessionBase):
             menu_data.append({"summary": container_text, **container_data})
 
         return menu_data
-
 
     def resolve_instance(self, instance: str) -> Tuple[str, Dict[str, Any]]:
         # Is it a valid Instance ID?
@@ -168,7 +167,7 @@ class InstanceResolver(AWSSessionBase):
         # Print the matched instance we are connecting to
         row = []
         for v in items[instances[0]].values():
-            row.append(', '.join(v) if isinstance(v, list) else v)
+            row.append(", ".join(v) if isinstance(v, list) else v)
         print(tabulate([row], headers=items[instances[0]].keys()))
 
         # Found only one instance - return it

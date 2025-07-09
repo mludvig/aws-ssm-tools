@@ -283,7 +283,7 @@ class SsmTunnel(SsmTalker):
 
     def display_stats(self) -> None:
         def _erase_line() -> None:
-            print("\r\x1B[K", end="")  # Erase line
+            print("\r\x1b[K", end="")  # Erase line
 
         stat_history = [self.stats]
         stat_history_len = int(self.stats_secs / self.stats_refresh)
