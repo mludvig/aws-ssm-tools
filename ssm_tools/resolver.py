@@ -7,8 +7,8 @@ import re
 import sys
 from typing import Any, Dict, List, Tuple
 
-import botocore.session
 from tabulate import tabulate
+from botocore.exceptions import ClientError
 
 from .common import AWSSessionBase
 
@@ -99,7 +99,7 @@ class InstanceResolver(AWSSessionBase):
                             logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
                     return items
 
-            except botocore.exceptions.ClientError as ex:
+            except ClientError as ex:
                 if ex.response.get("Error", {}).get("Code", "") != "InvalidInstanceID.NotFound":
                     raise
                 message = ex.response.get("Error", {}).get("Message", "")
@@ -165,6 +165,12 @@ class InstanceResolver(AWSSessionBase):
             logger.warning("Use INSTANCE_ID to connect to a specific one")
             sys.exit(1)
 
+        # Print the matched instance we are connecting to
+        row = []
+        for v in items[instances[0]].values():
+            row.append(', '.join(v) if isinstance(v, list) else v)
+        print(tabulate([row], headers=items[instances[0]].keys()))
+
         # Found only one instance - return it
         return instances[0], items[instances[0]]
 
@@ -195,10 +201,6 @@ class ContainerResolver(AWSSessionBase):
         )
 
     def get_list(self) -> List[Dict[str, Any]]:
-        def _try_append(_list: list, _dict: dict, _key: str) -> None:
-            if _key in _dict:
-                _list.append(_dict[_key])
-
         # List ECS Clusters
         clusters = []
         logger.debug("Listing ECS Clusters")

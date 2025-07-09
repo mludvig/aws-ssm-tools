@@ -17,9 +17,6 @@ SCRIPTS = [
     "ecs-session",
     "ec2-ssh",
     "ssm-tunnel",
-    # Renamed, deprecated and soon to be removed...
-    "ssm-session",
-    "ssm-ssh",
 ]
 VERSION = ssm_tools.__version__
 

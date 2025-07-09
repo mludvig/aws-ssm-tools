@@ -13,11 +13,9 @@
 
 import os
 import sys
-import time
 import logging
 import signal
 import argparse
-from typing import Tuple, List
 
 import botocore.exceptions
 from simple_term_menu import TerminalMenu
@@ -74,10 +72,6 @@ Author: Michael Ludvig
     if args.show_version:
         show_version(args)
 
-    # Require exactly one of INSTANCE or --list
-    # if bool(args.INSTANCE) + bool(args.list) != 1:
-    #     parser.error("Specify either INSTANCE or --list")
-
     if args.parameters and not args.document_name:
         parser.error("--parameters can only be used together with --document-name")
 
@@ -121,12 +115,6 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
 
 
 def main() -> int:
-    ## Deprecate old script name
-    if sys.argv[0].endswith("/ssm-session"):
-        print('\033[31;1mWARNING:\033[33;1m "ssm-session" has been renamed to "ec2-session" - please update your scripts.\033[0m', file=sys.stderr)
-        time.sleep(3)
-        print(file=sys.stderr)
-
     ## Split command line to main args and optional command to run
     args = parse_args(sys.argv[1:])
 
