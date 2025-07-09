@@ -11,18 +11,18 @@
 # and host names, etc. In the end it executes 'aws' to actually
 # start the session.
 
+import argparse
+import logging
 import os
+import signal
 import sys
 import time
-import logging
-import signal
-import argparse
 
 from typing import Tuple, List
 
 import botocore.exceptions
 
-from .common import add_general_parameters, show_version, configure_logging
+from .common import add_general_parameters, configure_logging, show_version
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ec2-session")
@@ -86,7 +86,7 @@ Author: Michael Ludvig
 Use only one of --user / --command / --document-name
 If you need to run the COMMAND as a specific USER then prepend
 the command with the appropriate: sudo -i -u USER COMMAND
-"""
+""",
         )
 
     return args
@@ -101,7 +101,12 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
 
     if args.user:
         # Fake --document-name / --parameters for --user
-        exec_args += ["--document-name", "AWS-StartInteractiveCommand", "--parameters", f'command=["sudo -i -u {args.user}"]']
+        exec_args += [
+            "--document-name",
+            "AWS-StartInteractiveCommand",
+            "--parameters",
+            f'command=["sudo -i -u {args.user}"]',
+        ]
     if args.command:
         # Fake --document-name / --parameters for --command
         exec_args += ["--document-name", "AWS-StartInteractiveCommand", "--parameters", f"command={args.command}"]

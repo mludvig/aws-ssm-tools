@@ -6,29 +6,28 @@
 #
 # Author: Michael Ludvig (https://aws.nz)
 
-import os
-import sys
-import time
+import argparse
 import copy
 import errno
-import logging
-import threading
-import random
-import struct
-import select
 import fcntl
-import argparse
 import ipaddress
-from base64 import b64encode, b64decode
+import logging
+import os
+import random
+import select
+import struct
+import sys
+import threading
+import time
+from base64 import b64decode, b64encode
+from typing import Any
 
-from typing import List, Any, Tuple
-
-import pexpect
 import botocore.exceptions
+import pexpect
 
-from .common import add_general_parameters, show_version, configure_logging, bytes_to_human, seconds_to_human
-from .talker import SsmTalker
+from .common import add_general_parameters, bytes_to_human, configure_logging, seconds_to_human, show_version
 from .resolver import InstanceResolver
+from .talker import SsmTalker
 
 logger = logging.getLogger("ssm-tools.ssm-tunnel")
 
@@ -53,10 +52,10 @@ def parse_args(argv: list) -> argparse.Namespace:
     group_network = parser.add_argument_group("Networking Options")
     group_network.add_argument("--route", "-r", metavar="ROUTE", dest="routes", type=str, action="append", default=[], help="CIDR(s) to route through this tunnel. May be used multiple times.")
     group_network.add_argument("--tunnel-cidr", metavar="CIDR", type=str, default=tunnel_cidr,
-        help=f"By default the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598). This should be ok for most users."
+        help=f"By default the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598). This should be ok for most users.",
     )
     group_network.add_argument("--up-down", metavar="SCRIPT", dest="updown_script", type=str,
-        help="Script to call during tunnel start up and close down. Check out 'ssm-tunnel-updown.dns-example' that supports setting a custom DNS server when the tunnel goes up."
+        help="Script to call during tunnel start up and close down. Check out 'ssm-tunnel-updown.dns-example' that supports setting a custom DNS server when the tunnel goes up.",
     )
     # fmt: on
 
@@ -100,7 +99,7 @@ class SsmTunnel(SsmTalker):
         self.tun_name = ""
         self._tun_fd = -1
         self.local_ip = self.remote_ip = ""
-        self.routes: List[str] = []
+        self.routes: list[str] = []
         self.updown_script = ""
         self.updown_up_success = False
 
@@ -120,7 +119,10 @@ class SsmTunnel(SsmTalker):
         if match != 0:  # Index matched in the 'patterns'
             logger.error("Unable to establish the tunnel!")
             logger.error("ssm-tunnel-agent: command not found on the target instance %s.", self._instance_id)
-            logger.error("Install with: ssm-session %s --command 'sudo pip install aws-ssm-tunnel-agent'", self._instance_id)
+            logger.error(
+                "Install with: ssm-session %s --command 'sudo pip install aws-ssm-tunnel-agent'",
+                self._instance_id,
+            )
             logger.error("(replace 'pip' with 'pip3' above if the former doesn't work)")
             sys.exit(1)
         logger.debug(self._child.after)
@@ -183,15 +185,15 @@ class SsmTunnel(SsmTalker):
             if self._exiting:
                 break
             try:
-                r, w, x = select.select([self._tun_fd], [], [], 1)
-                if not self._tun_fd in r:
+                r, _, _ = select.select([self._tun_fd], [], [], 1)
+                if self._tun_fd not in r:
                     if last_ts + keepalive_sec < time.time():
                         # Keepalive timeout - send '#'
                         self._child.sendline("#")
                         last_ts = time.time()
                     continue
                 buf = os.read(self._tun_fd, 1504)  # Virtual GRE header adds 4 bytes
-                self._child.sendline("%{}".format(b64encode(buf).decode("ascii")))
+                self._child.sendline(f"%{b64encode(buf).decode('ascii')}")
             except OSError as e:
                 if e.errno == errno.EBADF and self._exiting:
                     break
@@ -213,7 +215,7 @@ class SsmTunnel(SsmTalker):
             except pexpect.exceptions.TIMEOUT:
                 # This is a long timeout, 30 sec, not very useful
                 continue
-            if type(self._child.after) == pexpect.exceptions.EOF:
+            if isinstance(self._child.after, pexpect.exceptions.EOF):
                 logger.warning("Received unexpected EOF - tunnel went down?")
                 self._exiting = True
                 break
@@ -262,7 +264,7 @@ class SsmTunnel(SsmTalker):
             logger.error("Updown script %s exitted with error.", self.updown_script)
             sys.exit(1)
 
-    def start(self, local_ip: str, remote_ip: str, routes: List[str], updown_script: str) -> None:
+    def start(self, local_ip: str, remote_ip: str, routes: list[str], updown_script: str) -> None:
         self.local_ip = local_ip
         self.remote_ip = remote_ip
         self.routes = routes
@@ -300,8 +302,12 @@ class SsmTunnel(SsmTalker):
 
             # Calculate sliding window average
             if stat_history[1]["ts"] > stat_history[-1]["ts"]:
-                l2r_avg = (stat_history[1]["l2r"] - stat_history[-1]["l2r"]) / (stat_history[1]["ts"] - stat_history[-1]["ts"])
-                r2l_avg = (stat_history[1]["r2l"] - stat_history[-1]["r2l"]) / (stat_history[1]["ts"] - stat_history[-1]["ts"])
+                l2r_avg = (stat_history[1]["l2r"] - stat_history[-1]["l2r"]) / (
+                    stat_history[1]["ts"] - stat_history[-1]["ts"]
+                )
+                r2l_avg = (stat_history[1]["r2l"] - stat_history[-1]["r2l"]) / (
+                    stat_history[1]["ts"] - stat_history[-1]["ts"]
+                )
             else:
                 l2r_avg = r2l_avg = 0.0
 
@@ -315,10 +321,14 @@ class SsmTunnel(SsmTalker):
             r2l_a_h, r2l_a_u = bytes_to_human(r2l_avg)
 
             _erase_line()
-            print(f"{uptime} | In: {r2l_t_h:6.1f}{r2l_t_u:>2s} @ {r2l_a_h:6.1f}{r2l_a_u:>2s}/s | Out: {l2r_t_h:6.1f}{l2r_t_u:>2s} @ {l2r_a_h:6.1f}{l2r_a_u:>2s}/s", end="", flush=True)
+            print(
+                f"{uptime} | In: {r2l_t_h:6.1f}{r2l_t_u:>2s} @ {r2l_a_h:6.1f}{r2l_a_u:>2s}/s | Out: {l2r_t_h:6.1f}{l2r_t_u:>2s} @ {l2r_a_h:6.1f}{l2r_a_u:>2s}/s",
+                end="",
+                flush=True,
+            )
 
 
-def random_ips(network: str) -> Tuple[str, str]:
+def random_ips(network: str) -> tuple[str, str]:
     # Network address
     net = ipaddress.ip_network(network)
     # Random host-part
@@ -332,7 +342,10 @@ def random_ips(network: str) -> Tuple[str, str]:
 def main() -> int:
     if sys.platform != "linux":
         print("The 'ssm-tunnel' program only works on Linux at the moment!", file=sys.stderr)
-        print("In other systems you are welcome to install it in VirtualBox or in a similar virtual environment running Linux.", file=sys.stderr)
+        print(
+            "In other systems you are welcome to install it in VirtualBox or in a similar virtual environment running Linux.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     ## Split command line args

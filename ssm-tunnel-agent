@@ -9,23 +9,22 @@
 # Intentionally Python 2 with no external dependencies as that's
 # what's available by default on Amazon Linux 2 as of now.
 
-from __future__ import print_function
 
-import os
-import sys
-import time
 import errno
-import struct
-import select
 import fcntl
+import os
+import select
+import struct
+import sys
 import threading
-from base64 import b64encode, b64decode
+import time
+from base64 import b64decode, b64encode
 
 timeout_sec = 60    # Exit and cleanup if we don't get any input
 keepalive_sec = 10  # Send a dummy message this often
 
 def run_command(command, assert_0=True):
-    print("# {}".format(command))
+    print(f"# {command}")
     ret = os.system(command)
     if assert_0:
         assert ret == 0
@@ -43,7 +42,7 @@ def create_tun(tun_name, local_ip, remote_ip):
         run_command("sudo ip link set {tun_name} up".format(**params))
         # Enable forwarding
         run_command("sudo sysctl -q -w net.ipv4.ip_forward=1".format(**params), assert_0=False)
-        run_command("sudo iptables -t nat -I POSTROUTING -m comment --comment \"{tun_name}\" -s {remote_ip} -j MASQUERADE".format(**params), assert_0=False)
+        run_command('sudo iptables -t nat -I POSTROUTING -m comment --comment "{tun_name}" -s {remote_ip} -j MASQUERADE'.format(**params), assert_0=False)
     except AssertionError:
         delete_tun(tun_name, local_ip, remote_ip)
         quit(1)
@@ -60,7 +59,7 @@ def delete_tun(tun_name, local_ip, remote_ip):
     # We don't check return code here - best effort to delete the devices
     run_command("sudo ip link set {tun_name} down".format(**params), assert_0=False)
     run_command("sudo ip tuntap del {tun_name} mode tun".format(**params), assert_0=False)
-    run_command("sudo iptables -t nat -D POSTROUTING -m comment --comment \"{tun_name}\" -s {remote_ip} -j MASQUERADE".format(**params), assert_0=False)
+    run_command('sudo iptables -t nat -D POSTROUTING -m comment --comment "{tun_name}" -s {remote_ip} -j MASQUERADE'.format(**params), assert_0=False)
 
 def setup_tun(tun_name):
     TUNSETIFF = 0x400454ca
@@ -69,7 +68,7 @@ def setup_tun(tun_name):
     tun_fd = os.open("/dev/net/tun", os.O_RDWR)
 
     flags = IFF_TUN
-    ifr = struct.pack('16sH22s', tun_name.encode(), flags, b'\x00'*22)
+    ifr = struct.pack("16sH22s", tun_name.encode(), flags, b"\x00"*22)
     fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
 
     return tun_fd
@@ -77,14 +76,14 @@ def setup_tun(tun_name):
 def tun_reader(tun_fd):
     while True:
         try:
-            r, w, x = select.select([tun_fd], [], [], keepalive_sec)
-            if not tun_fd in r:
+            r, _, _ = select.select([tun_fd], [], [], keepalive_sec)
+            if tun_fd not in r:
                 # Keepalive timeout - send '#'
                 sys.stdout.write("#\n")
                 sys.stdout.flush()
                 continue
             buf = os.read(tun_fd, 1504)     # Virtual GRE header adds 4 bytes
-            sys.stdout.write("%{}\n".format(b64encode(buf).decode('ascii')))
+            sys.stdout.write(f"%{b64encode(buf).decode('ascii')}\n")
             sys.stdout.flush()
         except OSError as e:
             if e.errno == errno.EBADF:
@@ -96,12 +95,12 @@ def main():
     remote_ip = sys.argv[2]
 
     tun_suffix = ".".join(local_ip.split(".")[2:])
-    tun_name = "tunSSM.{}".format(tun_suffix)
+    tun_name = f"tunSSM.{tun_suffix}"
 
     create_tun(tun_name, local_ip, remote_ip)
 
     tun_fd = setup_tun(tun_name)
-    print("# Agent device {} is ready [{}]".format(tun_name, sys.argv[1]))
+    print(f"# Agent device {tun_name} is ready [{sys.argv[1]}]")
 
     t = threading.Thread(target=tun_reader, args=(tun_fd,))
     t.daemon = True
@@ -111,16 +110,16 @@ def main():
         last_ts = time.time()
         stdin_fd = sys.stdin.fileno()       # Should be '0', but still...
         while True:
-            r, w, x = select.select([stdin_fd], [], [], 1)    # Wait 1 sec for input
-            if not stdin_fd in r:
+            r, _, _ = select.select([stdin_fd], [], [], 1)    # Wait 1 sec for input
+            if stdin_fd not in r:
                 if last_ts + timeout_sec < time.time():
-                    print("# ERROR: {} sec timeout, exitting...".format(timeout_sec))
+                    print(f"# ERROR: {timeout_sec} sec timeout, exiting...")
                     break
                 continue
             line = sys.stdin.readline()
             last_ts = time.time()
-            if line[0] == '%':
-                buf = b64decode(line[1:].strip('\n\r'))
+            if line[0] == "%":
+                buf = b64decode(line[1:].strip("\n\r"))
                 os.write(tun_fd, buf)
 
     except KeyboardInterrupt:

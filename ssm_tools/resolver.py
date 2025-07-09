@@ -5,9 +5,9 @@ import re
 import logging
 import argparse
 
-from typing import Dict, List, Any, Tuple
+from typing import Any
 
-import botocore.session
+from botocore.exceptions import ClientError
 
 from .common import AWSSessionBase
 
@@ -22,7 +22,7 @@ class InstanceResolver(AWSSessionBase):
         self.ssm_client = self.session.client("ssm")
         self.ec2_client = self.session.client("ec2")
 
-    def get_list(self) -> Dict[str, Dict[str, Any]]:
+    def get_list(self) -> dict[str, dict[str, Any]]:
         def _try_append(_list: list, _dict: dict, _key: str) -> None:
             if _key in _dict:
                 _list.append(_dict[_key])
@@ -90,7 +90,7 @@ class InstanceResolver(AWSSessionBase):
                             logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
                     return items
 
-            except botocore.exceptions.ClientError as ex:
+            except ClientError as ex:
                 if ex.response.get("Error", {}).get("Code", "") != "InvalidInstanceID.NotFound":
                     raise
                 message = ex.response.get("Error", {}).get("Message", "")
@@ -129,7 +129,7 @@ class InstanceResolver(AWSSessionBase):
         for item in items_list:
             print(f"{item['InstanceId']:20}   {item['HostName']:{hostname_len}}   {item['InstanceName']:{instname_len}}   {' '.join(item['Addresses'])}")
 
-    def resolve_instance(self, instance: str) -> Tuple[str, Dict[str, Any]]:
+    def resolve_instance(self, instance: str) -> tuple[str, dict[str, Any]]:
         # Is it a valid Instance ID?
         if re.match("^m?i-[a-f0-9]+$", instance):
             return instance, {}
@@ -163,10 +163,10 @@ class ContainerResolver(AWSSessionBase):
         self.ecs_client = self.session.client("ecs")
 
         self.args = args
-        self.containers: List[Dict[str, Any]] = []
-        self._tasks: Dict[str, Any] = {}
+        self.containers: list[dict[str, Any]] = []
+        self._tasks: dict[str, Any] = {}
 
-    def add_container(self, container: Dict[str, Any]) -> None:
+    def add_container(self, container: dict[str, Any]) -> None:
         _task_parsed = container["taskArn"].split(":")[-1].split("/")
         self.containers.append(
             {
@@ -180,7 +180,7 @@ class ContainerResolver(AWSSessionBase):
             }
         )
 
-    def get_list(self) -> List[Dict[str, Any]]:
+    def get_list(self) -> list[dict[str, Any]]:
         def _try_append(_list: list, _dict: dict, _key: str) -> None:
             if _key in _dict:
                 _list.append(_dict[_key])
@@ -229,7 +229,7 @@ class ContainerResolver(AWSSessionBase):
 
         return self.containers
 
-    def print_containers(self, containers: List[Dict[str, Any]]) -> None:
+    def print_containers(self, containers: list[dict[str, Any]]) -> None:
         max_len = {}
         for container in containers:
             for key in container.keys():
@@ -252,7 +252,7 @@ class ContainerResolver(AWSSessionBase):
 
         self.print_containers(containers)
 
-    def resolve_container(self, keywords: List[str]) -> Dict[str, Any]:
+    def resolve_container(self, keywords: list[str]) -> dict[str, Any]:
         containers = self.get_list()
 
         if not containers:
@@ -261,7 +261,7 @@ class ContainerResolver(AWSSessionBase):
 
         logger.debug("Searching for containers matching all keywords: %s", " ".join(keywords))
 
-        candidates: List[Dict[str, Any]] = []
+        candidates: list[dict[str, Any]] = []
         for container in containers:
             for keyword in keywords:
                 if keyword not in (container["group_name"], container["task_id"], container["container_name"], container["container_ip"]):

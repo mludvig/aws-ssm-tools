@@ -10,12 +10,11 @@
 # In the end it executes 'aws ecs execute-command' with the appropriate parameters.
 # Supports both EC2 and Fargate ECS tasks.
 
+import argparse
+import logging
 import os
 import sys
-import logging
-import argparse
-
-from typing import Tuple, List, Dict, Any
+from typing import Any
 
 import botocore.exceptions
 
@@ -25,7 +24,7 @@ from .resolver import ContainerResolver
 logger = logging.getLogger("ssm-tools.ecs-session")
 
 
-def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
+def parse_args(argv: list) -> tuple[argparse.Namespace, list[str]]:
     """
     Parse command line arguments.
     """
@@ -35,12 +34,34 @@ def parse_args(argv: list) -> Tuple[argparse.Namespace, List[str]]:
     add_general_parameters(parser)
 
     group_container = parser.add_argument_group("Container Selection")
-    group_container.add_argument("CONTAINER", nargs=argparse.ZERO_OR_MORE, help="Task ID, Container Name or IP address. Use multiple keywords (e.g. Task Name and IP) to narrow down ambiguous selections.")
-    group_container.add_argument("--list", "-l", dest="list", action="store_true", help="List available containers configured for ECS RunTask")
-    group_container.add_argument("--cluster", dest="cluster", metavar="CLUSTER", help="Specify an ECS cluster. (optional)")
+    group_container.add_argument(
+        "CONTAINER",
+        nargs=argparse.ZERO_OR_MORE,
+        help="Task ID, Container Name or IP address. Use multiple keywords (e.g. Task Name and IP) to narrow down ambiguous selections.",
+    )
+    group_container.add_argument(
+        "--list",
+        "-l",
+        dest="list",
+        action="store_true",
+        help="List available containers configured for ECS RunTask",
+    )
+    group_container.add_argument(
+        "--cluster",
+        dest="cluster",
+        metavar="CLUSTER",
+        help="Specify an ECS cluster. (optional)",
+    )
 
     group_session = parser.add_argument_group("Session Parameters")
-    group_session.add_argument("--command", dest="command", metavar="COMMAND", default="/bin/sh", help="Command to run inside the container. Default: /bin/sh")
+    group_session.add_argument(
+        "--command",
+        "-c",
+        dest="command",
+        metavar="COMMAND",
+        default="/bin/sh",
+        help="Command to run inside the container. Default: /bin/sh",
+    )
 
     parser.description = "Execute 'ECS Run Task' in a given container"
     parser.epilog = f"""
@@ -66,7 +87,7 @@ Author: Michael Ludvig
     return args, extras
 
 
-def start_session(container: Dict[str, Any], args: argparse.Namespace, command: str) -> None:
+def start_session(container: dict[str, Any], args: argparse.Namespace, command: str) -> None:
     exec_args = ["aws", "ecs", "execute-command"]
     if args.profile:
         exec_args += ["--profile", args.profile]

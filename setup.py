@@ -1,10 +1,10 @@
 # aws-ssm-tools packaging
 
 import os
-import sys
 import pathlib
+import sys
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 from setuptools.command.install import install
 
 import ssm_tools
