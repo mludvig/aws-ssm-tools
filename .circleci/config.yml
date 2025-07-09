@@ -28,7 +28,7 @@ jobs:
           name: Install prerequisities
           command: |
             set -x
-            python3 -m pip install pylint mypy black types-tabulate setuptools
+            python3 -m pip install -r requirements-dev.txt
             python3 -m pip install -r requirements.txt
             pyenv rehash
 
@@ -62,7 +62,7 @@ jobs:
           name: Install twine
           command: |
             python3 -m pip install --upgrade pip
-            python3 -m pip install twine
+            python3 -m pip install -r requirements-dev.txt
             pyenv rehash
 
       - run:

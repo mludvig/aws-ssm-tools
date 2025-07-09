@@ -1,0 +1,70 @@
+[tool.ruff]
+# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
+lint.select = [
+    "E", # pycodestyle - Error
+    "W", # pycodestyle - Warning
+    "I", # isort
+    "F", # Pyflakes
+    "UP", # pyupgrade
+    "C4", # flake8-comprehensions
+    "PIE", # flake8-pie
+    "Q", # flake8-quotes
+    "RSE", # flake8-raise
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking 
+    "FLY", # flynt
+    "COM", # flake8-commas
+    "RET", # flake8-return
+]
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+lint.fixable = ["ALL"]
+lint.unfixable = []
+
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+    ".circleci",
+]
+lint.ignore = [
+    "E501", # Line too Long (We run black separably)
+    "W191", # tab-indentation (We run black separably)
+    "SIM108", # if-else-block-instead-of-if-exp
+    "RET504", # Hurts readability
+]
+# Same as Black.
+line-length = 120
+indent-width = 4
+
+# Allow unused variables when underscore-prefixed.
+lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.mccabe]
+# Unlike Flake8, default to a complexity level of 10.
+max-complexity = 10
+

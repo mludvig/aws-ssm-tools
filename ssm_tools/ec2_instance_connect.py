@@ -1,11 +1,10 @@
-import sys
+# Needed for type hints
+import argparse
 import logging
 import pathlib
 import subprocess
-
-# Needed for type hints
-import argparse
-from typing import List, Tuple, Optional
+import sys
+from typing import Optional
 
 from .common import AWSSessionBase
 
@@ -21,9 +20,9 @@ class EC2InstanceConnectHelper(AWSSessionBase):
         # Create boto3 client from session
         self.ec2ic_client = self.session.client("ec2-instance-connect")
 
-    def obtain_ssh_key(self, key_file_name: str) -> Tuple[str, Optional[str]]:
-        def _read_ssh_agent_keys() -> List[str]:
-            cp = subprocess.run(["ssh-add", "-L"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    def obtain_ssh_key(self, key_file_name: str) -> tuple[str, Optional[str]]:
+        def _read_ssh_agent_keys() -> list[str]:
+            cp = subprocess.run(["ssh-add", "-L"], capture_output=True, check=False)
             if cp.returncode != 0:
                 logger.debug("Failed to run: ssh-add -L: %s", cp.stderr.decode("utf-8").strip().replace("\n", " "))
                 return []
@@ -82,7 +81,10 @@ class EC2InstanceConnectHelper(AWSSessionBase):
             logger.debug("Could not find the public key for %s in SSH Agent", key_file_name)
 
             # Try extracting the public key from the provided private key
-            logger.warning("Trying to extract the public key from %s - you may be asked for a passphrase!", key_file_name)
+            logger.warning(
+                "Trying to extract the public key from %s - you may be asked for a passphrase!",
+                key_file_name,
+            )
             cp = subprocess.run(["ssh-keygen", "-y", "-f", key_file_name], stdout=subprocess.PIPE, check=False)
             if cp.returncode == 0:
                 logger.info("Extracted the public key from: %s", key_file_name)

@@ -1,6 +1,6 @@
 import pathlib
 
-from setuptools import setup, find_packages
+from setuptools import setup
 
 import ssm_tools
 
@@ -11,10 +11,10 @@ setup(
     name="aws-ssm-tunnel-agent",
     version=ssm_tools.__version__,
     scripts=[
-        'ssm-tunnel-agent'
+        "ssm-tunnel-agent",
     ],
 
-    python_requires='>=2.7',
+    python_requires=">=2.7",
 
     install_requires=[ ],
 
@@ -30,5 +30,5 @@ setup(
         "Bug Tracker": "https://github.com/mludvig/aws-ssm-tools/issues",
         "Documentation": "https://github.com/mludvig/aws-ssm-tools/blob/master/README.md",
         "Source Code": "https://github.com/mludvig/aws-ssm-tools",
-    }
+    },
 )

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+
 from ssm_tools.ssm_tunnel_cli import main
 
 if __name__ == "__main__":

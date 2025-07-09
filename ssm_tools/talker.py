@@ -1,5 +1,7 @@
-import time
+import contextlib
 import logging
+import time
+
 import pexpect
 
 logger = logging.getLogger("ssm-tools.talker")
@@ -38,10 +40,8 @@ class SsmTalker:
         self._child.sendcontrol("c")
         time.sleep(0.5)
         self._child.sendline("exit")
-        try:
+        with contextlib.suppress(OSError, pexpect.exceptions.EOF):
             self._child.expect(["Exiting session", pexpect.EOF])
-        except (OSError, pexpect.exceptions.EOF):
-            pass
 
     def wait_for_prompt(self) -> None:
         """

@@ -1,15 +1,13 @@
-import sys
-import pathlib
-import logging
 import argparse
+import logging
+import pathlib
 import subprocess
-
-from typing import List, Tuple
+import sys
 
 import boto3
 import botocore.credentials
-
 import packaging.version
+
 from . import __version__ as ssm_tools_version
 
 __all__ = []
@@ -45,19 +43,48 @@ def add_general_parameters(parser: argparse.ArgumentParser, long_only: bool = Fa
     """
 
     # Remove short options if long_only==True
-    def _get_opts(opt_long: str, opt_short: str) -> List[str]:
+    def _get_opts(opt_long: str, opt_short: str) -> list[str]:
         opts = [opt_long]
         if not long_only:
             opts.append(opt_short)
         return opts
 
     group_general = parser.add_argument_group("General Options")
-    group_general.add_argument(*_get_opts("--profile", "-p"), dest="profile", type=str, help="Configuration profile from ~/.aws/{credentials,config}")
+    group_general.add_argument(
+        *_get_opts("--profile", "-p"),
+        dest="profile",
+        type=str,
+        help="Configuration profile from ~/.aws/{credentials,config}",
+    )
     group_general.add_argument(*_get_opts("--region", "-g"), dest="region", type=str, help="Set / override AWS region.")
-    group_general.add_argument(*_get_opts("--verbose", "-v"), action="store_const", dest="log_level", const=logging.INFO, default=logging.INFO, help="Default log level. Show informational messages only.")
-    group_general.add_argument(*_get_opts("--debug", "-d"), action="store_const", dest="log_level", const=logging.DEBUG, help="Increase log level.")
-    group_general.add_argument(*_get_opts("--quiet", "-q"), action="store_const", dest="log_level", const=logging.WARNING, help="Decrease log level. Only show warnings and errors.")
-    group_general.add_argument(*_get_opts("--version", "-V"), action="store_true", dest="show_version", help=f"Show package version and exit. Version is {ssm_tools_version}")
+    group_general.add_argument(
+        *_get_opts("--verbose", "-v"),
+        action="store_const",
+        dest="log_level",
+        const=logging.INFO,
+        default=logging.INFO,
+        help="Default log level. Show informational messages only.",
+    )
+    group_general.add_argument(
+        *_get_opts("--debug", "-d"),
+        action="store_const",
+        dest="log_level",
+        const=logging.DEBUG,
+        help="Increase log level.",
+    )
+    group_general.add_argument(
+        *_get_opts("--quiet", "-q"),
+        action="store_const",
+        dest="log_level",
+        const=logging.WARNING,
+        help="Decrease log level. Only show warnings and errors.",
+    )
+    group_general.add_argument(
+        *_get_opts("--version", "-V"),
+        action="store_true",
+        dest="show_version",
+        help=f"Show package version and exit. Version is {ssm_tools_version}",
+    )
     group_general.add_argument(*_get_opts("--help", "-h"), action="help", help="Print this help and exit")
 
     return group_general
@@ -85,7 +112,7 @@ def show_version(args: argparse.Namespace) -> None:
 __all__.append("bytes_to_human")
 
 
-def bytes_to_human(size: float) -> Tuple[float, str]:
+def bytes_to_human(size: float) -> tuple[float, str]:
     """
     Convert Bytes to more readable units
     """
@@ -151,7 +178,9 @@ def verify_plugin_version(version_required: str, logger: logging.Logger) -> bool
     except FileNotFoundError:
         logger.error(f"{session_manager_plugin} not installed")
 
-    logger.error("Check out https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html for instructions")
+    logger.error(
+        "Check out https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html for instructions",
+    )
 
     return False
 
@@ -195,4 +224,6 @@ class AWSSessionBase:
 
         # Construct boto3 session with MFA cache
         self.session = boto3.session.Session(profile_name=args.profile, region_name=args.region)
-        self.session._session.get_component("credential_provider").get_provider("assume-role").cache = botocore.credentials.JSONFileCache(cli_cache)
+        self.session._session.get_component("credential_provider").get_provider("assume-role").cache = (
+            botocore.credentials.JSONFileCache(cli_cache)
+        )
