@@ -117,12 +117,12 @@ class InstanceResolver(AWSSessionBase):
 
         return items
 
-    def print_list(self, quiet=False) -> List:
+    def print_list(self, quiet: bool = False) -> List:
         items = self.get_list().values()
 
         if not items:
             logger.warning("No instances registered in SSM!")
-            return None
+            return []
 
         items_list = list(items)
         del items
@@ -168,7 +168,7 @@ class InstanceResolver(AWSSessionBase):
         row = []
         for v in items[instances[0]].values():
             row.append(", ".join(v) if isinstance(v, list) else v)
-        print(tabulate([row], headers=items[instances[0]].keys()))
+        print(tabulate([row], headers=list(items[instances[0]].keys())))
 
         # Found only one instance - return it
         return instances[0], items[instances[0]]
@@ -246,7 +246,7 @@ class ContainerResolver(AWSSessionBase):
 
         return self.containers
 
-    def print_containers(self, containers: List[Dict[str, Any]], quiet=False) -> list:
+    def print_containers(self, containers: List[Dict[str, Any]], quiet: bool = False) -> list:
         table_data = copy.deepcopy(containers)
 
         table_data.sort(key=lambda x: [x["cluster_name"], x["container_name"]])
@@ -264,7 +264,7 @@ class ContainerResolver(AWSSessionBase):
 
         return menu_data
 
-    def print_list(self, quiet=False) -> List:
+    def print_list(self, quiet: bool = False) -> List:
         containers = self.get_list()
 
         if not containers:

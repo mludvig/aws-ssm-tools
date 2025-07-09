@@ -47,4 +47,4 @@ class SsmTalker:
         """
         As of now a typical SSM prompt is 'sh-4.2$ '
         """
-        self._child.expect(".*\$ $")
+        self._child.expect(r".*\$ $")

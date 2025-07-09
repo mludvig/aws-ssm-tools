@@ -62,7 +62,7 @@ setup(
     entry_points={
         "console_scripts": console_scripts(),
     },
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     install_requires=reqs,
     package_data={
         "": ["*.txt", "*.md", "ssm-tunnel-updown.dns-example", "LICENSE"],
@@ -87,12 +87,13 @@ setup(
         "Development Status :: 5 - Production/Stable",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Topic :: System :: Systems Administration",
         "Topic :: System :: Networking",
     ],

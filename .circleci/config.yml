@@ -19,7 +19,7 @@ workflows:
 jobs:
   build:
     docker:
-      - image: cimg/python:3.6
+      - image: cimg/python:3.12
 
     steps:
       - checkout
@@ -28,7 +28,7 @@ jobs:
           name: Install prerequisities
           command: |
             set -x
-            python3 -m pip install pylint mypy black
+            python3 -m pip install pylint mypy black types-tabulate setuptools
             python3 -m pip install -r requirements.txt
             pyenv rehash
 
@@ -38,7 +38,7 @@ jobs:
 
   publish:
     docker:
-      - image: cimg/python:3.6
+      - image: cimg/python:3.12
 
     steps:
       - checkout

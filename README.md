@@ -298,7 +298,7 @@ The easiest way is to install the ssm-tools from *[PyPI](https://pypi.org/)* rep
 sudo pip3 install aws-ssm-tools
 ```
 
-**NOTE:** SSM Tools require **Python 3.6 or newer**. Only the `ssm-tunnel-agent`
+**NOTE:** SSM Tools require **Python 3.7 or newer**. Only the `ssm-tunnel-agent`
 requires **Python 2.7 or newer** as that's what's available by default
 on *Amazon Linux 2* instances.
 
