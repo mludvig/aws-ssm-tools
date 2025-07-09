@@ -133,8 +133,8 @@ and for ECS Docker Exec: `ecs-session`
     *not* need an open SSH port in the Security Group. All it needs is to be
     registered in the Systems Manager.
 
-    All `ssh` options are supported, go wild. In this example we will
-    forward port our local 3306 port to our MySQL RDS database which is running on the same standard port
+    All `ssh` options are supported, go wild. In this example we will port forward
+    our local 3306 port to our MySQL RDS database which is running on the same standard port
     `-L 3306:mysql-rds.aws.nz:3306` SSH port forwarding method.
 
     ```
