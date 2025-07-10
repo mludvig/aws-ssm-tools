@@ -62,7 +62,7 @@ setup(
     entry_points={
         "console_scripts": console_scripts(),
     },
-    python_requires=">=3.7",
+    python_requires=">=3.9",
     install_requires=reqs,
     package_data={
         "": ["*.txt", "*.md", "ssm-tunnel-updown.dns-example", "LICENSE"],

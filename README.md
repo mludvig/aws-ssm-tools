@@ -69,11 +69,11 @@ and for ECS Docker Exec: `ecs-session`
 
     ```
     ~ $ ec2-session --list
-    InstanceId           InstanceName       HostName                        Addresses
-    -------------------  -----------------  ------------------------------  --------------
-    i-07c189021bc56e042   nginx-web-server  ip-10-251-128-70.ec2.internal   10.251.128.70
-    i-094df06d3633f3267   bastion-host      ip-10-251-128-73.ec2.internal   10.251.128.73
-    i-02689d593e17f2b75   jenkins-server    ip-10-251-129-78.ec2.internal   10.251.129.78
+    InstanceId           InstanceName      HostName                        Addresses
+    -------------------  ----------------  ------------------------------  --------------
+    i-07c189021bc56e042  nginx-web-server  ip-10-251-128-70.ec2.internal   10.251.128.70
+    i-094df06d3633f3267  bastion-host      ip-10-251-128-73.ec2.internal   10.251.128.73
+    i-02689d593e17f2b75  jenkins-server    ip-10-251-129-78.ec2.internal   10.251.129.78
     ```
 
     If you're like me and have access to many different AWS accounts you
@@ -81,9 +81,9 @@ and for ECS Docker Exec: `ecs-session`
 
     ```
     ~ $ ec2-session --profile aws-sandpit --region us-west-2 --list
-    InstanceId           InstanceName        HostName                        Addresses
-    -------------------  ------------------  ------------------------------  --------------
-    i-07c189021bc56e042   nginx-web-server   ip-10-251-128-70.ec2.internal   10.251.128.70
+    InstanceId           InstanceName      HostName                       Addresses
+    -------------------  ----------------  -----------------------------  --------------
+    i-07c189021bc56e042  nginx-web-server  ip-10-251-128-70.ec2.internal  10.251.128.70
     ```
 
     Alternatively use the standard AWS *environment variables*:
@@ -92,9 +92,9 @@ and for ECS Docker Exec: `ecs-session`
     ~ $ export AWS_DEFAULT_PROFILE=aws-sandpit
     ~ $ export AWS_DEFAULT_REGION=us-west-2
     ~ $ ec2-session --list
-    InstanceId           InstanceName       HostName                        Addresses
-    -------------------  -----------------  ------------------------------  --------------
-    i-07c189021bc56e042   nginx-web-server  ip-10-251-128-70.ec2.internal   10.251.128.70
+    InstanceId           InstanceName      HostName                       Addresses
+    -------------------  ----------------  -----------------------------  -------------
+    i-07c189021bc56e042  nginx-web-server  ip-10-251-128-70.ec2.internal  10.251.128.70
     ```
 
 2. **Open SSM session** to an instance:
@@ -112,9 +112,9 @@ and for ECS Docker Exec: `ecs-session`
     You can skip the interactive menu by specifying the server directly into the command.
     ```
     ~ $ ec2-session -v nginx-web-server --user ec2-user --reason "optional - The reason why you are connecting to the instance"
-    InstanceId           InstanceName       HostName                        Addresses
-    -------------------  -----------------  ------------------------------  --------------
-    i-07c189021bc56e042   nginx-web-server  ip-10-251-128-70.ec2.internal   10.251.128.70
+    InstanceId           InstanceName       HostName                      Addresses
+    -------------------  ----------------  -----------------------------  -------------
+    i-07c189021bc56e042  nginx-web-server  ip-10-251-128-70.ec2.internal  10.251.128.70
 
     Starting session with SessionId: botocore-session-0d381a3ef740153ac
     [ec2-user@ip-10-251-128-70] ~ $ hostname
