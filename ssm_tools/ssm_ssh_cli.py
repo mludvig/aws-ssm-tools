@@ -198,7 +198,7 @@ def main() -> int:
                 login_name = maybe_login_name
 
             # Woohoo we've got an instance id!
-            logger.info("Resolved instance name '%s' to '%s'", instance, instance_id)
+            logger.debug("Resolved instance name '%s' to '%s'", instance, instance_id)
             ssh_args.append(instance_id)
 
             if login_name:

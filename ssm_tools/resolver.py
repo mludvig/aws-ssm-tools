@@ -117,12 +117,12 @@ class InstanceResolver(AWSSessionBase):
 
         return items
 
-    def print_list(self, quiet: bool = False) -> list:
+    def print_list(self, quiet: bool = False) -> tuple[str, list[Any]]:
         items = self.get_list().values()
 
         if not items:
             logger.warning("No instances registered in SSM!")
-            return []
+            return "", []
 
         items_list = list(items)
         del items
@@ -136,11 +136,13 @@ class InstanceResolver(AWSSessionBase):
         if not quiet:
             print(table)
 
+        menu_header = "\n".join([f"  {line}" for line in table.split("\n")[:2]])
         menu_data = []
+
         for container_data, container_text in zip(items_list, table.split("\n")[2:]):
             menu_data.append({"summary": container_text, **container_data})
 
-        return menu_data
+        return menu_header, menu_data
 
     def resolve_instance(self, instance: str) -> tuple[str, dict[str, Any]]:
         # Is it a valid Instance ID?
@@ -246,7 +248,7 @@ class ContainerResolver(AWSSessionBase):
 
         return self.containers
 
-    def print_containers(self, containers: list[dict[str, Any]], quiet: bool = False) -> list:
+    def print_containers(self, containers: list[dict[str, Any]], quiet: bool = False) -> tuple[str, list[Any]]:
         table_data = copy.deepcopy(containers)
 
         table_data.sort(key=lambda x: [x["cluster_name"], x["container_name"]])
@@ -258,13 +260,15 @@ class ContainerResolver(AWSSessionBase):
         if not quiet:
             print(table)
 
+        menu_header = "\n".join([f"  {line}" for line in table.split("\n")[:2]])
         menu_data = []
+
         for container_data, container_text in zip(table_data, table.split("\n")[2:]):
             menu_data.append({"summary": container_text, **container_data})
 
-        return menu_data
+        return menu_header, menu_data
 
-    def print_list(self, quiet: bool = False) -> list:
+    def print_list(self, quiet: bool = False) -> tuple[str, list[Any]]:
         containers = self.get_list()
 
         if not containers:
@@ -275,7 +279,6 @@ class ContainerResolver(AWSSessionBase):
 
     def resolve_container(self, keywords: list[str]) -> dict[str, Any]:
         containers = self.get_list()
-
         if not containers:
             logger.warning("No Execute-Command capable containers found!")
             sys.exit(1)
@@ -311,10 +314,10 @@ class ContainerResolver(AWSSessionBase):
             logger.warning("No container matches: %s", " AND ".join(keywords))
             sys.exit(1)
         elif len(candidates) == 1:
-            self.print_containers(candidates)
+            self.print_containers(candidates, quiet=True)
             return candidates[0]
         else:
             logger.warning("Found %d instances for: %s", len(candidates), keyword)
             logger.warning("Use Container IP or Task ID to connect to a specific one")
-            self.print_containers(candidates)
+            self.print_containers(candidates, quiet=True)
             sys.exit(1)

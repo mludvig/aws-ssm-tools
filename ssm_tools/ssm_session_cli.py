@@ -127,16 +127,19 @@ def main() -> int:
 
     try:
         if bool(args.INSTANCE) + bool(args.list) != 1:
-            session_details = InstanceResolver(args).print_list(quiet=True)
+            headers, session_details = InstanceResolver(args).print_list(quiet=True)
             terminal_menu = TerminalMenu(
                 [text["summary"] for text in session_details],
-                title="Select a connection or press q to quit:",
+                title=headers,
                 show_search_hint=True,
+                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
             )
             selected_index = terminal_menu.show()
             if selected_index:
                 selected_session = session_details[selected_index]
                 args.INSTANCE = selected_session["InstanceId"]
+                print(headers)
+                print(f"  {selected_session['summary']}")
             else:
                 sys.exit(0)
 
