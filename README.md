@@ -69,9 +69,11 @@ and for ECS Docker Exec: `ecs-session`
 
     ```
     ~ $ ec2-session --list
-    i-07c189021bc56e042   test1.aws.nz       test1        192.168.45.158
-    i-094df06d3633f3267   tunnel-test.aws.nz tunnel-test  192.168.44.95
-    i-02689d593e17f2b75   winbox.aws.nz      winbox       192.168.45.5    13.11.22.33
+    InstanceId           InstanceName      HostName                        Addresses
+    -------------------  ----------------  ------------------------------  --------------
+    i-07c189021bc56e042  nginx-web-server  ip-10-251-128-70.ec2.internal   10.251.128.70
+    i-094df06d3633f3267  bastion-host      ip-10-251-128-73.ec2.internal   10.251.128.73
+    i-02689d593e17f2b75  jenkins-server    ip-10-251-129-78.ec2.internal   10.251.129.78
     ```
 
     If you're like me and have access to many different AWS accounts you
@@ -79,7 +81,9 @@ and for ECS Docker Exec: `ecs-session`
 
     ```
     ~ $ ec2-session --profile aws-sandpit --region us-west-2 --list
-    i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
+    InstanceId           InstanceName      HostName                       Addresses
+    -------------------  ----------------  -----------------------------  --------------
+    i-07c189021bc56e042  nginx-web-server  ip-10-251-128-70.ec2.internal  10.251.128.70
     ```
 
     Alternatively use the standard AWS *environment variables*:
@@ -88,7 +92,9 @@ and for ECS Docker Exec: `ecs-session`
     ~ $ export AWS_DEFAULT_PROFILE=aws-sandpit
     ~ $ export AWS_DEFAULT_REGION=us-west-2
     ~ $ ec2-session --list
-    i-0beb42b1e6b60ac10   uswest2.aws.nz     uswest2      172.31.0.92
+    InstanceId           InstanceName      HostName                       Addresses
+    -------------------  ----------------  -----------------------------  -------------
+    i-07c189021bc56e042  nginx-web-server  ip-10-251-128-70.ec2.internal  10.251.128.70
     ```
 
 2. **Open SSM session** to an instance:
@@ -98,18 +104,21 @@ and for ECS Docker Exec: `ecs-session`
     You can specify most a different user with e.g. `--user ec2-user` or
     even `--user root`.
 
+
+    Running `ec2-session` without specifying an IP or hostname to connect to will show a simple terminal menu.
+    You can see all the servers managed by SSM here and pressing enter will start a connection to the highted server.
+    note that you will still need to pass in `--user` if you are not using the default values.
+
+    You can skip the interactive menu by specifying the server directly into the command.
     ```
-    ~ $ ec2-session -v test1 --user ec2-user
+    ~ $ ec2-session -v nginx-web-server --user ec2-user --reason "optional - The reason why you are connecting to the instance"
+    InstanceId           InstanceName       HostName                      Addresses
+    -------------------  ----------------  -----------------------------  -------------
+    i-07c189021bc56e042  nginx-web-server  ip-10-251-128-70.ec2.internal  10.251.128.70
+
     Starting session with SessionId: botocore-session-0d381a3ef740153ac
-    [ec2-user@ip-192-168-45-158] ~ $ hostname
-    test1.aws.nz
-
-    [ec2-user@ip-192-168-45-158] ~ $ id
-    uid=1000(ec2-user) gid=1000(ec2-user) groups=1000(ec2-user),...
-
-    [ec2-user@ip-192-168-45-158] ~ $ ^D
-    Exiting session with sessionId: botocore-session-0d381a3ef740153ac.
-    ~ $
+    [ec2-user@ip-10-251-128-70] ~ $ hostname
+    ip-10-251-128-70.ec2.internal
     ```
 
     You can specify other SSM documents to run with `--document-name AWS-...`
@@ -124,12 +133,15 @@ and for ECS Docker Exec: `ecs-session`
     *not* need an open SSH port in the Security Group. All it needs is to be
     registered in the Systems Manager.
 
-    All `ssh` options are supported, go wild. In this example we will
-    forward port 3306 to our MySQL RDS database using the standard
+    All `ssh` options are supported, go wild. In this example we will port forward
+    our local 3306 port to our MySQL RDS database which is running on the same standard port
     `-L 3306:mysql-rds.aws.nz:3306` SSH port forwarding method.
 
     ```
     ~ $ ec2-ssh ec2-user@test1 -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
+    InstanceId           InstanceName                 HostName                        Addresses
+    -------------------  ---------------------------  ------------------------------  --------------
+    i-07c189021bc56e042   nginx-web-server            ip-10-251-128-70.ec2.internal   10.251.128.70
     [ec2-ssh] INFO: Resolved instance name 'test1' to 'i-07c189021bc56e042'
     [ec2-ssh] INFO: Running: ssh -o ProxyCommand='aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p' i-07c189021bc56e042 -l ec2-user -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
     OpenSSH_7.6p1 Ubuntu-4ubuntu0.3, OpenSSL 1.0.2n  7 Dec 2017

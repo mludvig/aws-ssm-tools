@@ -48,19 +48,19 @@ class EC2InstanceConnectHelper(AWSSessionBase):
             # - SSH Agent keys (doesn't matter which one - we'll immediately connect to it)
             ssh_keys = _read_ssh_agent_keys()
             if ssh_keys:
-                logger.info("Using SSH key from SSH Agent, should be as good as any.")
+                logger.info("Using SSH key from SSH Agent")
                 return ssh_keys[0], self.SSH_AGENT_LABEL
 
             # - ~/.ssh/id_rsa.pub
             ssh_key = _read_ssh_public_key("~/.ssh/id_rsa.pub")
             if ssh_key:
-                logger.info("Using SSH key from ~/.ssh/id_rsa.pub - should work in most cases")
+                logger.info("Using SSH key from ~/.ssh/id_rsa.pub")
                 return ssh_key, "~/.ssh/id_rsa"
 
             # - ~/.ssh/id_dsa.pub
             ssh_key = _read_ssh_public_key("~/.ssh/id_dsa.pub")
             if ssh_key:
-                logger.info("Using SSH key from ~/.ssh/id_dsa.pub - should work in most cases")
+                logger.info("Using SSH key from ~/.ssh/id_dsa.pub")
                 return ssh_key, "~/.ssh/id_dsa"
 
         else:  # i.e. key_file_name is set

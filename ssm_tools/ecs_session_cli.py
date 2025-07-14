@@ -17,6 +17,7 @@ import sys
 from typing import Any
 
 import botocore.exceptions
+from simple_term_menu import TerminalMenu
 
 from .common import add_general_parameters, configure_logging, show_version
 from .resolver import ContainerResolver
@@ -80,14 +81,10 @@ Author: Michael Ludvig
     if args.show_version:
         show_version(args)
 
-    # Require exactly one of CONTAINER or --list
-    if bool(args.CONTAINER) + bool(args.list) != 1:
-        parser.error("Specify either CONTAINER or --list")
-
     return args, extras
 
 
-def start_session(container: dict[str, Any], args: argparse.Namespace, command: str) -> None:
+def execute_command(container: dict[str, Any], args: argparse.Namespace, command: str) -> None:
     exec_args = ["aws", "ecs", "execute-command"]
     if args.profile:
         exec_args += ["--profile", args.profile]
@@ -115,7 +112,27 @@ def main() -> int:
     configure_logging(args.log_level)
 
     try:
-        if args.list:
+        if bool(args.CONTAINER) + bool(args.list) != 1:
+            headers, containers = ContainerResolver(args).print_list(quiet=True)
+            terminal_menu = TerminalMenu(
+                [text["summary"] for text in containers],
+                title=headers,
+                show_search_hint=True,
+                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
+            )
+            selected_index = terminal_menu.show()
+            if selected_index:
+                selected_session = containers[selected_index]
+                args.CONTAINER = [
+                    selected_session["task_id"],
+                    selected_session["container_name"],
+                ]
+                print(headers)
+                print(f"  {selected_session['summary']}")
+            else:
+                sys.exit(0)
+
+        elif args.list:
             ContainerResolver(args).print_list()
             sys.exit(0)
 
@@ -125,7 +142,7 @@ def main() -> int:
             logger.warning("Could not find any container matching: %s", " AND ".join(args.CONTAINER))
             sys.exit(1)
 
-        start_session(container, args, args.command)
+        execute_command(container, args, args.command)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)

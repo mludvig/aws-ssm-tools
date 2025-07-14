@@ -16,11 +16,9 @@ import logging
 import os
 import signal
 import sys
-import time
-
-from typing import Tuple, List
 
 import botocore.exceptions
+from simple_term_menu import TerminalMenu
 
 from .common import add_general_parameters, configure_logging, show_version
 from .resolver import InstanceResolver
@@ -49,6 +47,7 @@ def parse_args(argv: list) -> argparse.Namespace:
 
     group_session = parser.add_argument_group("Session Parameters")
     group_session.add_argument("--user", "-u", "--sudo", dest="user", metavar="USER", help="SUDO to USER after opening the session. Can't be used together with --document-name / --parameters. (optional)")
+    group_session.add_argument("--reason", "-r", help="The reason for connecting to the instance.")
     group_session.add_argument("--command", "-c", dest="command", metavar="COMMAND", help="Command to run in the SSM Session. Can't be used together with --user. "
                                "If you need to run the COMMAND as a different USER prepend the command with the appropriate 'sudo -u USER ...'. (optional)")
     group_session.add_argument("--document-name", dest="document_name", help="Document to execute, e.g. AWS-StartInteractiveCommand (optional)")
@@ -73,10 +72,6 @@ Author: Michael Ludvig
     if args.show_version:
         show_version(args)
 
-    # Require exactly one of INSTANCE or --list
-    if bool(args.INSTANCE) + bool(args.list) != 1:
-        parser.error("Specify either INSTANCE or --list")
-
     if args.parameters and not args.document_name:
         parser.error("--parameters can only be used together with --document-name")
 
@@ -98,6 +93,8 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
         exec_args += ["--profile", args.profile]
     if args.region:
         exec_args += ["--region", args.region]
+    if args.reason:
+        exec_args += ["--reason", args.reason]
 
     if args.user:
         # Fake --document-name / --parameters for --user
@@ -123,19 +120,30 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
 
 
 def main() -> int:
-    ## Deprecate old script name
-    if sys.argv[0].endswith("/ssm-session"):
-        print('\033[31;1mWARNING:\033[33;1m "ssm-session" has been renamed to "ec2-session" - please update your scripts.\033[0m', file=sys.stderr)
-        time.sleep(3)
-        print(file=sys.stderr)
-
     ## Split command line to main args and optional command to run
     args = parse_args(sys.argv[1:])
 
     configure_logging(args.log_level)
 
     try:
-        if args.list:
+        if bool(args.INSTANCE) + bool(args.list) != 1:
+            headers, session_details = InstanceResolver(args).print_list(quiet=True)
+            terminal_menu = TerminalMenu(
+                [text["summary"] for text in session_details],
+                title=headers,
+                show_search_hint=True,
+                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
+            )
+            selected_index = terminal_menu.show()
+            if selected_index:
+                selected_session = session_details[selected_index]
+                args.INSTANCE = selected_session["InstanceId"]
+                print(headers)
+                print(f"  {selected_session['summary']}")
+            else:
+                sys.exit(0)
+
+        elif args.list:
             InstanceResolver(args).print_list()
             sys.exit(0)
 

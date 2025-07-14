@@ -1,5 +1,7 @@
 pexpect
 packaging
+tabulate
+simple-term-menu
 
 # AWS Stuff
 botocore

@@ -13,11 +13,8 @@ setup(
     scripts=[
         "ssm-tunnel-agent",
     ],
-
     python_requires=">=2.7",
-
-    install_requires=[ ],
-
+    install_requires=[],
     author="Michael Ludvig",
     author_email="mludvig@logix.net.nz",
     description="ssm-tunnel-agent for ssm-tunnel script from aws-ssm-tools package",
