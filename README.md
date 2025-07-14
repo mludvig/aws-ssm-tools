@@ -152,7 +152,7 @@ and for ECS Docker Exec: `ecs-session`
     Enter password: {RdsMasterPassword}
     Welcome to the MariaDB monitor.  Commands end with ; or \g.
     Server version: 5.6.10 MySQL Community Server (GPL)
-    
+
     MySQL [(none)]> show processlist;
     +-----+------------+-----------------------+
     | Id  | User       | Host                  |
