@@ -1,3 +1,4 @@
+pylint
 mypy
 black
 types-tabulate

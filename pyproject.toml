@@ -1,4 +1,5 @@
 [tool.ruff]
+# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
 lint.select = [
     "E", # pycodestyle - Error
     "W", # pycodestyle - Warning
@@ -10,7 +11,7 @@ lint.select = [
     "Q", # flake8-quotes
     "RSE", # flake8-raise
     "SIM", # flake8-simplify
-    "TCH", # flake8-type-checking 
+    "TCH", # flake8-type-checking
     "FLY", # flynt
     "COM", # flake8-commas
     "RET", # flake8-return
@@ -51,8 +52,8 @@ exclude = [
     ".circleci",
 ]
 lint.ignore = [
-    "E501", # Line too Long (We run black separately)
-    "W191", # tab-indentation (We run black separately)
+    "E501", # Line too Long (We run black separably)
+    "W191", # tab-indentation (We run black separably)
     "SIM108", # if-else-block-instead-of-if-exp
     "RET504", # Hurts readability
 ]
