@@ -16,7 +16,6 @@ import logging
 import os
 import signal
 import sys
-import time
 
 import botocore.exceptions
 from simple_term_menu import TerminalMenu

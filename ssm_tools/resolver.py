@@ -144,7 +144,6 @@ class InstanceResolver(AWSSessionBase):
 
         return menu_header, menu_data
 
-
     def resolve_instance(self, instance: str) -> tuple[str, dict[str, Any]]:
         # Is it a valid Instance ID?
         if re.match("^m?i-[a-f0-9]+$", instance):
