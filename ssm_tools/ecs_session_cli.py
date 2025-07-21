@@ -121,16 +121,16 @@ def main() -> int:
                 show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
             )
             selected_index = terminal_menu.show()
-            if selected_index:
-                selected_session = containers[selected_index]
-                args.CONTAINER = [
-                    selected_session["task_id"],
-                    selected_session["container_name"],
-                ]
-                print(headers)
-                print(f"  {selected_session['summary']}")
-            else:
+            if selected_index is None:
                 sys.exit(0)
+
+            selected_session = containers[selected_index]
+            args.CONTAINER = [
+                selected_session["task_id"],
+                selected_session["container_name"],
+            ]
+            print(headers)
+            print(f"  {selected_session['summary']}")
 
         elif args.list:
             ContainerResolver(args).print_list()
