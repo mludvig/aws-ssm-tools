@@ -22,14 +22,14 @@ timeout_sec = 60  # Exit and cleanup if we don't get any input
 keepalive_sec = 10  # Send a dummy message this often
 
 
-def run_command(command, assert_0=True):
+def run_command(command: str, assert_0: bool = True) -> None:
     print(f"# {command}")
     ret = os.system(command)
     if assert_0:
         assert ret == 0
 
 
-def create_tun(tun_name, local_ip, remote_ip):
+def create_tun(tun_name: str, local_ip: str, remote_ip: str) -> None:
     params = {
         "tun_name": tun_name,
         "local_ip": local_ip,
@@ -56,7 +56,7 @@ def create_tun(tun_name, local_ip, remote_ip):
         raise
 
 
-def delete_tun(tun_name, local_ip, remote_ip):
+def delete_tun(tun_name: str, local_ip: str, remote_ip: str) -> None:
     params = {
         "tun_name": tun_name,
         "local_ip": local_ip,
@@ -73,7 +73,7 @@ def delete_tun(tun_name, local_ip, remote_ip):
     )
 
 
-def setup_tun(tun_name):
+def setup_tun(tun_name: str) -> int:
     TUNSETIFF = 0x400454CA
     IFF_TUN = 0x0001
 
@@ -86,7 +86,7 @@ def setup_tun(tun_name):
     return tun_fd
 
 
-def tun_reader(tun_fd):
+def tun_reader(tun_fd: int) -> None:
     while True:
         try:
             r, _, _ = select.select([tun_fd], [], [], keepalive_sec)
@@ -104,7 +104,7 @@ def tun_reader(tun_fd):
                 break
 
 
-def main():
+def main() -> None:
     if len(sys.argv) != 3:
         print("Usage: ssm-tunnel-agent <local_ip> <remote_ip>", file=sys.stderr)
         sys.exit(1)
