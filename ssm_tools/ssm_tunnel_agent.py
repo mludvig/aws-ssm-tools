@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # ssm-tunnel-agent - remote agent for ssm-tunnel
 #                    this should be installed on the EC2 instance
@@ -6,9 +6,7 @@
 #
 # Author: Michael Ludvig
 
-# Intentionally Python 2 with no external dependencies as that's
-# what's available by default on Amazon Linux 2 as of now.
-
+# Updated for Python 3.8+ compatibility as part of aws-ssm-tools modernization
 
 import errno
 import fcntl
@@ -20,14 +18,16 @@ import threading
 import time
 from base64 import b64decode, b64encode
 
-timeout_sec = 60    # Exit and cleanup if we don't get any input
+timeout_sec = 60  # Exit and cleanup if we don't get any input
 keepalive_sec = 10  # Send a dummy message this often
+
 
 def run_command(command, assert_0=True):
     print(f"# {command}")
     ret = os.system(command)
     if assert_0:
         assert ret == 0
+
 
 def create_tun(tun_name, local_ip, remote_ip):
     params = {
@@ -42,13 +42,19 @@ def create_tun(tun_name, local_ip, remote_ip):
         run_command("sudo ip link set {tun_name} up".format(**params))
         # Enable forwarding
         run_command("sudo sysctl -q -w net.ipv4.ip_forward=1".format(**params), assert_0=False)
-        run_command('sudo iptables -t nat -I POSTROUTING -m comment --comment "{tun_name}" -s {remote_ip} -j MASQUERADE'.format(**params), assert_0=False)
+        run_command(
+            'sudo iptables -t nat -I POSTROUTING -m comment --comment "{tun_name}" -s {remote_ip} -j MASQUERADE'.format(
+                **params,
+            ),
+            assert_0=False,
+        )
     except AssertionError:
         delete_tun(tun_name, local_ip, remote_ip)
         quit(1)
-    except:
+    except Exception:
         delete_tun(tun_name, local_ip, remote_ip)
         raise
+
 
 def delete_tun(tun_name, local_ip, remote_ip):
     params = {
@@ -59,19 +65,26 @@ def delete_tun(tun_name, local_ip, remote_ip):
     # We don't check return code here - best effort to delete the devices
     run_command("sudo ip link set {tun_name} down".format(**params), assert_0=False)
     run_command("sudo ip tuntap del {tun_name} mode tun".format(**params), assert_0=False)
-    run_command('sudo iptables -t nat -D POSTROUTING -m comment --comment "{tun_name}" -s {remote_ip} -j MASQUERADE'.format(**params), assert_0=False)
+    run_command(
+        'sudo iptables -t nat -D POSTROUTING -m comment --comment "{tun_name}" -s {remote_ip} -j MASQUERADE'.format(
+            **params,
+        ),
+        assert_0=False,
+    )
+
 
 def setup_tun(tun_name):
-    TUNSETIFF = 0x400454ca
+    TUNSETIFF = 0x400454CA
     IFF_TUN = 0x0001
 
     tun_fd = os.open("/dev/net/tun", os.O_RDWR)
 
     flags = IFF_TUN
-    ifr = struct.pack("16sH22s", tun_name.encode(), flags, b"\x00"*22)
+    ifr = struct.pack("16sH22s", tun_name.encode(), flags, b"\x00" * 22)
     fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
 
     return tun_fd
+
 
 def tun_reader(tun_fd):
     while True:
@@ -82,7 +95,7 @@ def tun_reader(tun_fd):
                 sys.stdout.write("#\n")
                 sys.stdout.flush()
                 continue
-            buf = os.read(tun_fd, 1504)     # Virtual GRE header adds 4 bytes
+            buf = os.read(tun_fd, 1504)  # Virtual GRE header adds 4 bytes
             sys.stdout.write(f"%{b64encode(buf).decode('ascii')}\n")
             sys.stdout.flush()
         except OSError as e:
@@ -90,7 +103,12 @@ def tun_reader(tun_fd):
                 # Closed FD during exit
                 break
 
+
 def main():
+    if len(sys.argv) != 3:
+        print("Usage: ssm-tunnel-agent <local_ip> <remote_ip>", file=sys.stderr)
+        sys.exit(1)
+
     local_ip = sys.argv[1]
     remote_ip = sys.argv[2]
 
@@ -108,9 +126,9 @@ def main():
 
     try:
         last_ts = time.time()
-        stdin_fd = sys.stdin.fileno()       # Should be '0', but still...
+        stdin_fd = sys.stdin.fileno()  # Should be '0', but still...
         while True:
-            r, _, _ = select.select([stdin_fd], [], [], 1)    # Wait 1 sec for input
+            r, _, _ = select.select([stdin_fd], [], [], 1)  # Wait 1 sec for input
             if stdin_fd not in r:
                 if last_ts + timeout_sec < time.time():
                     print(f"# ERROR: {timeout_sec} sec timeout, exiting...")
@@ -128,6 +146,7 @@ def main():
     finally:
         os.close(tun_fd)
         delete_tun(tun_name, local_ip, remote_ip)
+
 
 if __name__ == "__main__":
     main()
