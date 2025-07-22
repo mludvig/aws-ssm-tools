@@ -1,3 +1,82 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aws-ssm-tools"
+version = "1.6.0"
+description = "Tools for AWS Systems Manager: ec2-session ecs-session ec2-ssh ssm-tunnel"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.8"
+authors = [
+    { name = "Michael Ludvig", email = "mludvig@logix.net.nz" },
+]
+keywords = ["aws", "ssm", "ec2-session", "ecs-session", "ec2-ssh", "ssm-tunnel"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Development Status :: 5 - Production/Stable",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Systems Administration",
+    "Topic :: System :: Networking",
+]
+
+dependencies = [
+    "pexpect",
+    "packaging",
+    "tabulate",
+    "simple-term-menu",
+    "botocore",
+    "boto3>=1.22.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "pylint>=2.15.0",
+    "ruff>=0.1.0",
+    "setuptools>=60.0.0",
+    "twine>=4.0.0",
+    "types-tabulate>=0.9.0",
+]
+
+[project.urls]
+"Bug Tracker" = "https://github.com/mludvig/aws-ssm-tools/issues"
+"Documentation" = "https://github.com/mludvig/aws-ssm-tools/blob/master/README.md"
+"Source Code" = "https://github.com/mludvig/aws-ssm-tools"
+
+[project.scripts]
+ec2-session = "ssm_tools.ssm_session_cli:main"
+ec2-ssh = "ssm_tools.ssm_ssh_cli:main"
+ecs-session = "ssm_tools.ecs_session_cli:main"
+ssm-tunnel = "ssm_tools.ssm_tunnel_cli:main"
+ssm-tunnel-agent = "ssm_tools.ssm_tunnel_agent:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ssm_tools"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "ssm_tools/",
+    "ec2-session",
+    "ec2-ssh", 
+    "ecs-session",
+    "ssm-tunnel",
+    "ssm-tunnel-updown.dns-example",
+    "README.md",
+    "LICENSE",
+]
+
 [tool.ruff]
 # Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
 lint.select = [
@@ -20,6 +99,15 @@ lint.select = [
 # Allow autofix for all enabled rules (when `--fix`) is provided.
 lint.fixable = ["ALL"]
 lint.unfixable = []
+lint.ignore = [
+    "E501", # Line too Long (We run black separably)
+    "W191", # tab-indentation (We run black separably)
+    "SIM108", # if-else-block-instead-of-if-exp
+    "RET504", # Hurts readability
+]
+
+# Allow unused variables when underscore-prefixed.
+lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 # Exclude a variety of commonly ignored directories.
 exclude = [
@@ -51,19 +139,21 @@ exclude = [
     "venv",
     ".circleci",
 ]
-lint.ignore = [
-    "E501", # Line too Long (We run black separably)
-    "W191", # tab-indentation (We run black separably)
-    "SIM108", # if-else-block-instead-of-if-exp
-    "RET504", # Hurts readability
-]
 # Same as Black.
 line-length = 120
 indent-width = 4
 
-# Allow unused variables when underscore-prefixed.
-lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-
 [tool.ruff.lint.mccabe]
 # Unlike Flake8, default to a complexity level of 10.
 max-complexity = 10
+
+[dependency-groups]
+dev = [
+    "black>=23.0.0; python_version>='3.9'",
+    "mypy>=1.0.0",
+    "pylint>=2.15.0",
+    "ruff>=0.1.0",
+    "setuptools>=60.0.0",
+    "twine>=4.0.0",
+    "types-tabulate>=0.9.0",
+]

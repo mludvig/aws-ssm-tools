@@ -1,7 +1,0 @@
-pylint
-mypy
-black
-types-tabulate
-setuptools
-twine
-ruff
