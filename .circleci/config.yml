@@ -1,5 +1,21 @@
 version: 2.1
 
+# Reusable commands for efficiency
+commands:
+  install_uv:
+    steps:
+      - run:
+          name: Install uv
+          command: |
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+      
+      - run:
+          name: Install dependencies
+          command: |
+            export PATH="$HOME/.cargo/bin:$PATH"
+            ./dev.sh install
+
 workflows:
   build_and_publish:
     jobs:
@@ -23,18 +39,19 @@ jobs:
 
     steps:
       - checkout
+      - install_uv
 
       - run:
-          name: Install prerequisities
+          name: Run code quality checks
           command: |
-            set -x
-            python3 -m pip install -r requirements-dev.txt
-            python3 -m pip install -r requirements.txt
-            pyenv rehash
+            export PATH="$HOME/.cargo/bin:$PATH"
+            ./dev.sh check
 
       - run:
-          name: Check syntax and style
-          command: ./check.sh
+          name: Build package
+          command: |
+            export PATH="$HOME/.cargo/bin:$PATH"
+            ./dev.sh build
 
   publish:
     docker:
@@ -42,30 +59,36 @@ jobs:
 
     steps:
       - checkout
+      - install_uv
+
       - run:
           name: Verify git tag vs. version
           command: |
-            python3 setup.py verify
+            export PATH="$HOME/.cargo/bin:$PATH"
+            tag_version="${CIRCLE_TAG#v}"
+            package_version=$(./dev.sh version)
+            echo "Git tag version: $tag_version"
+            echo "Package version: $package_version"
+            if [ "$tag_version" != "$package_version" ]; then
+              echo "Error: Git tag version ($tag_version) does not match package version ($package_version)"
+              exit 1
+            fi
 
       - run:
-          name: Init .pypirc
+          name: Configure PyPI credentials
           command: |
-            echo -e "[pypi]" >> ~/.pypirc
-            echo -e "username = $PYPI_USERNAME" >> ~/.pypirc
-            echo -e "password = $PYPI_PASSWORD" >> ~/.pypirc
-
-      - run:
-          name: Build packages
-          command: ./build.sh
-
-      - run:
-          name: Install twine
-          command: |
-            python3 -m pip install --upgrade pip
-            python3 -m pip install -r requirements-dev.txt
-            pyenv rehash
+            # Configure twine for PyPI upload
+            cat > ~/.pypirc << EOF
+            [distutils]
+            index-servers = pypi
+            
+            [pypi]
+            username = __token__
+            password = $PYPI_TOKEN
+            EOF
 
       - run:
           name: Upload to PyPI
           command: |
-            twine upload dist/*
+            export PATH="$HOME/.cargo/bin:$PATH"
+            ./dev.sh upload
