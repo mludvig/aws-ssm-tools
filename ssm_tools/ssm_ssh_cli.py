@@ -16,6 +16,7 @@ import os
 import sys
 
 import botocore.exceptions
+from simple_term_menu import TerminalMenu
 
 from .common import (
     add_general_parameters,
@@ -100,6 +101,8 @@ def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: b
         aws_args += f"--profile {profile} "
     if region:
         aws_args += f"--region {region} "
+    if reason:
+        aws_args += f"--reason '{reason}' "
 
     if use_endpoint:
         min_awscli_version = "2.12.0"
@@ -113,7 +116,7 @@ def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: b
     else:
         proxy_option = [
             "-o",
-            f"ProxyCommand=aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p --reason '{reason}'",
+            f"ProxyCommand=aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p",
         ]
     command = ["ssh"] + proxy_option + ssh_args
     logger.debug("Running: %s", command)
@@ -148,8 +151,6 @@ def main() -> int:
         login_name = ""
         key_file_name = ""
 
-        print(f"{extra_args=}")
-        print(f"{args=}")
         extra_args_iter = iter(extra_args)
         for arg in extra_args_iter:
             # User name argument
@@ -208,10 +209,23 @@ def main() -> int:
                 ssh_args.extend(["-l", login_name])
 
         if not instance_id:
-            logger.warning("Could not resolve Instance ID for '%s'", instance)
-            logger.warning("Perhaps the '%s' is not registered in SSM?", instance)
-            sys.exit(1)
+            headers, session_details = InstanceResolver(args).print_list(quiet=True)
+            terminal_menu = TerminalMenu(
+                [text["summary"] for text in session_details],
+                title=headers,
+                show_search_hint=True,
+                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
+            )
+            selected_index = terminal_menu.show()
+            if selected_index is None:
+                sys.exit(0)
 
+            selected_session = session_details[selected_index]
+            instance_id = selected_session["InstanceId"]
+            ssh_args.append(instance_id)
+
+            print(headers)
+            print(f"  {selected_session['summary']}")
         if args.send_key:
             EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, key_file_name)
 
