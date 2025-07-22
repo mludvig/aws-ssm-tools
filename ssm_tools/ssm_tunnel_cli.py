@@ -24,6 +24,7 @@ from typing import Any
 
 import botocore.exceptions
 import pexpect
+from simple_term_menu import TerminalMenu
 
 from .common import add_general_parameters, bytes_to_human, configure_logging, seconds_to_human, show_version
 from .resolver import InstanceResolver
@@ -44,20 +45,37 @@ def parse_args(argv: list) -> argparse.Namespace:
 
     add_general_parameters(parser)
 
-    # fmt: off
     group_instance = parser.add_argument_group("Instance Selection")
     group_instance.add_argument("INSTANCE", nargs="?", help="Instance ID, Name, Host name or IP address")
-    group_instance.add_argument("--list", "-l", dest="list", action="store_true", help="List instances registered in SSM.")
+    group_instance.add_argument(
+        "--list", "-l", dest="list", action="store_true", help="List instances registered in SSM."
+    )
 
     group_network = parser.add_argument_group("Networking Options")
-    group_network.add_argument("--route", "-r", metavar="ROUTE", dest="routes", type=str, action="append", default=[], help="CIDR(s) to route through this tunnel. May be used multiple times.")
-    group_network.add_argument("--tunnel-cidr", metavar="CIDR", type=str, default=tunnel_cidr,
+    group_network.add_argument(
+        "--route",
+        "-r",
+        metavar="ROUTE",
+        dest="routes",
+        type=str,
+        action="append",
+        default=[],
+        help="CIDR(s) to route through this tunnel. May be used multiple times.",
+    )
+    group_network.add_argument(
+        "--tunnel-cidr",
+        metavar="CIDR",
+        type=str,
+        default=tunnel_cidr,
         help=f"By default the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598). This should be ok for most users.",
     )
-    group_network.add_argument("--up-down", metavar="SCRIPT", dest="updown_script", type=str,
+    group_network.add_argument(
+        "--up-down",
+        metavar="SCRIPT",
+        dest="updown_script",
+        type=str,
         help="Script to call during tunnel start up and close down. Check out 'ssm-tunnel-updown.dns-example' that supports setting a custom DNS server when the tunnel goes up.",
     )
-    # fmt: on
 
     parser.description = "Start IP tunnel to a given SSM instance"
     parser.epilog = f"""
@@ -76,10 +94,6 @@ Author: Michael Ludvig
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
-
-    # Require exactly one of INSTANCE or --list
-    if bool(args.INSTANCE) + bool(args.list) != 1:
-        parser.error("Specify either INSTANCE or --list")
 
     return args
 
@@ -120,7 +134,7 @@ class SsmTunnel(SsmTalker):
             logger.error("Unable to establish the tunnel!")
             logger.error("ssm-tunnel-agent: command not found on the target instance %s.", self._instance_id)
             logger.error(
-                "Install with: ssm-session %s --command 'sudo pip install aws-ssm-tunnel-agent'",
+                "Install with: ec2-session %s --command 'sudo pip install aws-ssm-tunnel-agent'",
                 self._instance_id,
             )
             logger.error("(replace 'pip' with 'pip3' above if the former doesn't work)")
@@ -357,6 +371,27 @@ def main() -> int:
     try:
         if args.list:
             # --list
+            InstanceResolver(args).print_list()
+            sys.exit(0)
+
+        if not args.INSTANCE:
+            headers, session_details = InstanceResolver(args).print_list(quiet=True)
+            terminal_menu = TerminalMenu(
+                [text["summary"] for text in session_details],
+                title=headers,
+                show_search_hint=True,
+                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
+            )
+            selected_index = terminal_menu.show()
+            if selected_index is None:
+                sys.exit(0)
+
+            selected_session = session_details[selected_index]
+            args.INSTANCE = selected_session["InstanceId"]
+            print(headers)
+            print(f"  {selected_session['summary']}")
+
+        elif args.list:
             InstanceResolver(args).print_list()
             sys.exit(0)
 
