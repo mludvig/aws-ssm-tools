@@ -122,7 +122,7 @@ class InstanceResolver(AWSSessionBase):
 
         if not items:
             logger.warning("No instances registered in SSM!")
-            return "", []
+            sys.exit(1)
 
         items_list = list(items)
         del items
