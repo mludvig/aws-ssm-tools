@@ -1,0 +1,92 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ published ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      run: uv python install ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: ./dev.sh install
+
+    - name: Run code quality checks
+      run: ./dev.sh check
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+
+    - name: Set up Python
+      run: uv python install 3.12
+
+    - name: Install dependencies
+      run: ./dev.sh install
+
+    - name: Build package
+      run: ./dev.sh build
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+  publish:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && github.event.action == 'published'
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+
+    - name: Set up Python
+      run: uv python install 3.12
+
+    - name: Install dependencies
+      run: ./dev.sh install
+
+    - name: Verify version matches tag
+      run: |
+        tag_version="${{ github.ref_name }}"
+        # Remove 'v' prefix if present
+        tag_version="${tag_version#v}"
+        package_version=$(./dev.sh version)
+        echo "Tag version: $tag_version"
+        echo "Package version: $package_version"
+        if [ "$tag_version" != "$package_version" ]; then
+          echo "Error: Tag version ($tag_version) does not match package version ($package_version)"
+          exit 1
+        fi
+
+    - name: Build and publish to PyPI
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: ./dev.sh upload
