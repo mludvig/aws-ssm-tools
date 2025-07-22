@@ -1,8 +1,0 @@
-pexpect
-packaging
-tabulate
-simple-term-menu
-
-# AWS Stuff
-botocore
-boto3 >= 1.22.0
