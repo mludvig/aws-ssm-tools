@@ -48,12 +48,12 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, list[str]]:
     )
 
     group_ec2ic = parser.add_argument_group("EC2 Instance Connect")
+    group_ec2ic.add_argument("--reason", help="The reason for connecting to the instance.")
     group_ec2ic.add_argument(
-        "--send-key",
-        dest="send_key",
-        action="store_true",
-        default=True,
-        help="Send the SSH key to instance metadata using EC2 Instance Connect (default and deprecated - use --no-send-key instead)",
+        "--user",
+        dest="user",
+        metavar="USER",
+        help="USER after opening the session.",
     )
     group_ec2ic.add_argument(
         "--no-send-key",
@@ -94,12 +94,13 @@ Author: Michael Ludvig
     return args, extra_args
 
 
-def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: bool) -> None:
+def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: bool, reason: str = "") -> None:
     aws_args = ""
     if profile:
         aws_args += f"--profile {profile} "
     if region:
         aws_args += f"--region {region} "
+
     if use_endpoint:
         min_awscli_version = "2.12.0"
         if not verify_awscli_version(min_awscli_version, logger):
@@ -112,7 +113,7 @@ def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: b
     else:
         proxy_option = [
             "-o",
-            f"ProxyCommand=aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p",
+            f"ProxyCommand=aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p --reason '{reason}'",
         ]
     command = ["ssh"] + proxy_option + ssh_args
     logger.debug("Running: %s", command)
@@ -147,6 +148,8 @@ def main() -> int:
         login_name = ""
         key_file_name = ""
 
+        print(f"{extra_args=}")
+        print(f"{args=}")
         extra_args_iter = iter(extra_args)
         for arg in extra_args_iter:
             # User name argument
@@ -212,7 +215,7 @@ def main() -> int:
         if args.send_key:
             EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, key_file_name)
 
-        start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region, use_endpoint=args.use_endpoint)
+        start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region, use_endpoint=args.use_endpoint, reason=args.reason)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)
