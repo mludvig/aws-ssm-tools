@@ -48,7 +48,7 @@ def parse_args(argv: list) -> argparse.Namespace:
     group_instance = parser.add_argument_group("Instance Selection")
     group_instance.add_argument("INSTANCE", nargs="?", help="Instance ID, Name, Host name or IP address")
     group_instance.add_argument(
-        "--list", "-l", dest="list", action="store_true", help="List instances registered in SSM."
+        "--list", "-l", dest="list", action="store_true", help="List instances registered in SSM.",
     )
 
     group_network = parser.add_argument_group("Networking Options")

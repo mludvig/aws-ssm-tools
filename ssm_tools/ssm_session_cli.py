@@ -43,7 +43,7 @@ def parse_args(argv: list) -> argparse.Namespace:
     group_instance = parser.add_argument_group("Instance Selection")
     group_instance.add_argument("INSTANCE", nargs="?", help="Instance ID, Name, Host name or IP address")
     group_instance.add_argument(
-        "--list", "-l", dest="list", action="store_true", help="List instances available for SSM Session"
+        "--list", "-l", dest="list", action="store_true", help="List instances available for SSM Session",
     )
 
     group_session = parser.add_argument_group("Session Parameters")
@@ -65,7 +65,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         "If you need to run the COMMAND as a different USER prepend the command with the appropriate 'sudo -u USER ...'. (optional)",
     )
     group_session.add_argument(
-        "--document-name", dest="document_name", help="Document to execute, e.g. AWS-StartInteractiveCommand (optional)"
+        "--document-name", dest="document_name", help="Document to execute, e.g. AWS-StartInteractiveCommand (optional)",
     )
     group_session.add_argument(
         "--parameters",
