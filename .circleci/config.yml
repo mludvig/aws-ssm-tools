@@ -78,7 +78,7 @@ jobs:
           name: Configure PyPI credentials
           command: |
             # Configure twine for PyPI upload
-            cat > ~/.pypirc << EOF
+            cat > ~/.pypirc \<< EOF
             [distutils]
             index-servers = pypi
             
