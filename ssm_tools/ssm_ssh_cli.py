@@ -229,7 +229,13 @@ def main() -> int:
         if args.send_key:
             EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, key_file_name)
 
-        start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region, use_endpoint=args.use_endpoint, reason=args.reason)
+        start_ssh_session(
+            ssh_args=ssh_args,
+            profile=args.profile,
+            region=args.region,
+            use_endpoint=args.use_endpoint,
+            reason=args.reason,
+        )
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)
