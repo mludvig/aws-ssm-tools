@@ -16,6 +16,7 @@ import os
 import sys
 
 import botocore.exceptions
+from simple_term_menu import TerminalMenu
 
 from .common import (
     add_general_parameters,
@@ -48,12 +49,12 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, list[str]]:
     )
 
     group_ec2ic = parser.add_argument_group("EC2 Instance Connect")
+    group_ec2ic.add_argument("--reason", help="The reason for connecting to the instance.")
     group_ec2ic.add_argument(
-        "--send-key",
-        dest="send_key",
-        action="store_true",
-        default=True,
-        help="Send the SSH key to instance metadata using EC2 Instance Connect (default and deprecated - use --no-send-key instead)",
+        "--user",
+        dest="user",
+        metavar="USER",
+        help="USER after opening the session.",
     )
     group_ec2ic.add_argument(
         "--no-send-key",
@@ -94,12 +95,15 @@ Author: Michael Ludvig
     return args, extra_args
 
 
-def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: bool) -> None:
+def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: bool, reason: str = "") -> None:
     aws_args = ""
     if profile:
         aws_args += f"--profile {profile} "
     if region:
         aws_args += f"--region {region} "
+    if reason:
+        aws_args += f"--reason '{reason}' "
+
     if use_endpoint:
         min_awscli_version = "2.12.0"
         if not verify_awscli_version(min_awscli_version, logger):
@@ -205,14 +209,33 @@ def main() -> int:
                 ssh_args.extend(["-l", login_name])
 
         if not instance_id:
-            logger.warning("Could not resolve Instance ID for '%s'", instance)
-            logger.warning("Perhaps the '%s' is not registered in SSM?", instance)
-            sys.exit(1)
+            headers, session_details = InstanceResolver(args).print_list(quiet=True)
+            terminal_menu = TerminalMenu(
+                [text["summary"] for text in session_details],
+                title=headers,
+                show_search_hint=True,
+                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
+            )
+            selected_index = terminal_menu.show()
+            if selected_index is None:
+                sys.exit(0)
 
+            selected_session = session_details[selected_index]
+            instance_id = selected_session["InstanceId"]
+            ssh_args.append(instance_id)
+
+            print(headers)
+            print(f"  {selected_session['summary']}")
         if args.send_key:
             EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, key_file_name)
 
-        start_ssh_session(ssh_args=ssh_args, profile=args.profile, region=args.region, use_endpoint=args.use_endpoint)
+        start_ssh_session(
+            ssh_args=ssh_args,
+            profile=args.profile,
+            region=args.region,
+            use_endpoint=args.use_endpoint,
+            reason=args.reason,
+        )
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         logger.error(e)
