@@ -25,10 +25,13 @@ usage() {
     echo "  upload       Build and upload to PyPI"
     echo "  clean        Clean build artifacts"
     echo ""
+    echo "Version Commands:"
+    echo "  bump <part>  Bump version (major, minor, patch, alpha, beta, rc)"
+    echo "  version [ver] Show project version or set to specific version"
+    echo ""
     echo "Utility Commands:"
     echo "  shell        Enter the project's virtual environment"
     echo "  run <cmd>    Run a command in the project environment"
-    echo "  version      Show project version"
     echo ""
     echo "Examples:"
     echo "  $0 install"
@@ -37,6 +40,10 @@ usage() {
     echo "  $0 format"
     echo "  $0 build"
     echo "  $0 upload"
+    echo "  $0 bump patch"
+    echo "  $0 bump minor"
+    echo "  $0 version"
+    echo "  $0 version 2.1.0"
     echo "  $0 run python -c 'import ssm_tools; print(ssm_tools.__version__)'"
 }
 
@@ -44,13 +51,179 @@ get_version() {
     uv run python -c 'import ssm_tools; print(ssm_tools.__version__)'
 }
 
+set_version_directly() {
+    local target_version="$1"
+    local init_file="ssm_tools/__init__.py"
+    local backup_file="$init_file.backup"
+
+    # Simply restore from backup
+    if [ -f "$backup_file" ]; then
+        mv "$backup_file" "$init_file"
+        echo "Restored version from backup"
+        return 0
+    else
+        echo "Error: No backup file found"
+        return 1
+    fi
+}
+
+bump_version() {
+    local part="${1:-patch}"
+
+    if [ -z "$part" ]; then
+        echo "Error: Version part required (major, minor, patch, alpha, beta, rc)"
+        exit 1
+    fi
+
+    # Get current version and create backup
+    local current_version
+    current_version=$(get_version)
+    echo "Current version: $current_version"
+
+    # Create backup before making changes
+    cp "ssm_tools/__init__.py" "ssm_tools/__init__.py.backup"
+
+    # Use hatch to bump the version
+    echo "Bumping $part version..."
+    uv run hatch version "$part"
+
+    # Get the new version that hatch actually created
+    local new_version
+    new_version=$(get_version)
+    echo "New version: $new_version"
+
+    # Ask if user is happy with the new version
+    echo ""
+    read -p "Accept version $new_version? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Reverting to previous version..."
+        # Revert by restoring the backup
+        if set_version_directly "$current_version"; then
+            echo "Version reverted to $current_version"
+        else
+            echo "Failed to revert version"
+        fi
+        return 0
+    fi
+
+    # Remove backup since we're keeping the changes
+    rm -f "ssm_tools/__init__.py.backup"
+
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo "Not in a git repository. Version updated but no commit/tag created."
+        return 0
+    fi
+
+    # Check if there are any changes to commit
+    if git diff-index --quiet HEAD --; then
+        echo "No changes to commit (version might already be at target)."
+        return 0
+    fi
+
+    # Ask for confirmation for git operations
+    echo ""
+    read -p "Commit and tag version v$new_version? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Version updated but not committed."
+        return 0
+    fi
+
+    # Commit the version change
+    git add ssm_tools/__init__.py
+    git commit -m "Version v$new_version"
+
+    # Create and push the tag
+    git tag "v$new_version"
+
+    echo "Created commit and tag for version v$new_version"
+    echo "Don't forget to push: git push && git push --tags"
+}
+
+set_version() {
+    local target_version="$1"
+
+    if [ -z "$target_version" ]; then
+        echo "Error: Target version required"
+        exit 1
+    fi
+
+    # Get current version and create backup
+    local current_version
+    current_version=$(get_version)
+    echo "Current version: $current_version"
+
+    # Create backup before making changes
+    cp "ssm_tools/__init__.py" "ssm_tools/__init__.py.backup"
+
+    # Use hatch to set the specific version
+    echo "Setting version to $target_version..."
+    uv run hatch version "$target_version"
+
+    # Get the new version that hatch actually created
+    local new_version
+    new_version=$(get_version)
+    echo "New version: $new_version"
+
+    # Ask if user is happy with the new version
+    echo ""
+    read -p "Accept version $new_version? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Reverting to previous version..."
+        # Revert by restoring the backup
+        if set_version_directly "$current_version"; then
+            echo "Version reverted to $current_version"
+        else
+            echo "Failed to revert version"
+        fi
+        return 0
+    fi
+
+    # Remove backup since we're keeping the changes
+    rm -f "ssm_tools/__init__.py.backup"
+
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo "Not in a git repository. Version updated but no commit/tag created."
+        return 0
+    fi
+
+    # Check if there are any changes to commit
+    if git diff-index --quiet HEAD --; then
+        echo "No changes to commit (version might already be at target)."
+        return 0
+    fi
+
+    # Ask for confirmation for git operations
+    echo ""
+    read -p "Commit and tag version v$new_version? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Version updated but not committed."
+        return 0
+    fi
+
+    # Commit the version change
+    git add ssm_tools/__init__.py
+    git commit -m "Version v$new_version"
+
+    # Create and push the tag
+    git tag "v$new_version"
+
+    echo "Created commit and tag for version v$new_version"
+    echo "Don't forget to push: git push && git push --tags"
+}
+
 run_checks() {
     local tool="${1:-all}"
     local python_scripts
-    
+
     echo "Finding Python scripts..."
     python_scripts="$(grep -l '#!/usr/bin/env python3' ssm-* ecs-* ec2-* 2>/dev/null || true)"
-    
+
     case "$tool" in
         black|all)
             echo "Running black..."
@@ -62,7 +235,7 @@ run_checks() {
             [ "$tool" = "black" ] && return 0
             ;;
     esac
-    
+
     case "$tool" in
         mypy|all)
             echo "Running mypy..."
@@ -73,7 +246,7 @@ run_checks() {
             [ "$tool" = "mypy" ] && return 0
             ;;
     esac
-    
+
     case "$tool" in
         ruff|all)
             echo "Running ruff..."
@@ -81,7 +254,7 @@ run_checks() {
             [ "$tool" = "ruff" ] && return 0
             ;;
     esac
-    
+
     if [ "$tool" != "all" ] && [ "$tool" != "black" ] && [ "$tool" != "mypy" ] && [ "$tool" != "ruff" ]; then
         echo "Unknown tool: $tool"
         echo "Available tools: black, mypy, ruff, all"
@@ -131,12 +304,12 @@ case "${1:-}" in
         # Build first
         rm -rf dist/ build/ *.egg-info/ tmp-agent-build/
         uv build
-        
+
         # Get version and upload
         version=$(get_version)
         echo "Checking packages for version $version..."
         uv run twine check dist/*${version}*
-        
+
         echo "Uploading to PyPI..."
         uv run twine upload dist/*${version}*
         ;;
@@ -158,8 +331,23 @@ case "${1:-}" in
         fi
         uv run "$@"
         ;;
+    bump)
+        if [ -z "${2:-}" ]; then
+            echo "Error: Version part required"
+            echo "Usage: $0 bump <part>"
+            echo "Parts: major, minor, patch, alpha, beta, rc"
+            exit 1
+        fi
+        bump_version "$2"
+        ;;
     version)
-        get_version
+        if [ -n "${2:-}" ]; then
+            # Set specific version
+            set_version "$2"
+        else
+            # Show current version
+            get_version
+        fi
         ;;
     "")
         usage

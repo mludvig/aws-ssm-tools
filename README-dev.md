@@ -53,10 +53,14 @@ The `dev.sh` script provides all development functionality in one place:
 - `./dev.sh upload` - Build and upload to PyPI
 - `./dev.sh clean` - Clean build artifacts
 
+### Version Commands
+- `./dev.sh bump <part>` - Bump version (major, minor, patch, alpha, beta, rc)
+- `./dev.sh version` - Show project version
+- `./dev.sh version <version>` - Set specific version
+
 ### Utility Commands
 - `./dev.sh shell` - Enter the project's virtual environment
 - `./dev.sh run <cmd>` - Run a command in the project environment
-- `./dev.sh version` - Show project version
 
 ## Examples
 
@@ -71,10 +75,50 @@ The `dev.sh` script provides all development functionality in one place:
 ./dev.sh check ruff
 ./dev.sh run python -c "import ssm_tools; print(ssm_tools.__version__)"
 
+# Version management
+./dev.sh version                    # Show current version
+./dev.sh bump patch                 # Bump patch version (e.g., 1.0.0 -> 1.0.1)
+./dev.sh bump minor                 # Bump minor version (e.g., 1.0.0 -> 1.1.0)
+./dev.sh bump major                 # Bump major version (e.g., 1.0.0 -> 2.0.0)
+./dev.sh bump alpha                 # Bump to alpha (e.g., 1.0.0 -> 1.0.1a1)
+./dev.sh version 2.1.0              # Set specific version
+
 # Release workflow
 ./dev.sh check
+./dev.sh bump patch                 # Or bump minor/major as needed
 ./dev.sh upload
 ```
+
+## Version Management
+
+The project uses [hatch](https://hatch.pypa.io/) for version management with convenient commands:
+
+### Version Bumping
+```bash
+./dev.sh bump patch    # 1.0.0 -> 1.0.1
+./dev.sh bump minor    # 1.0.0 -> 1.1.0
+./dev.sh bump major    # 1.0.0 -> 2.0.0
+./dev.sh bump alpha    # 1.0.0 -> 1.0.1a1
+./dev.sh bump beta     # 1.0.0 -> 1.0.1b1
+./dev.sh bump rc       # 1.0.0 -> 1.0.1rc1
+```
+
+### Setting Specific Versions
+```bash
+./dev.sh version 2.1.0         # Set to specific version
+./dev.sh version 2.0.0-alpha1  # Set to pre-release (becomes 2.0.0a1)
+```
+
+### Version Workflow
+1. The command shows the current version
+2. Hatch updates the version in `ssm_tools/__init__.py`
+3. Shows what version hatch actually created (may normalize format)
+4. Asks if you accept the new version
+5. If not, reverts to the original version
+6. If yes, asks whether to commit and tag
+7. Creates git commit with message "Version v{version}" and tags it
+
+**Note**: Hatch may normalize version strings (e.g., `2.0.0-alpha1` becomes `2.0.0a1`). The script handles this by showing you the actual version created and using that for commit messages and tags.
 
 ## Using uv directly
 
