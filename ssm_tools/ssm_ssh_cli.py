@@ -16,11 +16,11 @@ import os
 import sys
 
 import botocore.exceptions
-from simple_term_menu import TerminalMenu
 
 from .common import (
     add_general_parameters,
     configure_logging,
+    instance_selector,
     show_version,
     verify_awscli_version,
     verify_plugin_version,
@@ -87,10 +87,6 @@ Author: Michael Ludvig
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
-
-    # Require exactly one of INSTANCE or --list
-    if bool(extra_args) + bool(args.list) != 1:
-        parser.error("Specify either --list or SSH Options including instance name")
 
     return args, extra_args
 
@@ -210,22 +206,10 @@ def main() -> int:
 
         if not instance_id:
             headers, session_details = InstanceResolver(args).print_list(quiet=True)
-            terminal_menu = TerminalMenu(
-                [text["summary"] for text in session_details],
-                title=headers,
-                show_search_hint=True,
-                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
-            )
-            selected_index = terminal_menu.show()
-            if selected_index is None:
-                sys.exit(0)
-
-            selected_session = session_details[selected_index]
+            selected_session = instance_selector(headers, session_details)
             instance_id = selected_session["InstanceId"]
             ssh_args.append(instance_id)
 
-            print(headers)
-            print(f"  {selected_session['summary']}")
         if args.send_key:
             EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, key_file_name)
 

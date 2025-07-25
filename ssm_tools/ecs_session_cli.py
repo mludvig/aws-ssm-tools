@@ -17,9 +17,8 @@ import sys
 from typing import Any
 
 import botocore.exceptions
-from simple_term_menu import TerminalMenu
 
-from .common import add_general_parameters, configure_logging, show_version
+from .common import add_general_parameters, configure_logging, instance_selector, show_version
 from .resolver import ContainerResolver
 
 logger = logging.getLogger("ssm-tools.ecs-session")
@@ -112,29 +111,17 @@ def main() -> int:
     configure_logging(args.log_level)
 
     try:
-        if bool(args.CONTAINER) + bool(args.list) != 1:
-            headers, containers = ContainerResolver(args).print_list(quiet=True)
-            terminal_menu = TerminalMenu(
-                [text["summary"] for text in containers],
-                title=headers,
-                show_search_hint=True,
-                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
-            )
-            selected_index = terminal_menu.show()
-            if selected_index is None:
-                sys.exit(0)
+        if args.list:
+            ContainerResolver(args).print_list()
+            sys.exit(0)
 
-            selected_session = containers[selected_index]
+        if not args.CONTAINER:
+            headers, containers = ContainerResolver(args).print_list(quiet=True)
+            selected_session = instance_selector(headers, containers)
             args.CONTAINER = [
                 selected_session["task_id"],
                 selected_session["container_name"],
             ]
-            print(headers)
-            print(f"  {selected_session['summary']}")
-
-        elif args.list:
-            ContainerResolver(args).print_list()
-            sys.exit(0)
 
         container = ContainerResolver(args).resolve_container(keywords=args.CONTAINER)
 

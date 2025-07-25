@@ -7,6 +7,7 @@ import sys
 import boto3
 import botocore.credentials
 import packaging.version
+from simple_term_menu import TerminalMenu
 
 from . import __version__ as ssm_tools_version
 
@@ -210,6 +211,30 @@ def verify_awscli_version(version_required: str, logger: logging.Logger) -> bool
         logger.error("AWS-CLI is not installed")
 
     return False
+
+
+# ---------------------------------------------------------
+
+
+__all__.append("instance_selector")
+
+
+def instance_selector(headers, session_details) -> dict:
+    terminal_menu = TerminalMenu(
+        [text["summary"] for text in session_details],
+        title=headers,
+        show_search_hint=True,
+        show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
+    )
+    selected_index = terminal_menu.show()
+    if selected_index is None:
+        sys.exit(0)
+
+    selected_session = session_details[selected_index]
+    print(headers)
+    print(f"  {selected_session['summary']}")
+
+    return selected_session
 
 
 # ---------------------------------------------------------

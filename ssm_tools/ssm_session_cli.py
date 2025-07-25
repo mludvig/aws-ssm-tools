@@ -18,9 +18,8 @@ import signal
 import sys
 
 import botocore.exceptions
-from simple_term_menu import TerminalMenu
 
-from .common import add_general_parameters, configure_logging, show_version
+from .common import add_general_parameters, configure_logging, instance_selector, show_version
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ec2-session")
@@ -151,28 +150,16 @@ def main() -> int:
     configure_logging(args.log_level)
 
     try:
-        if bool(args.INSTANCE) + bool(args.list) != 1:
-            headers, session_details = InstanceResolver(args).print_list(quiet=True)
-            terminal_menu = TerminalMenu(
-                [text["summary"] for text in session_details],
-                title=headers,
-                show_search_hint=True,
-                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
-            )
-            selected_index = terminal_menu.show()
-            if selected_index is None:
-                sys.exit(0)
-
-            selected_session = session_details[selected_index]
-            args.INSTANCE = selected_session["InstanceId"]
-            print(headers)
-            print(f"  {selected_session['summary']}")
-
-        elif args.list:
+        if args.list:
             InstanceResolver(args).print_list()
             sys.exit(0)
 
-        instance_id, _ = InstanceResolver(args).resolve_instance(args.INSTANCE)
+        if not args.INSTANCE:
+            headers, session_details = InstanceResolver(args).print_list(quiet=True)
+            selected_session = instance_selector(headers, session_details)
+            instance_id = selected_session["InstanceId"]
+        else:
+            instance_id, _ = InstanceResolver(args).resolve_instance(args.INSTANCE)
 
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
