@@ -24,9 +24,15 @@ from typing import Any
 
 import botocore.exceptions
 import pexpect
-from simple_term_menu import TerminalMenu
 
-from .common import add_general_parameters, bytes_to_human, configure_logging, seconds_to_human, show_version
+from .common import (
+    add_general_parameters,
+    bytes_to_human,
+    configure_logging,
+    seconds_to_human,
+    show_version,
+    target_selector,
+)
 from .resolver import InstanceResolver
 from .talker import SsmTalker
 
@@ -374,30 +380,13 @@ def main() -> int:
     tunnel = None
     try:
         if args.list:
-            # --list
             InstanceResolver(args).print_list()
             sys.exit(0)
 
         if not args.INSTANCE:
             headers, session_details = InstanceResolver(args).print_list(quiet=True)
-            terminal_menu = TerminalMenu(
-                [text["summary"] for text in session_details],
-                title=headers,
-                show_search_hint=True,
-                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
-            )
-            selected_index = terminal_menu.show()
-            if selected_index is None:
-                sys.exit(0)
-
-            selected_session = session_details[selected_index]
+            selected_session = target_selector(headers, session_details)
             args.INSTANCE = selected_session["InstanceId"]
-            print(headers)
-            print(f"  {selected_session['summary']}")
-
-        elif args.list:
-            InstanceResolver(args).print_list()
-            sys.exit(0)
 
         instance_id, _ = InstanceResolver(args).resolve_instance(args.INSTANCE)
         if not instance_id:

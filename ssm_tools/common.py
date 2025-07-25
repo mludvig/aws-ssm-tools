@@ -216,12 +216,12 @@ def verify_awscli_version(version_required: str, logger: logging.Logger) -> bool
 # ---------------------------------------------------------
 
 
-__all__.append("instance_selector")
+__all__.append("target_selector")
 
 
-def instance_selector(headers, session_details) -> dict:
+def target_selector(headers: str, targets: list) -> dict:
     terminal_menu = TerminalMenu(
-        [text["summary"] for text in session_details],
+        [text["summary"] for text in targets],
         title=headers,
         show_search_hint=True,
         show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
@@ -230,11 +230,11 @@ def instance_selector(headers, session_details) -> dict:
     if selected_index is None:
         sys.exit(0)
 
-    selected_session = session_details[selected_index]
+    selected_target = targets[selected_index]
     print(headers)
-    print(f"  {selected_session['summary']}")
+    print(f"  {selected_target['summary']}")
 
-    return selected_session
+    return selected_target
 
 
 # ---------------------------------------------------------

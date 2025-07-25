@@ -19,7 +19,7 @@ import sys
 
 import botocore.exceptions
 
-from .common import add_general_parameters, configure_logging, instance_selector, show_version
+from .common import add_general_parameters, configure_logging, show_version, target_selector
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ec2-session")
@@ -156,7 +156,7 @@ def main() -> int:
 
         if not args.INSTANCE:
             headers, session_details = InstanceResolver(args).print_list(quiet=True)
-            selected_session = instance_selector(headers, session_details)
+            selected_session = target_selector(headers, session_details)
             instance_id = selected_session["InstanceId"]
         else:
             instance_id, _ = InstanceResolver(args).resolve_instance(args.INSTANCE)

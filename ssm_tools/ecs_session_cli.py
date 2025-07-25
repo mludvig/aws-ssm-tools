@@ -18,7 +18,7 @@ from typing import Any
 
 import botocore.exceptions
 
-from .common import add_general_parameters, configure_logging, instance_selector, show_version
+from .common import add_general_parameters, configure_logging, show_version, target_selector
 from .resolver import ContainerResolver
 
 logger = logging.getLogger("ssm-tools.ecs-session")
@@ -117,7 +117,7 @@ def main() -> int:
 
         if not args.CONTAINER:
             headers, containers = ContainerResolver(args).print_list(quiet=True)
-            selected_session = instance_selector(headers, containers)
+            selected_session = target_selector(headers, containers)
             args.CONTAINER = [
                 selected_session["task_id"],
                 selected_session["container_name"],

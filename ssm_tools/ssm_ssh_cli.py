@@ -20,8 +20,8 @@ import botocore.exceptions
 from .common import (
     add_general_parameters,
     configure_logging,
-    instance_selector,
     show_version,
+    target_selector,
     verify_awscli_version,
     verify_plugin_version,
 )
@@ -206,7 +206,7 @@ def main() -> int:
 
         if not instance_id:
             headers, session_details = InstanceResolver(args).print_list(quiet=True)
-            selected_session = instance_selector(headers, session_details)
+            selected_session = target_selector(headers, session_details)
             instance_id = selected_session["InstanceId"]
             ssh_args.append(instance_id)
 
