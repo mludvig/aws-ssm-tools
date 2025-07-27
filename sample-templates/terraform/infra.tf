@@ -4,14 +4,23 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
-resource "aws_default_vpc" "default" {
+data "aws_vpc" "default" {
+  default = true
 }
 
-resource "aws_default_subnet" "default" {
-  for_each = toset(data.aws_availability_zones.available.names)
-  availability_zone = each.key
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+
+  filter {
+    name   = "default-for-az"
+    values = ["true"]
+  }
 }
 
 locals {
-  default_subnet_ids = [ for entry in aws_default_subnet.default : entry.id ]
+  default_vpc_id     = data.aws_vpc.default.id
+  default_subnet_ids = data.aws_subnets.default.ids
 }

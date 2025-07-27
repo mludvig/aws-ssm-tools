@@ -13,9 +13,9 @@ resource "aws_ecs_task_definition" "task_def" {
   cpu                      = 256
   memory                   = 512
   container_definitions = jsonencode([{
-    Name                   = var.container_name
-    Essential              = true
-    Image                  = var.container_image
+    Name      = var.container_name
+    Essential = true
+    Image     = var.container_image
     LogConfiguration = {
       LogDriver = "awslogs"
       Options = {
@@ -28,21 +28,21 @@ resource "aws_ecs_task_definition" "task_def" {
 }
 
 resource "aws_ecs_service" "service" {
-  name                               = "${var.project_name}-service"
-  cluster                            = aws_ecs_cluster.ecs_cluster.id
-  task_definition                    = aws_ecs_task_definition.task_def.arn
-  desired_count                      = var.task_count
+  name            = "${var.project_name}-service"
+  cluster         = aws_ecs_cluster.ecs_cluster.id
+  task_definition = aws_ecs_task_definition.task_def.arn
+  desired_count   = var.task_count
   #deployment_maximum_percent         = 200
   #deployment_minimum_healthy_percent = 100
-  wait_for_steady_state              = true
-  launch_type                        = "FARGATE"
-  platform_version                   = "LATEST"     # LATEST is 1.4.0 -> ok
-  enable_execute_command             = true         # Enable ECS Exec
-  enable_ecs_managed_tags            = true
+  wait_for_steady_state   = true
+  launch_type             = "FARGATE"
+  platform_version        = "LATEST" # LATEST is 1.4.0 -> ok
+  enable_execute_command  = true     # Enable ECS Exec
+  enable_ecs_managed_tags = true
   network_configuration {
     assign_public_ip = true
-    subnets         = local.default_subnet_ids
-    security_groups = [aws_security_group.ecs_task_sg.id]
+    subnets          = local.default_subnet_ids
+    security_groups  = [aws_security_group.ecs_task_sg.id]
   }
 }
 
@@ -93,7 +93,7 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
 resource "aws_security_group" "ecs_task_sg" {
   name        = "${var.project_name}-task-sg"
   description = "Task Security Group"
-  vpc_id      = aws_default_vpc.default.id
+  vpc_id      = local.default_vpc_id
 
   # Configure 'ingress' rules as required by your containers
   #ingress {
@@ -105,7 +105,15 @@ resource "aws_security_group" "ecs_task_sg" {
   #}
 
   egress {
-    description = "Outbound access from ECS tasks to SSM service"
+    description = "Outbound access from ECS tasks to HTTP"
+    protocol    = "tcp"
+    from_port   = 80
+    to_port     = 80
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Outbound access from ECS tasks to HTTPS (incl SSM services)"
     protocol    = "tcp"
     from_port   = 443
     to_port     = 443
