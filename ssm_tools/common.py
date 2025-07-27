@@ -219,7 +219,7 @@ def verify_awscli_version(version_required: str, logger: logging.Logger) -> bool
 __all__.append("target_selector")
 
 
-def target_selector(headers: str, targets: list) -> dict:
+def target_selector(headers: str, targets: list[dict[str, str]]) -> dict[str, str]:
     terminal_menu = TerminalMenu(
         [text["summary"] for text in targets],
         title=headers,
@@ -230,7 +230,7 @@ def target_selector(headers: str, targets: list) -> dict:
     if selected_index is None:
         sys.exit(0)
 
-    selected_target = targets[selected_index]
+    selected_target = targets[int(selected_index)]  # Cast to int to make mypy happy
     print(headers)
     print(f"  {selected_target['summary']}")
 
