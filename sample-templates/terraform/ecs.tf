@@ -19,7 +19,7 @@ resource "aws_ecs_task_definition" "task_def" {
     LogConfiguration = {
       LogDriver = "awslogs"
       Options = {
-        awslogs-region        = data.aws_region.current.name
+        awslogs-region        = data.aws_region.current.region
         awslogs-group         = aws_cloudwatch_log_group.ecs_logs.id
         awslogs-stream-prefix = "${var.project_name}-logs"
       }
@@ -61,9 +61,11 @@ resource "aws_iam_role" "ecs_task_role" {
       },
     ]
   })
-  managed_policy_arns = [
-    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  ]
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_role_ssm" {
+  role       = aws_iam_role.ecs_task_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
 resource "aws_iam_role" "ecs_task_execution_role" {
@@ -81,9 +83,11 @@ resource "aws_iam_role" "ecs_task_execution_role" {
       },
     ]
   })
-  managed_policy_arns = [
-    "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-  ]
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
 resource "aws_security_group" "ecs_task_sg" {
