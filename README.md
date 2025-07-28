@@ -1,6 +1,6 @@
 # aws-ssm-tools - AWS System Manager Tools
 
-[![CircleCI](https://circleci.com/gh/mludvig/aws-ssm-tools.svg?style=shield)](https://circleci.com/gh/mludvig/aws-ssm-tools)
+[![CI/CD](https://github.com/mludvig/aws-ssm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/mludvig/aws-ssm-tools/actions)
 [![PyPI](https://img.shields.io/pypi/v/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
 
