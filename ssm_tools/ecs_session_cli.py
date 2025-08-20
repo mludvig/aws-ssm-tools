@@ -18,7 +18,7 @@ from typing import Any
 
 import botocore.exceptions
 
-from .common import add_general_parameters, configure_logging, show_version, target_selector
+from .common import add_general_parameters, configure_logging, show_version, sso_login, target_selector
 from .resolver import ContainerResolver
 
 logger = logging.getLogger("ssm-tools.ecs-session")
@@ -107,6 +107,8 @@ def execute_command(container: dict[str, Any], args: argparse.Namespace, command
 def main() -> int:
     ## Split command line to main args and optional command to run
     args, _ = parse_args(sys.argv[1:])
+
+    sso_login(args.profile)
 
     configure_logging(args.log_level)
 

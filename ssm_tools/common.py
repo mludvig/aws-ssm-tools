@@ -3,19 +3,16 @@ import logging
 import pathlib
 import subprocess
 import sys
-import os
-import subprocess
-import functools
-from pathlib import Path
+from typing import Optional
 
 import boto3
 import botocore.credentials
 import packaging.version
 from botocore.exceptions import (
-    NoCredentialsError,
-    PartialCredentialsError,
+    ClientError,
+    ProfileNotFound,
     SSOTokenLoadError,
-    TokenRetrievalError
+    TokenRetrievalError,
 )
 
 from . import __version__ as ssm_tools_version
@@ -231,16 +228,16 @@ __all__.append("target_selector")
 def target_selector(headers: str, targets: list[dict[str, str]]) -> dict[str, str]:
 
     # Simple term menu does not support windows as of 2025-08-14
-    if not sys.platform.startswith("win"): 
-            from simple_term_menu import TerminalMenu
+    if not sys.platform.startswith("win"):
+        from simple_term_menu import TerminalMenu
 
-            terminal_menu = TerminalMenu(
-                [text["summary"] for text in targets],
-                title=headers,
-                show_search_hint=True,
-                show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
-            )
-            selected_index = terminal_menu.show()
+        terminal_menu = TerminalMenu(
+            [text["summary"] for text in targets],
+            title=headers,
+            show_search_hint=True,
+            show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
+        )
+        selected_index = terminal_menu.show()
     else:
         print("  {}".format(headers.replace("\n", "\n  ")))
         items = [text["summary"] for text in targets]
@@ -290,3 +287,34 @@ class AWSSessionBase:
         self.session._session.get_component("credential_provider").get_provider("assume-role").cache = (
             botocore.credentials.JSONFileCache(cli_cache)
         )
+
+
+def sso_login(profile_name: Optional[str]) -> None:
+    """
+    Check if we need to login to an AWS SSO session.
+    """
+
+    try:
+        if profile_name:
+            session = boto3.Session(profile_name=profile_name)
+        else:
+            session = boto3.Session()
+        session.client("sts").get_caller_identity()
+
+    # We now catch a specific tuple of exceptions that indicate a credential issue.
+    except (SSOTokenLoadError, TokenRetrievalError) as e:
+        print(f"Credential error detected: {e}")
+        print(f"SSO session for profile '{profile_name if profile_name else 'Default'}' is likely expired or invalid.")
+
+        command = ["aws", "sso", "login"]
+        if profile_name:
+            command.extend(["--profile", profile_name])
+
+        subprocess.run(command, check=True)
+    except ProfileNotFound as e:
+        print(f"Please check your ~/.aws folder. {e}")
+        sys.exit(1)
+    except ClientError as e:
+        # Access denied means session is valid.
+        if e.response.get("Error", {}).get("Code") != "AccessDenied":
+            raise

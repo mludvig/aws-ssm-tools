@@ -31,6 +31,7 @@ from .common import (
     configure_logging,
     seconds_to_human,
     show_version,
+    sso_login,
     target_selector,
 )
 from .resolver import InstanceResolver
@@ -374,6 +375,8 @@ def main() -> int:
 
     ## Split command line args
     args = parse_args(sys.argv[1:])
+
+    sso_login(args.profile)
 
     configure_logging(args.log_level)
 
