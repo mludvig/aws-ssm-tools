@@ -19,7 +19,7 @@ import sys
 
 import botocore.exceptions
 
-from .common import add_general_parameters, configure_logging, show_version, sso_login, target_selector
+from .common import add_general_parameters, configure_logging, show_version, check_aws_login, target_selector
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ec2-session")
@@ -147,7 +147,7 @@ def main() -> int:
     ## Split command line to main args and optional command to run
     args = parse_args(sys.argv[1:])
 
-    sso_login(args.profile)
+    check_aws_login(args.profile)
 
     configure_logging(args.log_level)
 

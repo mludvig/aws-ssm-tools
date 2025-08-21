@@ -21,7 +21,7 @@ from .common import (
     add_general_parameters,
     configure_logging,
     show_version,
-    sso_login,
+    check_aws_login,
     target_selector,
     verify_awscli_version,
     verify_plugin_version,
@@ -127,7 +127,7 @@ def main() -> int:
     if args.log_level == logging.DEBUG:
         extra_args.append("-v")
 
-    sso_login(args.profile)
+    check_aws_login(args.profile)
 
     configure_logging(args.log_level)
 

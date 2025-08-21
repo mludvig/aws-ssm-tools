@@ -227,8 +227,7 @@ __all__.append("target_selector")
 
 def target_selector(headers: str, targets: list[dict[str, str]]) -> dict[str, str]:
 
-    # Simple term menu does not support windows as of 2025-08-14
-    if not sys.platform.startswith("win"):
+    try:
         from simple_term_menu import TerminalMenu
 
         terminal_menu = TerminalMenu(
@@ -238,7 +237,8 @@ def target_selector(headers: str, targets: list[dict[str, str]]) -> dict[str, st
             show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
         )
         selected_index = terminal_menu.show()
-    else:
+    # Simple term menu does not support windows as of 2025-08-14
+    except NotImplementedError:
         print("  {}".format(headers.replace("\n", "\n  ")))
         items = [text["summary"] for text in targets]
 
@@ -289,7 +289,7 @@ class AWSSessionBase:
         )
 
 
-def sso_login(profile_name: Optional[str]) -> None:
+def check_aws_login(profile_name: Optional[str]) -> None:
     """
     Check if we need to login to an AWS SSO session.
     """
@@ -303,14 +303,15 @@ def sso_login(profile_name: Optional[str]) -> None:
 
     # We now catch a specific tuple of exceptions that indicate a credential issue.
     except (SSOTokenLoadError, TokenRetrievalError) as e:
-        print(f"Credential error detected: {e}")
-        print(f"SSO session for profile '{profile_name if profile_name else 'Default'}' is likely expired or invalid.")
+        print(e)
 
         command = ["aws", "sso", "login"]
         if profile_name:
             command.extend(["--profile", profile_name])
 
-        subprocess.run(command, check=True)
+        print("Please run the following command")
+        print(" ".join(command))
+        sys.exit(1)
     except ProfileNotFound as e:
         print(f"Please check your ~/.aws folder. {e}")
         sys.exit(1)
