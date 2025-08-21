@@ -18,7 +18,7 @@ from typing import Any
 
 import botocore.exceptions
 
-from .common import add_general_parameters, configure_logging, show_version, check_aws_login, target_selector
+from .common import add_general_parameters, check_aws_login, configure_logging, show_version, target_selector
 from .resolver import ContainerResolver
 
 logger = logging.getLogger("ssm-tools.ecs-session")

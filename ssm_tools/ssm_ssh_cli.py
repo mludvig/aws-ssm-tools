@@ -19,9 +19,9 @@ import botocore.exceptions
 
 from .common import (
     add_general_parameters,
+    check_aws_login,
     configure_logging,
     show_version,
-    check_aws_login,
     target_selector,
     verify_awscli_version,
     verify_plugin_version,

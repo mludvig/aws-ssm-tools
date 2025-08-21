@@ -28,10 +28,10 @@ import pexpect
 from .common import (
     add_general_parameters,
     bytes_to_human,
+    check_aws_login,
     configure_logging,
     seconds_to_human,
     show_version,
-    check_aws_login,
     target_selector,
 )
 from .resolver import InstanceResolver
