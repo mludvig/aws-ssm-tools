@@ -3,11 +3,17 @@ import logging
 import pathlib
 import subprocess
 import sys
+from typing import Optional
 
 import boto3
 import botocore.credentials
 import packaging.version
-from simple_term_menu import TerminalMenu
+from botocore.exceptions import (
+    ClientError,
+    ProfileNotFound,
+    SSOTokenLoadError,
+    TokenRetrievalError,
+)
 
 from . import __version__ as ssm_tools_version
 
@@ -220,20 +226,49 @@ __all__.append("target_selector")
 
 
 def target_selector(headers: str, targets: list[dict[str, str]]) -> dict[str, str]:
-    terminal_menu = TerminalMenu(
-        [text["summary"] for text in targets],
-        title=headers,
-        show_search_hint=True,
-        show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
-    )
-    selected_index = terminal_menu.show()
-    if selected_index is None:
+
+    try:
+        from simple_term_menu import TerminalMenu
+
+        terminal_menu = TerminalMenu(
+            [text["summary"] for text in targets],
+            title=headers,
+            show_search_hint=True,
+            show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
+        )
+        selected_index = terminal_menu.show()
+    # Simple term menu does not support windows as of 2025-08-14
+    except NotImplementedError:
+        print("  {}".format(headers.replace("\n", "\n  ")))
+        items = [text["summary"] for text in targets]
+
+        # Calculate padding for numbers
+        width = len(str(len(items) - 1))
+
+        for i, item in enumerate(items):
+            print(f"{i:>{width}} | {item}")
+
+        print()
+        try:
+            selected_index = input("Enter the number for the server you want to connect to: ")
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            sys.exit(0)
+        except ValueError:
+            print("Invalid input. Please enter a number only.")
+            sys.exit(1)
+
+    if selected_index is None or not str(selected_index).isdigit():
+        print(f"User input '{selected_index}' - Exiting")
         sys.exit(0)
 
-    selected_target = targets[int(selected_index)]  # Cast to int to make mypy happy
+    try:
+        selected_target = targets[int(selected_index)]  # Cast to int to make mypy happy
+    except IndexError as e:
+        print(f"Invalid selection - {e}")
+        sys.exit(1)
     print(headers)
     print(f"  {selected_target['summary']}")
-
     return selected_target
 
 
@@ -252,3 +287,35 @@ class AWSSessionBase:
         self.session._session.get_component("credential_provider").get_provider("assume-role").cache = (
             botocore.credentials.JSONFileCache(cli_cache)
         )
+
+
+def check_aws_login(profile_name: Optional[str]) -> None:
+    """
+    Check if we need to login to an AWS SSO session.
+    """
+
+    try:
+        if profile_name:
+            session = boto3.Session(profile_name=profile_name)
+        else:
+            session = boto3.Session()
+        session.client("sts").get_caller_identity()
+
+    # We now catch a specific tuple of exceptions that indicate a credential issue.
+    except (SSOTokenLoadError, TokenRetrievalError) as e:
+        print(e)
+
+        command = ["aws", "sso", "login"]
+        if profile_name:
+            command.extend(["--profile", profile_name])
+
+        print("Please run the following command")
+        print(" ".join(command))
+        sys.exit(1)
+    except ProfileNotFound as e:
+        print(f"Please check your ~/.aws folder. {e}")
+        sys.exit(1)
+    except ClientError as e:
+        # Access denied means session is valid.
+        if e.response.get("Error", {}).get("Code") != "AccessDenied":
+            raise

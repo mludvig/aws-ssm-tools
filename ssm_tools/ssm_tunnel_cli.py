@@ -28,6 +28,7 @@ import pexpect
 from .common import (
     add_general_parameters,
     bytes_to_human,
+    check_aws_login,
     configure_logging,
     seconds_to_human,
     show_version,
@@ -374,6 +375,8 @@ def main() -> int:
 
     ## Split command line args
     args = parse_args(sys.argv[1:])
+
+    check_aws_login(args.profile)
 
     configure_logging(args.log_level)
 

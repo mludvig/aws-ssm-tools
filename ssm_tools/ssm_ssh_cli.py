@@ -19,6 +19,7 @@ import botocore.exceptions
 
 from .common import (
     add_general_parameters,
+    check_aws_login,
     configure_logging,
     show_version,
     target_selector,
@@ -125,6 +126,8 @@ def main() -> int:
 
     if args.log_level == logging.DEBUG:
         extra_args.append("-v")
+
+    check_aws_login(args.profile)
 
     configure_logging(args.log_level)
 
