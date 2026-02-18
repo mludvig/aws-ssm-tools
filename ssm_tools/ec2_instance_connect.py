@@ -24,7 +24,10 @@ class EC2InstanceConnectHelper(AWSSessionBase):
         def _read_ssh_agent_keys() -> list[str]:
             cp = subprocess.run(["ssh-add", "-L"], capture_output=True, check=False)
             if cp.returncode != 0:
-                logger.debug("Failed to run: ssh-add -L: %s", cp.stderr.decode("utf-8", errors="ignore").strip().replace("\n", " "))
+                logger.debug(
+                    "Failed to run: ssh-add -L: %s",
+                    cp.stderr.decode("utf-8", errors="ignore").strip().replace("\n", " "),
+                )
                 return []
             return cp.stdout.decode("utf-8", errors="ignore").split("\n")
 
