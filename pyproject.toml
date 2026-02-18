@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Tools for AWS Systems Manager: ec2-session ecs-session ec2-ssh ssm-tunnel"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 authors = [
     { name = "Michael Ludvig", email = "mludvig@logix.net.nz" },
 ]
@@ -20,8 +20,6 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -64,7 +62,7 @@ packages = ["ssm_tools"]
 include = [
     "ssm_tools/",
     "ec2-session",
-    "ec2-ssh", 
+    "ec2-ssh",
     "ecs-session",
     "ssm-tunnel",
     "ssm-tunnel-updown.dns-example",
