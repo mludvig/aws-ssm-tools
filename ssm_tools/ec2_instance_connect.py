@@ -4,7 +4,6 @@ import logging
 import pathlib
 import subprocess
 import sys
-from typing import Optional
 
 from .common import AWSSessionBase
 
@@ -20,7 +19,7 @@ class EC2InstanceConnectHelper(AWSSessionBase):
         # Create boto3 client from session
         self.ec2ic_client = self.session.client("ec2-instance-connect")
 
-    def obtain_ssh_key(self, key_file_name: str) -> tuple[str, Optional[str]]:
+    def obtain_ssh_key(self, key_file_name: str) -> tuple[str, str | None]:
         def _read_ssh_agent_keys() -> list[str]:
             cp = subprocess.run(["ssh-add", "-L"], capture_output=True, check=False)
             if cp.returncode != 0:

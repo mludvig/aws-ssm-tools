@@ -129,7 +129,7 @@ class InstanceResolver(AWSSessionBase):
         items_list.sort(key=lambda x: x.get("InstanceName") or x.get("HostName"))  # type: ignore
 
         for instance in items_list:
-            if isinstance(instance.get("Addresses"), (list, tuple)):
+            if isinstance(instance.get("Addresses"), list | tuple):
                 instance["Addresses"] = ", ".join([a for a in instance["Addresses"] if a])
             instance.pop("AvailabilityZone", None)
 
