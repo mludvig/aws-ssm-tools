@@ -209,6 +209,7 @@ and for ECS Docker Exec: `ecs-session`
     00:00:15 | In:  156.0 B @    5.2 B/s | Out:  509.0 B @   40.4 B/s
     ```
 
+    Enter your local computer password if prompted.
     Leave it running and from another shell `ssh` to one of the instances listed
     with `--list` above. For example to `test1` that's got VPC IP `192.168.45.158`:
 
@@ -260,17 +261,17 @@ Follow the detailed instructions at [**Using SSM Session Manager for
 interactive instance access**](https://aws.nz/best-practice/ssm-session-manager/)
 for more informations.
 
-### Install *AWS CLI* and `session-manager-plugin`
+### Install *AWS CLI 2* and `session-manager-plugin`
 
 Make sure you've got `aws` and `session-manager-plugin` installed locally
 on your laptop.
 
 ```
 ~ $ aws --version
-aws-cli/1.18.31 Python/3.6.9 Linux/5.3.0-42-generic botocore/1.15.31
+aws-cli/2.27.63 Python/3.13.5 Darwin/24.6.0 source/arm64
 
 ~ $ session-manager-plugin --version
-1.1.56.0
+1.2.707.0
 ```
 
 Follow [AWS CLI installation
