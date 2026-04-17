@@ -361,12 +361,13 @@ The interactive instance-selection menu (shown when no instance name is given) i
 
 #### Pre-built Windows binaries (no Python required)
 
-If you don't have Python installed, download the pre-built files from the
+If you don't have Python installed, download the pre-built zip bundle from the
 [**GitHub Releases**](https://github.com/mludvig/aws-ssm-tools/releases/latest) page.
-Each release includes a zip bundle containing all the available tools.
+Extract it — you'll get a single `aws-ssm-tools\` folder containing all four `.exe` files and a shared `_internal\` directory with the Python runtime and libraries.
+Add the `aws-ssm-tools\` folder to your `PATH` to use the tools from anywhere.
 
-You still need **AWS CLI** and **session-manager-plugin** installed — the `.exe` files
-only bundle the Python code, not the AWS CLI itself.
+You still need **AWS CLI** and **session-manager-plugin** installed — the bundles
+only contain the Python code, not the AWS CLI itself.
 
 ### Standalone *ssm-tunnel-agent* installation
 

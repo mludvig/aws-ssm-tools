@@ -73,28 +73,25 @@ jobs:
 
     - name: Build executables
       run: |
+        # Generate entry-point stubs (needed so PyInstaller resolves relative imports correctly)
         $tools = @(
-          @{ name = "ec2-session";      module = "ssm_tools.ssm_session_cli" },
-          @{ name = "ec2-ssh";          module = "ssm_tools.ssm_ssh_cli" },
-          @{ name = "ecs-session";      module = "ssm_tools.ecs_session_cli" },
-          @{ name = "ssm-port-forward"; module = "ssm_tools.ssm_port_forward_cli" }
+          @{ stub = "_entry_ec2_session.py";      module = "ssm_tools.ssm_session_cli" },
+          @{ stub = "_entry_ec2_ssh.py";          module = "ssm_tools.ssm_ssh_cli" },
+          @{ stub = "_entry_ecs_session.py";      module = "ssm_tools.ecs_session_cli" },
+          @{ stub = "_entry_ssm_port_forward.py"; module = "ssm_tools.ssm_port_forward_cli" }
         )
         foreach ($tool in $tools) {
-          # Write a top-level entry-point script so PyInstaller sees a package, not a raw file
-          $entry = "_entry_$($tool.name.Replace('-','_')).py"
-          "from $($tool.module) import main`nif __name__ == '__main__':`n    main()" | Set-Content $entry
-          pyinstaller --onefile --name $tool.name `
-            --collect-submodules botocore `
-            --collect-data botocore `
-            $entry
-          Remove-Item $entry
+          "from $($tool.module) import main`nif __name__ == '__main__':`n    main()" | Set-Content $tool.stub
         }
+        pyinstaller aws-ssm-tools.spec
+        foreach ($tool in $tools) { Remove-Item $tool.stub }
       shell: pwsh
 
     - name: Create zip bundle
       run: |
         $version = python -c "import ssm_tools; print(ssm_tools.__version__)"
-        Compress-Archive -Path dist\*.exe -DestinationPath "dist\aws-ssm-tools-windows-$version.zip"
+        Compress-Archive -Path dist\aws-ssm-tools `
+          -DestinationPath "dist\aws-ssm-tools-windows-$version.zip"
       shell: pwsh
 
     - name: Upload build artifacts
