@@ -4,7 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/aws-ssm-tools.svg)](https://pypi.org/project/aws-ssm-tools/)
 
-Helper tools for AWS Systems Manager: `ec2-session`, `ec2-ssh` and `ssm-tunnel`,
+Helper tools for AWS Systems Manager: `ec2-session`, `ec2-ssh`, `ssm-port-forward` and `ssm-tunnel`,
 and for ECS Docker Exec: `ecs-session`
 
 ## Scripts included
@@ -49,6 +49,16 @@ and for ECS Docker Exec: `ecs-session`
 
   Also supports pushing your SSH key to the instance with `--send-key` (aka
   *EC2 Instance Connect*, although that's an odd name for this function).
+
+* **ssm-port-forward**
+
+  Forward a local port to a remote port on an EC2 instance (or any host
+  reachable from it) through Systems Manager, without needing SSH or an
+  open firewall port.
+
+  Works on Linux, Mac and Windows. Uses the native AWS SSM port-forwarding
+  documents (`AWS-StartPortForwardingSession` and
+  `AWS-StartPortForwardingSessionToRemoteHost`).
 
 * **ssm-tunnel**
 
@@ -199,7 +209,31 @@ and for ECS Docker Exec: `ecs-session`
     *environment variables* `AWS_DEFAULT_PROFILE` and
     `AWS_DEFAULT_REGION`.`
 
-5. **Create IP tunnel** and SSH to another instance in the VPC through it.
+5. **Forward a local port** to an EC2 instance or a host in its VPC.
+
+    No SSH, no open firewall ports - just SSM. Works on Linux, Mac and Windows.
+
+    Forward RDP (port 3389) from `localhost:13389` to a Windows instance:
+
+    ```
+    ~ $ ssm-port-forward my-windows-host --remote-port 3389 --local-port 13389
+    ```
+
+    Then connect your RDP client to `localhost:13389`.
+
+    Forward a local port to an RDS database *through* a bastion instance
+    (the RDS endpoint never needs to be publicly accessible):
+
+    ```
+    ~ $ ssm-port-forward my-bastion --remote-port 5432 --remote-host my-db.cluster.rds.amazonaws.com
+    ```
+
+    If `--local-port` is omitted it defaults to the same value as `--remote-port`.
+
+    Like `ec2-session`, running without an instance name shows an interactive
+    selection menu.
+
+6. **Create IP tunnel** and SSH to another instance in the VPC through it.
 
     We will use `--route 192.168.44.0/23` that gives us access to the VPC CIDR.
 
