@@ -222,8 +222,8 @@ def target_selector(headers: str, targets: list[dict[str, str]]) -> dict[str, st
     try:
         from simple_term_menu import TerminalMenu
     except ImportError:
-        logger.error("Interactive instance selection is not supported on this platform.")
-        logger.error("Use --list or specify the instance name with --instance.")
+        print("ERROR: Interactive instance selection is not supported on this platform.")
+        print("ERROR: Use --list or specify the instance name with --instance.")
         sys.exit(1)
     terminal_menu = TerminalMenu(
         [text["summary"] for text in targets],
