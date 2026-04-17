@@ -81,7 +81,14 @@ jobs:
           @{ stub = "_entry_ssm_port_forward.py"; module = "ssm_tools.ssm_port_forward_cli" }
         )
         foreach ($tool in $tools) {
-          "from $($tool.module) import main`nif __name__ == '__main__':`n    main()" | Set-Content $tool.stub
+          $lines = @(
+            "from ssm_tools.startup import Spinner",
+            "with Spinner():",
+            "    from $($tool.module) import main",
+            "if __name__ == '__main__':",
+            "    main()"
+          )
+          $lines -join "`n" | Set-Content $tool.stub
         }
         pyinstaller aws-ssm-tools.spec
         foreach ($tool in $tools) { Remove-Item $tool.stub }
