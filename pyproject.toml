@@ -71,6 +71,10 @@ include = [
     "LICENSE",
 ]
 
+[tool.black]
+target-version = ["py310"]
+line-length = 120
+
 [tool.ruff]
 # Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
 lint.select = [
