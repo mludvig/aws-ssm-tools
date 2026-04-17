@@ -19,7 +19,7 @@ import sys
 
 import botocore.exceptions
 
-from .common import add_general_parameters, configure_logging, show_version, target_selector
+from .common import add_general_parameters, configure_logging, handle_boto_error, show_version, target_selector
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ec2-session")
@@ -169,7 +169,7 @@ def main() -> int:
         start_session(instance_id, args)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
-        logger.error(e)
+        handle_boto_error(e, logger, args.profile)
         sys.exit(1)
 
     return 0

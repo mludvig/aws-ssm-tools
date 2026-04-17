@@ -6,6 +6,7 @@ import sys
 
 import boto3
 import botocore.credentials
+import botocore.exceptions
 import packaging.version
 
 from . import __version__ as ssm_tools_version
@@ -56,7 +57,12 @@ def add_general_parameters(parser: argparse.ArgumentParser, long_only: bool = Fa
         type=str,
         help="Configuration profile from ~/.aws/{credentials,config}",
     )
-    group_general.add_argument(*_get_opts("--region", "-g"), dest="region", type=str, help="Set / override AWS region.")
+    group_general.add_argument(
+        *_get_opts("--region", "-g"),
+        dest="region",
+        type=str,
+        help="Set / override AWS region.",
+    )
     group_general.add_argument(
         *_get_opts("--verbose", "-v"),
         action="store_const",
@@ -214,6 +220,39 @@ def verify_awscli_version(version_required: str, logger: logging.Logger) -> bool
 
 # ---------------------------------------------------------
 
+
+__all__.append("handle_boto_error")
+
+_AUTH_ERROR_CODES = {
+    "ExpiredTokenException",
+    "ExpiredToken",
+    "InvalidClientTokenId",
+    "AuthFailure",
+    "AccessDenied",
+}
+_AUTH_ERROR_MSGS = {
+    "token",
+    "credential",
+    "auth",
+    "sso",
+    "expired",
+    "not authorized",
+    "access denied",
+}
+
+
+def handle_boto_error(e: Exception, logger: logging.Logger, profile: str | None = None) -> None:
+    logger.error(e)
+    msg = str(e).lower()
+    is_auth = (
+        isinstance(e, botocore.exceptions.ClientError) and e.response["Error"]["Code"] in _AUTH_ERROR_CODES
+    ) or any(kw in msg for kw in _AUTH_ERROR_MSGS)
+    if is_auth:
+        profile_flag = f" --profile {profile}" if profile else ""
+        logger.error("Hint: try re-authenticating with: aws sso login%s", profile_flag)
+
+
+# ---------------------------------------------------------
 
 __all__.append("target_selector")
 

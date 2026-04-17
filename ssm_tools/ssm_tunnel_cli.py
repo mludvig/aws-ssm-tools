@@ -29,6 +29,7 @@ from .common import (
     add_general_parameters,
     bytes_to_human,
     configure_logging,
+    handle_boto_error,
     seconds_to_human,
     show_version,
     target_selector,
@@ -399,7 +400,7 @@ def main() -> int:
         tunnel.start(local_ip, remote_ip, list(args.routes) or [], args.updown_script)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
-        logger.error(e)
+        handle_boto_error(e, logger, args.profile)
         sys.exit(1)
 
     finally:
