@@ -7,7 +7,6 @@ import sys
 import boto3
 import botocore.credentials
 import packaging.version
-from simple_term_menu import TerminalMenu
 
 from . import __version__ as ssm_tools_version
 
@@ -220,6 +219,12 @@ __all__.append("target_selector")
 
 
 def target_selector(headers: str, targets: list[dict[str, str]]) -> dict[str, str]:
+    try:
+        from simple_term_menu import TerminalMenu
+    except ImportError:
+        logger.error("Interactive instance selection is not supported on this platform.")
+        logger.error("Use --list or specify the instance name with --instance.")
+        sys.exit(1)
     terminal_menu = TerminalMenu(
         [text["summary"] for text in targets],
         title=headers,

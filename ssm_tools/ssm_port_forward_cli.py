@@ -46,10 +46,9 @@ def parse_args(argv: list) -> argparse.Namespace:
     )
     group_fwd.add_argument(
         "--remote-port",
-        "-R",
         dest="remote_port",
         metavar="PORT",
-        required=True,
+        required=False,
         help="Remote port to forward to (on the instance, or on --remote-host).",
     )
     group_fwd.add_argument(
@@ -81,6 +80,9 @@ Author: Michael Ludvig
 
     if args.show_version:
         show_version(args)
+
+    if not args.list and not args.remote_port:
+        parser.error("--remote-port is required")
 
     if not args.local_port:
         args.local_port = args.remote_port
@@ -119,7 +121,10 @@ def start_port_forward(instance_id: str, args: argparse.Namespace) -> None:
         # os.execvp doesn't replace the process on Windows; use subprocess instead
         import subprocess
 
-        sys.exit(subprocess.call(exec_args))
+        try:
+            sys.exit(subprocess.call(exec_args))
+        except KeyboardInterrupt:
+            sys.exit(0)
     else:
         os.execvp(exec_args[0], exec_args)
 
