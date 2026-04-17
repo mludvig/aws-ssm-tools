@@ -328,13 +328,45 @@ Check out the [detailed instructions](https://aws.nz/best-practice/ssm-session-m
 
 The easiest way is to install the ssm-tools from *[PyPI](https://pypi.org/)* repository:
 
+**Linux / Mac:**
 ```
 sudo pip3 install aws-ssm-tools
 ```
 
-**NOTE:** SSM Tools require **Python 3.9 or newer**. Only `ssm-tunnel-agent`
+**Windows** (run in *Command Prompt* or *PowerShell*):
+```
+pip install aws-ssm-tools
+```
+
+**From source** (Linux, Mac or Windows):
+```
+pip install .
+```
+
+**NOTE:** SSM Tools require **Python 3.10 or newer**. Only `ssm-tunnel-agent`
 requires **Python 3.8 or newer** as that's what's available by default
 on *Amazon Linux 2* instances.
+
+#### Windows compatibility
+
+| Tool | Works on Windows? |
+|---|---|
+| `ssm-port-forward` | Yes |
+| `ec2-session` | Yes (requires `session-manager-plugin`) |
+| `ec2-ssh` | Yes (requires OpenSSH and `session-manager-plugin`) |
+| `ecs-session` | Yes |
+| `ssm-tunnel` | **No** — requires Linux TUN device and iptables |
+
+The interactive instance-selection menu (shown when no instance name is given) is not available on Windows. Pass an instance name explicitly on the command line instead.
+
+#### Pre-built Windows binaries (no Python required)
+
+If you don't have Python installed, download the pre-built files from the
+[**GitHub Releases**](https://github.com/mludvig/aws-ssm-tools/releases/latest) page.
+Each release includes a zip bundle containing all the available tools.
+
+You still need **AWS CLI** and **session-manager-plugin** installed — the `.exe` files
+only bundle the Python code, not the AWS CLI itself.
 
 ### Standalone *ssm-tunnel-agent* installation
 
