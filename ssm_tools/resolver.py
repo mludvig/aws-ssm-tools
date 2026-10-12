@@ -61,6 +61,26 @@ class InstanceResolver(AWSSessionBase):
                 }
                 logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
 
+        # Add names of Hybrid Activation instances (mi-*) from SSM.
+        # The Name field reflects the instance's Name tag.
+        if any(instance_id.startswith("mi-") for instance_id in items):
+            logger.debug("Fetching SSM managed instance names")
+            paginator = self.ssm_client.get_paginator("describe_instance_information")
+            response_iterator = paginator.paginate(
+                Filters=[{"Key": "ResourceType", "Values": ["ManagedInstance"]}],
+                PaginationConfig={"PageSize": 50},
+            )
+            try:
+                for page in response_iterator:
+                    for info in page["InstanceInformationList"]:
+                        instance_id = info["InstanceId"]
+                        if instance_id not in items or not info.get("Name"):
+                            continue
+                        items[instance_id]["InstanceName"] = info["Name"]
+                        logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
+            except ClientError as ex:
+                logger.debug("Unable to fetch SSM managed instance names: %s", ex)
+
         # Add attributes from EC2
         paginator = self.ec2_client.get_paginator("describe_instances")
         ec2_instance_ids = list(filter(lambda x: x.startswith("i-"), items))
