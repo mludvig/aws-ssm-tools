@@ -61,6 +61,25 @@ class InstanceResolver(AWSSessionBase):
                 }
                 logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
 
+        # Add names of Hybrid Activation instances (mi-*) from SSM tags
+        managed_instance_ids = list(filter(lambda x: x.startswith("mi-"), items))
+        for instance_id in managed_instance_ids:
+            try:
+                response = self.ssm_client.list_tags_for_resource(
+                    ResourceType="ManagedInstance",
+                    ResourceId=instance_id,
+                )
+            except ClientError as ex:
+                logger.debug("Unable to list tags for %s: %s", instance_id, ex)
+                continue
+
+            # Find instance name from tag Name
+            for tag in response.get("TagList", []):
+                if tag["Key"] == "Name" and tag["Value"]:
+                    items[instance_id]["InstanceName"] = tag["Value"]
+
+            logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
+
         # Add attributes from EC2
         paginator = self.ec2_client.get_paginator("describe_instances")
         ec2_instance_ids = list(filter(lambda x: x.startswith("i-"), items))
