@@ -11,6 +11,7 @@
 # parameters to actually start the SSH session.
 
 import argparse
+import dataclasses
 import logging
 import os
 import sys
@@ -34,13 +35,95 @@ logger = logging.getLogger("ssm-tools.ec2-ssh")
 MIN_PLUGIN_VERSION = "1.1.23"  # AWS-StartSSHSession support
 MIN_AWSCLI_VERSION_ENDPOINT = "2.12.0"  # aws ec2-instance-connect open-tunnel
 
+# ssh(1) option letters without and with a value, as in OpenSSH's getopt() string
+SSH_FLAGS = "46AaCfGgKkMNnqsTtVvXxYy"
+SSH_VALUE_FLAGS = "BbcDEeFIiJLlmOoPpQRSWw"
 
-def parse_args(argv: list) -> tuple[argparse.Namespace, list[str]]:
+
+@dataclasses.dataclass
+class SshArgs:
+    """The ssh command line: options (one flag and its value per token), destination and remote command."""
+
+    options: list[str] = dataclasses.field(default_factory=list)
+    destination: str = ""
+    command: list[str] = dataclasses.field(default_factory=list)
+
+    def option(self, flag: str) -> str:
+        """Return the first value of a value option, e.g. option("-l"), or ''."""
+        options = iter(self.options)
+        for option in options:
+            if option[1] in SSH_VALUE_FLAGS:
+                value = next(options)
+                if option == flag:
+                    return value
+        return ""
+
+
+def split_ssh_argv(argv: list[str], own_options: dict[str, bool]) -> tuple[list[str], SshArgs]:
+    """
+    Split argv the way ssh(1) parses it: options before and after the destination, up to
+    the first word after it, which starts the remote command. '--' ends the options.
+
+    Long options and the short ones in 'own_options' ({option: takes_value}) are ours,
+    everything else is ssh's. The remote command is never looked at.
+    Raises ValueError for an option without its value.
+    See docs/adr/0003-ec2-ssh-argv-parsing.md
+    """
+    own: list[str] = []
+    ssh = SshArgs()
+    args = list(argv)
+
+    def value(option: str) -> str:
+        if not args:
+            raise ValueError(f"option {option} requires a value")
+        return args.pop(0)
+
+    while args:
+        arg = args.pop(0)
+
+        if arg == "--":
+            if not ssh.destination and args:
+                ssh.destination = args.pop(0)
+            ssh.command = args
+            break
+
+        if arg.startswith("--"):
+            option = arg.split("=", 1)[0]
+            own.append(arg)
+            if own_options.get(option) and "=" not in arg:
+                own.append(value(option))
+            continue
+
+        if not arg.startswith("-") or arg == "-":
+            if ssh.destination:
+                ssh.command = [arg, *args]
+                break
+            ssh.destination = arg
+            continue
+
+        # A cluster of short options, e.g. -tt, -p2222 or -vl user
+        for pos, letter in enumerate(arg[1:], 2):
+            option = "-" + letter
+            is_own = option in own_options
+            target = own if is_own else ssh.options
+            target.append(option)
+            if own_options[option] if is_own else letter in SSH_VALUE_FLAGS:
+                target.append(arg[pos:] or value(option))
+                break
+
+    return own, ssh
+
+
+def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
     """
     Parse command line arguments.
     """
 
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+        allow_abbrev=False,
+    )
 
     add_general_parameters(parser, long_only=True)
 
@@ -85,17 +168,22 @@ Visit https://aws.nz/aws-utils/ec2-ssh for more info and usage examples.
 Author: Michael Ludvig
 """
 
-    # Parse supplied arguments
-    args, extra_args = parser.parse_known_args(argv)
+    # Our options are only taken from before the remote command, the rest is for ssh
+    own_options = {option: action.nargs != 0 for action in parser._actions for option in action.option_strings}
+    try:
+        own_argv, ssh_args = split_ssh_argv(argv, own_options)
+    except ValueError as e:
+        parser.error(str(e))
+    args = parser.parse_args(own_argv)
 
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
 
-    return args, extra_args
+    return args, ssh_args
 
 
-def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: bool, reason: str = "") -> None:
+def start_ssh_session(ssh_args: SshArgs, profile: str, region: str, use_endpoint: bool, reason: str = "") -> None:
     aws_args = ""
     if profile:
         aws_args += f"--profile {profile} "
@@ -111,17 +199,17 @@ def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: b
             "-o",
             f"ProxyCommand=aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p",
         ]
-    command = ["ssh"] + proxy_option + ssh_args
+    # Nothing after the destination may be read as an ssh option
+    command = ["ssh", *proxy_option, *ssh_args.options, "--", ssh_args.destination, *ssh_args.command]
     logger.debug("Running: %s", command)
     os.execvp(command[0], command)
 
 
 def main() -> int:
-    ## Split command line to main args and optional command to run
-    args, extra_args = parse_args(sys.argv[1:])
+    args, ssh_args = parse_args(sys.argv[1:])
 
     if args.log_level == logging.DEBUG:
-        extra_args.append("-v")
+        ssh_args.options.insert(0, "-v")
 
     configure_logging(args.log_level)
 
@@ -142,80 +230,25 @@ def main() -> int:
         if not args.use_endpoint and not verify_plugin_version(logger, required=MIN_PLUGIN_VERSION):
             sys.exit(1)
 
-        # Loop through all SSH args to find:
-        # - instance name
-        # - user name (for use with --send-key)
-        # - key name (for use with --send-key)
-        ssh_args = []
-        instance_id = ""
-        login_name = ""
-        key_file_name = ""
+        login_name, _, host = ssh_args.destination.rpartition("@")  # OpenSSH splits on the last '@'
+        if host:
+            instance_id, _ = instance_resolver.resolve_instance(host)
+        else:
+            headers, session_details = instance_resolver.print_list(quiet=True)
+            instance_id = target_selector(headers, session_details)["InstanceId"]
 
-        extra_args_iter = iter(extra_args)
-        for arg in extra_args_iter:
-            # User name argument
-            if arg.startswith("-l"):
-                ssh_args.append(arg)
-                if len(arg) > 2:
-                    login_name = arg[2:]
-                else:
-                    login_name = next(extra_args_iter)
-                    ssh_args.append(login_name)
-                continue
-
-            # SSH key argument
-            if arg.startswith("-i"):
-                ssh_args.append(arg)
-                if len(arg) > 2:
-                    key_file_name = arg[2:]
-                else:
-                    key_file_name = next(extra_args_iter)
-                    ssh_args.append(key_file_name)
-                continue
-
-            # If we already have instance id just copy the args
-            if instance_id:
-                ssh_args.append(arg)
-                continue
-
-            # Some args that can't be an instance name
-            if arg.startswith("-") or arg.find(":") > -1 or arg.find(os.path.sep) > -1:
-                ssh_args.append(arg)
-                continue
-
-            # This may be an instance name - try to resolve it
-            maybe_login_name = None
-            if arg.find("@") > -1:  # username@hostname format
-                maybe_login_name, instance = arg.split("@", 1)
-            else:
-                instance = arg
-
-            instance_id, _ = instance_resolver.resolve_instance(instance)
-            if not instance_id:
-                # Not resolved as an instance name - put back to args
-                ssh_args.append(arg)
-                maybe_login_name = None
-                continue
-
-            # We got a login name from 'login_name@instance'
-            if maybe_login_name:
-                login_name = maybe_login_name
-
-            # Woohoo we've got an instance id!
-            logger.debug("Resolved instance name '%s' to '%s'", instance, instance_id)
-            ssh_args.append(instance_id)
-
-            if login_name:
-                ssh_args.extend(["-l", login_name])
-
-        if not instance_id:
-            headers, session_details = InstanceResolver(args).print_list(quiet=True)
-            selected_session = target_selector(headers, session_details)
-            instance_id = selected_session["InstanceId"]
-            ssh_args.append(instance_id)
-
-        if args.send_key:
-            EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, key_file_name)
+        if instance_id:
+            logger.debug("Resolved instance name '%s' to '%s'", host, instance_id)
+            ssh_args.destination = f"{login_name}@{instance_id}" if login_name else instance_id
+            if args.send_key:
+                EC2InstanceConnectHelper(args).send_ssh_key(
+                    instance_id,
+                    login_name or ssh_args.option("-l"),
+                    ssh_args.option("-i"),
+                )
+        else:
+            # E.g. an ssh_config alias, let ssh resolve it
+            logger.info("No instance found for '%s', passing it to ssh as is", host)
 
         start_ssh_session(
             ssh_args=ssh_args,

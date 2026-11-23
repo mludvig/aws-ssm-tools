@@ -160,7 +160,7 @@ and for ECS Docker Exec: `ecs-session`
     -------------------  ---------------------------  ------------------------------  --------------
     i-07c189021bc56e042   nginx-web-server            ip-10-251-128-70.ec2.internal   10.251.128.70
     [ec2-ssh] INFO: Resolved instance name 'test1' to 'i-07c189021bc56e042'
-    [ec2-ssh] INFO: Running: ssh -o ProxyCommand='aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p' i-07c189021bc56e042 -l ec2-user -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem
+    [ec2-ssh] INFO: Running: ssh -o ProxyCommand='aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p' -L 3306:mysql-rds.aws.nz:3306 -i ~/.ssh/aws-nz.pem -- ec2-user@i-07c189021bc56e042
     OpenSSH_7.6p1 Ubuntu-4ubuntu0.3, OpenSSL 1.0.2n  7 Dec 2017
     ...
     Last login: Sun Apr 12 20:05:09 2020 from localhost
@@ -282,7 +282,11 @@ All these tools support `--help` and a set of common parameters:
     --debug, -d         Increase log level even more.
 
 `ec2-ssh` only supports the long options to prevent conflict with `ssh`'s
-own short options that are being passed through.
+own short options that are being passed through. It reads the command line
+like `ssh` does: options, then `[user@]instance`, then the remote command.
+The remote command is passed through untouched, even if it contains options
+like `--profile`. A name that isn't an SSM instance, e.g. a `Host` alias from
+`~/.ssh/config`, is passed to `ssh` as it is.
 
 Standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
 `AWS_DEFAULT_REGION`, etc, are also supported.
