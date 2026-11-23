@@ -85,3 +85,22 @@ def test_no_soft_reset_when_stdout_is_not_a_terminal(tmp_path: Any) -> None:
     result = run_in_pty("exit 0", redirect=f"> {out_file}")
     assert result["RC"] == "0"
     assert out_file.read_bytes() == b""
+
+
+def test_term_without_terminal_is_passed_on() -> None:
+    # As `kill <ec2-ssh pid>` from a script: the child gets it and we return 128+N, not die.
+    # The sleep gives run_session() time to set its handlers after starting the child.
+    driver = subprocess.Popen(
+        [
+            *DRIVER,
+            "sh",
+            "-c",
+            "trap 'echo child got TERM; kill $!; exit 1' TERM; sleep 0.5; kill -TERM $PPID; sleep 31.4 >&- & wait",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    output, _ = driver.communicate(timeout=10)
+    assert driver.returncode == 143
+    assert "child got TERM" in output

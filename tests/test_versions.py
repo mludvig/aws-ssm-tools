@@ -119,14 +119,15 @@ def test_list_skips_plugin_check(monkeypatch: pytest.MonkeyPatch, module: str, r
 
 
 def test_ssh_use_endpoint_skips_plugin_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[dict[str, Any]] = []
+    calls: list[tuple[Any, ...]] = []
     monkeypatch.setattr(ssm_ssh_cli, "InstanceResolver", FakeResolver)
     monkeypatch.setattr(ssm_ssh_cli, "verify_plugin_version", no_plugin_check)
     monkeypatch.setattr(ssm_ssh_cli, "verify_awscli_version", lambda *_args: True)
-    monkeypatch.setattr(ssm_ssh_cli, "start_ssh_session", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(ssm_ssh_cli, "ssh_command", lambda *args: calls.append(args) or ["true"])
+    monkeypatch.setattr(ssm_ssh_cli.os, "execvp", lambda *_args: None)
     monkeypatch.setattr("sys.argv", ["ec2-ssh", "--use-endpoint", "--no-send-key", "i-0123456789abcdef0"])
     ssm_ssh_cli.main()
-    assert calls[0]["use_endpoint"] is True
+    assert calls[0][3] is True  # use_endpoint
 
 
 def test_ssh_use_endpoint_old_awscli_exits(monkeypatch: pytest.MonkeyPatch) -> None:

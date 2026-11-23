@@ -11,12 +11,14 @@
 # parameters to actually start the SSH session.
 
 import argparse
+import contextlib
 import dataclasses
 import logging
 import os
 import shlex
 import subprocess
 import sys
+import tempfile
 
 import botocore.exceptions
 
@@ -29,9 +31,10 @@ from .common import (
     verify_awscli_version,
     verify_plugin_version,
 )
-from .ec2_instance_connect import EC2InstanceConnectHelper
+from .ec2_instance_connect import EC2InstanceConnectHelper, generate_key, select_key
 from .picker import target_selector
 from .resolver import InstanceResolver
+from .terminal import run_session
 
 logger = logging.getLogger("ssm-tools.ec2-ssh")
 
@@ -117,19 +120,20 @@ def split_ssh_argv(argv: list[str], own_options: dict[str, bool]) -> tuple[list[
     return own, ssh
 
 
-def ssh_login(options: list[str], host: str) -> str:
+def ssh_config(options: list[str], destination: str) -> dict[str, list[str]]:
     """
-    Return the user that ssh would log in to 'host' as with these options and the ssh_config.
+    Return the config that ssh would use for 'destination' with these options and the ssh_config,
+    as {keyword: [values]}. Most keywords have one value, e.g. "user", some more, e.g. "identityfile".
     """
-    result = subprocess.run(["ssh", "-G", *options, "--", host], capture_output=True, text=True, check=False)
+    result = subprocess.run(["ssh", "-G", *options, "--", destination], capture_output=True, text=True, check=False)
     if result.returncode != 0:
         logger.error("ssh -G failed: %s", result.stderr.strip())
         sys.exit(255)
+    config: dict[str, list[str]] = {}
     for line in result.stdout.splitlines():
         key, _, value = line.partition(" ")
-        if key == "user":
-            return value
-    return ""
+        config.setdefault(key, []).append(value)
+    return config
 
 
 def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
@@ -166,7 +170,14 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
         help="Log in as USER, the same as -l USER or USER@INSTANCE. Default: the user ssh would use.",
     )
     group_ec2ic.add_argument("--send-key", dest="send_key", action="store_true", default=True, help=argparse.SUPPRESS)
-    group_ec2ic.add_argument(
+    group_send_key = group_ec2ic.add_mutually_exclusive_group()
+    group_send_key.add_argument(
+        "--gen-key",
+        dest="gen_key",
+        action="store_true",
+        help="Send a new key, made for this connection only, instead of one of yours",
+    )
+    group_send_key.add_argument(
         "--no-send-key",
         dest="send_key",
         action="store_false",
@@ -234,12 +245,10 @@ def proxy_command(profile: str, region: str, use_endpoint: bool, reason: str = "
     return command
 
 
-def start_ssh_session(ssh_args: SshArgs, profile: str, region: str, use_endpoint: bool, reason: str = "") -> None:
+def ssh_command(ssh_args: SshArgs, profile: str, region: str, use_endpoint: bool, reason: str = "") -> list[str]:
     proxy_option = ["-o", f"ProxyCommand={proxy_command(profile, region, use_endpoint, reason)}"]
     # Nothing after the destination may be read as an ssh option
-    command = ["ssh", *proxy_option, *ssh_args.options, "--", ssh_args.destination, *ssh_args.command]
-    logger.debug("Running: %s", command)
-    os.execvp(command[0], command)
+    return ["ssh", *proxy_option, *ssh_args.options, "--", ssh_args.destination, *ssh_args.command]
 
 
 def main() -> int:
@@ -269,32 +278,35 @@ def main() -> int:
             headers, session_details = instance_resolver.print_list(quiet=True)
             instance_id = target_selector(headers, session_details)["InstanceId"]
 
-        if instance_id:
-            logger.debug("Resolved instance name '%s' to '%s'", args.host, instance_id)
-            # EC2 Instance Connect only knows EC2 instances, not hybrid managed instances (mi-)
-            is_ec2 = instance_id.startswith("i-")
-            if args.use_endpoint and not is_ec2:
-                logger.error("--use-endpoint only works with EC2 instances, not with %s", instance_id)
-                sys.exit(1)
-            # ssh only sees the instance ID, so ask it which user it would use for the name we were given.
-            # See docs/adr/0004-ec2-ssh-login-user.md
-            login_name = args.user or ssh_login(ssh_args.options, args.host or instance_id)
-            ssh_args.destination = f"{login_name}@{instance_id}"
-            if args.send_key and not is_ec2:
-                logger.info("Not sending an SSH key to %s, it's not an EC2 instance", instance_id)
-            elif args.send_key:
-                EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, ssh_args.option("-i"))
-        else:
-            # E.g. an ssh_config alias, let ssh resolve it
-            logger.info("No instance found for '%s', passing it to ssh as is", args.host)
+        # The --gen-key key is deleted when ssh exits, so ssh runs as our child, see docs/adr/0010-eic-key-selection.md
+        with tempfile.TemporaryDirectory(prefix="ec2-ssh-") if args.gen_key else contextlib.nullcontext() as key_dir:
+            if instance_id:
+                logger.debug("Resolved instance name '%s' to '%s'", args.host, instance_id)
+                # EC2 Instance Connect only knows EC2 instances, not hybrid managed instances (mi-)
+                is_ec2 = instance_id.startswith("i-")
+                if args.use_endpoint and not is_ec2:
+                    logger.error("--use-endpoint only works with EC2 instances, not with %s", instance_id)
+                    sys.exit(1)
+                # ssh only sees the instance ID, so ask it which user it would use for the name we were given.
+                # See docs/adr/0004-ec2-ssh-login-user.md
+                login_name = args.user or ssh_config(ssh_args.options, args.host or instance_id)["user"][0]
+                ssh_args.destination = f"{login_name}@{instance_id}"
+                if args.send_key and not is_ec2:
+                    logger.info("Not sending an SSH key to %s, it's not an EC2 instance", instance_id)
+                elif args.send_key:
+                    if key_dir:  # Offered first and alone
+                        ssh_args.options[:0] = ["-i", generate_key(key_dir), "-o", "IdentitiesOnly=yes"]
+                    public_key = select_key(ssh_config(ssh_args.options, ssh_args.destination))
+                    EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, public_key)
+            else:
+                # E.g. an ssh_config alias, let ssh resolve it
+                logger.info("No instance found for '%s', passing it to ssh as is", args.host)
 
-        start_ssh_session(
-            ssh_args=ssh_args,
-            profile=args.profile,
-            region=args.region,
-            use_endpoint=args.use_endpoint,
-            reason=args.reason,
-        )
+            command = ssh_command(ssh_args, args.profile, args.region, args.use_endpoint, args.reason)
+            logger.debug("Running: %s", command)
+            if key_dir:
+                return run_session(command)
+            os.execvp(command[0], command)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         handle_boto_error(e, logger, args.profile)
@@ -304,4 +316,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

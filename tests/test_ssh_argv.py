@@ -1,6 +1,8 @@
+import os
 import re
 import shlex
 import shutil
+import subprocess
 from typing import Any
 
 import pytest
@@ -107,10 +109,14 @@ class FakeResolver:
 def run(monkeypatch: pytest.MonkeyPatch) -> Any:
     """
     Run ec2-ssh with 'argv', return the ssh argv and the (instance, login, key) the key was sent for.
-    Without 'real_ssh' ssh_login() says "sshuser".
+    Without 'real_ssh' ssh says the user is "sshuser-for-DESTINATION", without 'real_keys' the key is "KEY".
     """
 
-    def _run(*argv: str, real_ssh: bool = False) -> tuple[list[str], list[tuple[str, str, str]]]:
+    def _run(
+        *argv: str,
+        real_ssh: bool = False,
+        real_keys: bool = False,
+    ) -> tuple[list[str], list[tuple[str, str, str]]]:
         sent: list[tuple[str, str, str]] = []
         execs: list[list[str]] = []
 
@@ -126,8 +132,11 @@ def run(monkeypatch: pytest.MonkeyPatch) -> Any:
         monkeypatch.setattr(ssm_ssh_cli, "verify_plugin_version", lambda *_args, **_kwargs: True)
         monkeypatch.setattr(ssm_ssh_cli, "target_selector", lambda _headers, targets: targets[0])
         monkeypatch.setattr(ssm_ssh_cli.os, "execvp", lambda _file, command: execs.append(command))
+        monkeypatch.setattr(ssm_ssh_cli, "run_session", lambda command: execs.append(["(child)", *command]) or 0)
         if not real_ssh:
-            monkeypatch.setattr(ssm_ssh_cli, "ssh_login", lambda _options, host: f"sshuser-for-{host}")
+            monkeypatch.setattr(ssm_ssh_cli, "ssh_config", lambda _options, dest: {"user": [f"sshuser-for-{dest}"]})
+        if not real_keys:
+            monkeypatch.setattr(ssm_ssh_cli, "select_key", lambda _config: "KEY")
         monkeypatch.setattr("sys.argv", ["ec2-ssh", *argv])
         ssm_ssh_cli.main()
         return execs[0], sent
@@ -145,34 +154,34 @@ HYBRID = "mi-0123456789abcdef0"
         (
             ["-l", "ec2-user", "web", *RSYNC_COMMAND],
             ["-l", "ec2-user", "--", f"ec2-user@{WEB}", *RSYNC_COMMAND],
-            [(WEB, "ec2-user", "")],
+            [(WEB, "ec2-user", "KEY")],
         ),
-        (["-l", "u", "-s", "--", "web", "sftp"], ["-l", "u", "-s", "--", f"u@{WEB}", "sftp"], [(WEB, "u", "")]),
+        (["-l", "u", "-s", "--", "web", "sftp"], ["-l", "u", "-s", "--", f"u@{WEB}", "sftp"], [(WEB, "u", "KEY")]),
         (
             ["-i", "~/.ssh/k", "a@b@web", "ls", "-la"],
             ["-i", "~/.ssh/k", "--", f"a@b@{WEB}", "ls", "-la"],
-            [(WEB, "a@b", "~/.ssh/k")],
+            [(WEB, "a@b", "KEY")],
         ),
-        (["--debug", "u@web", "hello"], ["-v", "--", f"u@{WEB}", "hello"], [(WEB, "u", "")]),
+        (["--debug", "u@web", "hello"], ["-v", "--", f"u@{WEB}", "hello"], [(WEB, "u", "KEY")]),
         (["--no-send-key", "-u", "u", "web", "--", "-p", "1"], ["--", f"u@{WEB}", "-p", "1"], []),
-        (["--send-key", "--user", "u", "-l", "u", "u@web"], ["-l", "u", "--", f"u@{WEB}"], [(WEB, "u", "")]),
+        (["--send-key", "--user", "u", "-l", "u", "u@web"], ["-l", "u", "--", f"u@{WEB}"], [(WEB, "u", "KEY")]),
         # No user given: ask ssh for the name we were given
-        (["-o", "User=x", "web"], ["-o", "User=x", "--", f"sshuser-for-web@{WEB}"], [(WEB, "sshuser-for-web", "")]),
+        (["-o", "User=x", "web"], ["-o", "User=x", "--", f"sshuser-for-web@{WEB}"], [(WEB, "sshuser-for-web", "KEY")]),
         (
             [WEB, "uptime"],
             ["--", f"sshuser-for-{WEB}@{WEB}", "uptime"],
-            [(WEB, f"sshuser-for-{WEB}", "")],
+            [(WEB, f"sshuser-for-{WEB}", "KEY")],
         ),
         # Hybrid managed instance: EC2 Instance Connect can't send it a key
         (["u@" + HYBRID], ["--", f"u@{HYBRID}"], []),
         # Not an instance: e.g. an ssh_config alias, passed to ssh untouched and no key sent
         (["-l", "u", "myalias", "uptime"], ["-l", "u", "--", "myalias", "uptime"], []),
         # No destination: the picker
-        (["-u", "u"], ["--", "u@i-0fedcba9876543210"], [("i-0fedcba9876543210", "u", "")]),
+        (["-u", "u"], ["--", "u@i-0fedcba9876543210"], [("i-0fedcba9876543210", "u", "KEY")]),
         (
             [],
             ["--", "sshuser-for-i-0fedcba9876543210@i-0fedcba9876543210"],
-            [("i-0fedcba9876543210", "sshuser-for-i-0fedcba9876543210", "")],
+            [("i-0fedcba9876543210", "sshuser-for-i-0fedcba9876543210", "KEY")],
         ),
     ],
 )
@@ -240,11 +249,59 @@ def test_login_precedence(run: Any, tmp_path: Any, argv: list[str], login: str) 
 
 
 @pytest.mark.skipif(not shutil.which("ssh"), reason="needs ssh")
-def test_ssh_login_error(caplog: pytest.LogCaptureFixture) -> None:
+def test_ssh_config_error(caplog: pytest.LogCaptureFixture) -> None:
     with pytest.raises(SystemExit) as exc:
-        ssm_ssh_cli.ssh_login(["-o", "NoSuchOption=1"], "web")
+        ssm_ssh_cli.ssh_config(["-o", "NoSuchOption=1"], "web")
     assert exc.value.code == 255
     assert "ssh -G failed" in caplog.text
+
+
+@pytest.fixture
+def no_user_keys(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """No ~/.ssh keys and no agent. Return an ssh_config file to write to."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("SSH_AUTH_SOCK", raising=False)
+    return tmp_path / "ssh_config"
+
+
+def make_key(path: Any) -> str:
+    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(path)], check=True)
+    return (path.parent / f"{path.name}.pub").read_text().strip()
+
+
+@pytest.mark.skipif(not shutil.which("ssh-keygen"), reason="needs ssh")
+def test_sends_the_key_for_the_instance_id(run: Any, tmp_path: Any, no_user_keys: Any) -> None:
+    keys = {name: make_key(tmp_path / name) for name in ("web", "instance", "user")}
+    no_user_keys.write_text(
+        f"Host web\n  IdentityFile {tmp_path}/web\n"
+        f"Match host i-* user u\n  IdentityFile {tmp_path}/user\n"
+        f"Host i-*\n  IdentityFile {tmp_path}/instance\n",
+    )
+    _, sent_keys = run("-F", str(no_user_keys), "u@web", real_ssh=True, real_keys=True)
+    assert sent_keys == [(WEB, "u", keys["user"])]  # ssh connects to u@INSTANCE_ID, not to web
+    _, sent_keys = run("-F", str(no_user_keys), "x@web", real_ssh=True, real_keys=True)
+    assert sent_keys == [(WEB, "x", keys["instance"])]
+
+
+@pytest.mark.skipif(not shutil.which("ssh-keygen"), reason="needs ssh")
+def test_gen_key(run: Any, tmp_path: Any, no_user_keys: Any) -> None:
+    mine = make_key(tmp_path / "mine")
+    no_user_keys.write_text(f"Host *\n  IdentityFile {tmp_path}/mine\n")
+    command, sent_keys = run("--gen-key", "-F", str(no_user_keys), "u@web", real_ssh=True, real_keys=True)
+    assert command[:2] == ["(child)", "ssh"]  # Not exec'd: we delete the key when ssh exits
+    key_file = command[command.index("-i") + 1]
+    assert command[command.index("-i") :][:4] == ["-i", key_file, "-o", "IdentitiesOnly=yes"]
+    (instance_id, login, public_key), *_ = sent_keys
+    assert (instance_id, login) == (WEB, "u")
+    assert public_key.startswith("ssh-ed25519 ") and public_key.endswith(" ec2-ssh") and public_key != mine
+    assert not os.path.exists(os.path.dirname(key_file))
+
+
+def test_gen_key_without_sending(capsys: pytest.CaptureFixture) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parse_args(["--gen-key", "--no-send-key", "web"])
+    assert exc.value.code == 2
+    assert "not allowed with argument" in capsys.readouterr().err
 
 
 def run_proxy_command(proxy: str) -> list[str]:

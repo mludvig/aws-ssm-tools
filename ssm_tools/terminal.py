@@ -43,11 +43,39 @@ def run_session(exec_args: list[str]) -> int:
     if os.name == "posix" and os.isatty(0) and os.tcgetpgrp(0) == os.getpgrp():
         return _run_foreground_job(command)
 
-    # No terminal of ours to manage (or Windows)
+    return _run_child(command)
+
+
+def _exit_code(received: list[int], returncode: int) -> int:
+    if received:
+        return 128 + received[0]
+    return returncode if returncode >= 0 else 128 - returncode
+
+
+def _run_child(command: list[str]) -> int:
+    """
+    No terminal of ours to manage (or Windows). Pass TERM and HUP on, and wait for the child,
+    so that our caller still cleans up.
+    """
+    received: list[int] = []
+    proc = subprocess.Popen(command)
+
+    def _forward(signum: int, _frame: object) -> None:
+        received.append(signum)
+        proc.send_signal(signum)
+
+    forwarded = [signal.SIGTERM] + ([signal.SIGHUP] if os.name == "posix" else [])
+    old_handlers = {signum: signal.signal(signum, _forward) for signum in forwarded}
     try:
-        return subprocess.call(command)
-    except KeyboardInterrupt:
-        return 128 + signal.SIGINT
+        returncode = proc.wait()
+    except KeyboardInterrupt:  # As subprocess.call() did: aws ignores it during a session
+        received.append(signal.SIGINT)
+        proc.kill()
+        returncode = proc.wait()
+    finally:
+        for signum, handler in old_handlers.items():
+            signal.signal(signum, handler)
+    return _exit_code(received, returncode)
 
 
 def _killpg(pgid: int, signum: int) -> None:
@@ -104,6 +132,4 @@ def _run_foreground_job(command: list[str]) -> int:
         for signum, handler in old_handlers.items():
             signal.signal(signum, handler)
 
-    if received:
-        return 128 + received[0]
-    return returncode if returncode >= 0 else 128 - returncode
+    return _exit_code(received, returncode)

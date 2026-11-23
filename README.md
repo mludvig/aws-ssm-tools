@@ -54,7 +54,10 @@ and for ECS Docker Exec: `ecs-session`
 
   It pushes your SSH key to the instance first (aka *EC2 Instance Connect*,
   although that's an odd name for this function), use `--no-send-key` to
-  skip that. The login user is `-u USER`, `--user USER`, `-l USER` or
+  skip that. The key is the first RSA or Ed25519 key that `ssh` will offer,
+  from your agent or from `-i` and `IdentityFile`, as `ssh` orders them.
+  `--gen-key` sends a new key made for this connection instead, and deletes
+  it when `ssh` exits. The login user is `-u USER`, `--user USER`, `-l USER` or
   `USER@INSTANCE`, or else the user `ssh` itself would use, e.g. from a
   `Host` stanza in `~/.ssh/config` matching the name you typed.
 
