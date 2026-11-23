@@ -12,7 +12,6 @@
 
 import argparse
 import logging
-import os
 import sys
 from typing import Any
 
@@ -20,6 +19,7 @@ import botocore.exceptions
 
 from .common import add_general_parameters, configure_logging, handle_boto_error, show_version, target_selector
 from .resolver import ContainerResolver
+from .terminal import run_session
 
 logger = logging.getLogger("ssm-tools.ecs-session")
 
@@ -83,7 +83,7 @@ Author: Michael Ludvig
     return args, extras
 
 
-def execute_command(container: dict[str, Any], args: argparse.Namespace, command: str) -> None:
+def execute_command(container: dict[str, Any], args: argparse.Namespace, command: str) -> int:
     exec_args = ["aws", "ecs", "execute-command"]
     if args.profile:
         exec_args += ["--profile", args.profile]
@@ -101,7 +101,7 @@ def execute_command(container: dict[str, Any], args: argparse.Namespace, command
     # fmt: on
 
     logger.debug("Running: %s", exec_args)
-    os.execvp(exec_args[0], exec_args)
+    return run_session(exec_args)
 
 
 def main() -> int:
@@ -129,14 +129,12 @@ def main() -> int:
             logger.warning("Could not find any container matching: %s", " AND ".join(args.CONTAINER))
             sys.exit(1)
 
-        execute_command(container, args, args.command)
+        return execute_command(container, args, args.command)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         handle_boto_error(e, logger, args.profile)
         sys.exit(1)
 
-    return 0
-
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

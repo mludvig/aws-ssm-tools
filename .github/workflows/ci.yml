@@ -92,11 +92,12 @@ jobs:
         )
         foreach ($tool in $tools) {
           $lines = @(
+            "import sys",
             "from ssm_tools.startup import Spinner",
             "with Spinner():",
             "    from $($tool.module) import main",
             "if __name__ == '__main__':",
-            "    main()"
+            "    sys.exit(main())"
           )
           $lines -join "`n" | Set-Content $tool.stub
         }

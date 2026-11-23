@@ -21,6 +21,7 @@ import botocore.exceptions
 
 from .common import add_general_parameters, configure_logging, handle_boto_error, show_version, target_selector
 from .resolver import InstanceResolver
+from .terminal import run_session
 
 logger = logging.getLogger("ssm-tools.ec2-session")
 
@@ -106,7 +107,7 @@ the command with the appropriate: sudo -i -u USER COMMAND
     return args
 
 
-def start_session(instance_id: str, args: argparse.Namespace) -> None:
+def start_session(instance_id: str, args: argparse.Namespace) -> int:
     exec_args = ["aws", "ssm", "start-session"]
     if args.profile:
         exec_args += ["--profile", args.profile]
@@ -135,7 +136,7 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
 
     exec_args += ["--target", instance_id]
     logger.debug("Running: %s", exec_args)
-    os.execvp(exec_args[0], exec_args)
+    return run_session(exec_args)
 
 
 def main() -> int:
@@ -166,14 +167,12 @@ def main() -> int:
             logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
             sys.exit(1)
 
-        start_session(instance_id, args)
+        return start_session(instance_id, args)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         handle_boto_error(e, logger, args.profile)
         sys.exit(1)
 
-    return 0
-
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
