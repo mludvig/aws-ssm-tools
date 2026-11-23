@@ -15,6 +15,7 @@ import logging
 import os
 import random
 import select
+import signal
 import struct
 import sys
 import threading
@@ -29,6 +30,7 @@ from .common import (
     add_general_parameters,
     bytes_to_human,
     configure_logging,
+    exit_on_signal,
     handle_boto_error,
     seconds_to_human,
     show_version,
@@ -240,7 +242,7 @@ class SsmTunnel(SsmTalker):
             except pexpect.exceptions.TIMEOUT:
                 # This is a long timeout, 30 sec, not very useful
                 continue
-            if isinstance(self._child.after, pexpect.exceptions.EOF):
+            if self._child.after is pexpect.EOF:
                 logger.warning("Received unexpected EOF - tunnel went down?")
                 self._exiting = True
                 break
@@ -295,11 +297,17 @@ class SsmTunnel(SsmTalker):
         self.routes = routes
         self.updown_script = updown_script
 
+        # Close the session and delete the tun device and its routes in 'finally'
+        for signum in (signal.SIGTERM, signal.SIGHUP):
+            signal.signal(signum, exit_on_signal)
+
         try:
             self.open_remote_tunnel()
             self.open_local_tunnel()
             self.run_updown("up")
             self.process_traffic()
+            if self._exiting:  # The session went down, not Ctrl-C
+                sys.exit(1)
 
         finally:
             logger.info("Closing tunnel, please wait...")
@@ -316,7 +324,7 @@ class SsmTunnel(SsmTalker):
         stat_history_len = int(self.stats_secs / self.stats_refresh)
         start_ts = time.time()
 
-        while True:
+        while not self._exiting:
             time.sleep(self.stats_refresh)
 
             # Take another 'stat' snapshot

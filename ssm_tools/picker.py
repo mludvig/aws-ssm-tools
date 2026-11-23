@@ -12,7 +12,7 @@ from typing import Any
 
 from wcwidth import wcwidth
 
-from .common import printable
+from .common import exit_on_signal, printable
 
 __all__ = ["has_terminal", "target_selector"]
 
@@ -73,15 +73,12 @@ def _menu(headers: str, summaries: list[str]) -> int | None:
         show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
     )
 
-    def _exit(signum: int, _frame: Any) -> None:
-        raise SystemExit(128 + signum)  # After show() has restored the terminal
-
-    # Ctrl-Z would leave the menu stuck after 'fg', the others would skip the terminal restore
+    # Ctrl-Z would leave the menu stuck after 'fg', the others would skip show()'s terminal restore
     handlers: dict[signal.Signals, Any] = {
         signal.SIGTSTP: signal.SIG_IGN,
-        signal.SIGQUIT: _exit,
-        signal.SIGTERM: _exit,
-        signal.SIGHUP: _exit,
+        signal.SIGQUIT: exit_on_signal,
+        signal.SIGTERM: exit_on_signal,
+        signal.SIGHUP: exit_on_signal,
     }
     old_handlers = {signum: signal.signal(signum, handler) for signum, handler in handlers.items()}
     try:

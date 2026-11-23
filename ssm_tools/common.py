@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable
+from typing import Any
 
 import boto3
 import botocore.credentials
@@ -321,6 +322,16 @@ __all__.append("printable")
 def printable(text: str) -> str:
     """Replace control characters, e.g. ESC from an instance's self-reported name, with '?'."""
     return re.sub(r"[\x00-\x1f\x7f-\x9f]", "?", text)
+
+
+# ---------------------------------------------------------
+
+__all__.append("exit_on_signal")
+
+
+def exit_on_signal(signum: int, _frame: Any) -> None:
+    """Signal handler: exit through the 'finally' blocks with the shell's 128+N status."""
+    raise SystemExit(128 + signum)
 
 
 # ---------------------------------------------------------
