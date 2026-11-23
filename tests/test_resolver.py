@@ -170,6 +170,59 @@ def test_resolve_managed_instance_without_ip(instance_resolver: InstanceResolver
     assert details["Addresses"] == []
 
 
+def item(instance_id: str, name: str = "", host: str = "", ip: str = "") -> dict[str, Any]:
+    return {"InstanceId": instance_id, "InstanceName": name, "HostName": host, "Addresses": [ip] if ip else []}
+
+
+@pytest.mark.parametrize(
+    ("items", "target", "expected", "message"),
+    [
+        # A hybrid node claims an EC2 instance's Name as its host name: the Name wins
+        ([item("i-1", name="web"), item(HYBRID, host="web")], "web", "i-1", f"Ignoring {HYBRID}, whose host name"),
+        ([item("i-1", name="web"), item("i-2", ip="web")], "WEB", "i-1", "Ignoring i-2, whose host name or IP"),
+        # Its own host name equal to its Name is no collision
+        ([item("i-1", name="web", host="web")], "web", "i-1", ""),
+        # Only a self-reported field matched: say which, louder for hybrid nodes
+        ([item(HYBRID, name="onprem", host="stopped")], "stopped", HYBRID, f"is the host name that {HYBRID} reports"),
+        ([item(HYBRID, ip="10.0.0.9")], "10.0.0.9", HYBRID, f"is the IP address that {HYBRID} reports"),
+        ([item("i-1", host="ip-10-0-0-1")], "ip-10-0-0-1", "i-1", "is the host name of i-1"),
+    ],
+)
+def test_name_beats_self_reported_fields(
+    instance_resolver: InstanceResolver,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    items: list[dict[str, Any]],
+    target: str,
+    expected: str,
+    message: str,
+) -> None:
+    caplog.set_level("INFO")
+    monkeypatch.setattr(instance_resolver, "get_list", lambda: {i["InstanceId"]: i for i in items})
+    assert instance_resolver.resolve_instance(target)[0] == expected
+    assert message in caplog.text
+    if not message:
+        assert not caplog.records
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        [item("i-1", name="web"), item(HYBRID, name="web")],
+        [item("i-1", host="web"), item(HYBRID, ip="web")],
+    ],
+)
+def test_ambiguous_within_a_tier_exits(
+    instance_resolver: InstanceResolver,
+    monkeypatch: pytest.MonkeyPatch,
+    items: list[dict[str, Any]],
+) -> None:
+    monkeypatch.setattr(instance_resolver, "get_list", lambda: {i["InstanceId"]: i for i in items})
+    with pytest.raises(SystemExit) as exc:
+        instance_resolver.resolve_instance("web")
+    assert exc.value.code == 1
+
+
 def ecs_task(task_id: str, container: dict[str, Any]) -> dict[str, Any]:
     task_arn = f"arn:aws:ecs:{REGION}:{ACCOUNT}:task/lab/{task_id}"
     return {

@@ -318,6 +318,12 @@ like `--profile`. A name that isn't an SSM instance, e.g. a `Host` alias from
 apply. From a `Host name` stanza matching the name you typed, only `User` is
 used.
 
+Instances can be given by instance ID, *Name* tag, host name or IP. A *Name*
+match wins over host names and IPs, because instances report those
+themselves, and the tools say so when they match only a host name or IP.
+Hybrid instances get their *Name* from their activation, so anyone with the
+activation code can register more instances with the same *Name*.
+
 Standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
 `AWS_DEFAULT_REGION`, etc, are also supported.
 

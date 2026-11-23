@@ -175,14 +175,13 @@ class InstanceResolver(AWSSessionBase):
         if INSTANCE_ID_RE.fullmatch(instance):
             return instance.lower(), {}
 
-        # It is not - find it in the list
-        instances = []
-
+        # It is not - find it in the list. The Name, which the instance can't change, beats
+        # the host name and IP, which it can. See docs/adr/0008-name-resolution-trust.md
+        needle = instance.lower()
         items = self.get_list()
-        for instance_id in items:
-            item = items[instance_id]
-            if instance.lower() in [item["HostName"].lower(), item["InstanceName"].lower()] + item["Addresses"]:
-                instances.append(instance_id)
+        by_name = [i for i, item in items.items() if item["InstanceName"].lower() == needle]
+        by_host = [i for i, item in items.items() if needle in [item["HostName"].lower(), *item["Addresses"]]]
+        instances = by_name or by_host
 
         if not instances:
             return "", {}
@@ -192,14 +191,26 @@ class InstanceResolver(AWSSessionBase):
             logger.warning("Use INSTANCE_ID to connect to a specific one")
             sys.exit(1)
 
+        instance_id = instances[0]
+        if by_name:
+            ignored = sorted(set(by_host) - {instance_id})
+            if ignored:
+                logger.warning("Ignoring %s, whose host name or IP is also '%s'", " ".join(ignored), instance)
+        else:
+            field = "host name" if items[instance_id]["HostName"].lower() == needle else "IP address"
+            if instance_id.startswith("mi-"):
+                logger.warning("'%s' is the %s that %s reports itself, not its Name", instance, field, instance_id)
+            else:
+                logger.info("'%s' is the %s of %s", instance, field, instance_id)
+
         # Print the matched instance we are connecting to
         row = []
-        for v in items[instances[0]].values():
+        for v in items[instance_id].values():
             row.append(", ".join(v) if isinstance(v, list) else v)
-        print(tabulate([row], headers=list(items[instances[0]].keys())))
+        print(tabulate([row], headers=list(items[instance_id].keys())))
 
         # Found only one instance - return it
-        return instances[0], items[instances[0]]
+        return instance_id, items[instance_id]
 
 
 class ContainerResolver(AWSSessionBase):
