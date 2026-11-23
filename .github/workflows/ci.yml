@@ -105,6 +105,18 @@ jobs:
         foreach ($tool in $tools) { Remove-Item $tool.stub }
       shell: pwsh
 
+    - name: Smoke test executables
+      run: |
+        $dist = "dist\aws-ssm-tools"
+        foreach ($exe in Get-ChildItem "$dist\*.exe") {
+          foreach ($option in "--version", "--help") {
+            & $exe.FullName $option > $null
+            if ($LASTEXITCODE -ne 0) { throw "$($exe.Name) $option failed with $LASTEXITCODE" }
+          }
+        }
+        "OK: $((Get-ChildItem "$dist\*.exe").Name -join ', ')"
+      shell: pwsh
+
     - name: Create zip bundle
       run: |
         $version = python -c "import ssm_tools; print(ssm_tools.__version__)"
