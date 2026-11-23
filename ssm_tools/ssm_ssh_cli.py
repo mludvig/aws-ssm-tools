@@ -14,6 +14,7 @@ import argparse
 import dataclasses
 import logging
 import os
+import subprocess
 import sys
 
 import botocore.exceptions
@@ -114,6 +115,21 @@ def split_ssh_argv(argv: list[str], own_options: dict[str, bool]) -> tuple[list[
     return own, ssh
 
 
+def ssh_login(options: list[str], host: str) -> str:
+    """
+    Return the user that ssh would log in to 'host' as with these options and the ssh_config.
+    """
+    result = subprocess.run(["ssh", "-G", *options, "--", host], capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        logger.error("ssh -G failed: %s", result.stderr.strip())
+        sys.exit(255)
+    for line in result.stdout.splitlines():
+        key, _, value = line.partition(" ")
+        if key == "user":
+            return value
+    return ""
+
+
 def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
     """
     Parse command line arguments.
@@ -123,6 +139,7 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False,
         allow_abbrev=False,
+        usage="%(prog)s [OPTIONS] [SSH OPTIONS] [[USER@]INSTANCE [COMMAND ...]]",
     )
 
     add_general_parameters(parser, long_only=True)
@@ -139,15 +156,17 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
     group_ec2ic.add_argument("--reason", help="The reason for connecting to the instance.")
     group_ec2ic.add_argument(
         "--user",
+        "-u",
         dest="user",
         metavar="USER",
-        help="USER after opening the session.",
+        help="Log in as USER, the same as -l USER or USER@INSTANCE. Default: the user ssh would use.",
     )
+    group_ec2ic.add_argument("--send-key", dest="send_key", action="store_true", default=True, help=argparse.SUPPRESS)
     group_ec2ic.add_argument(
         "--no-send-key",
         dest="send_key",
         action="store_false",
-        help="Send the SSH key to instance metadata using EC2 Instance Connect",
+        help="Don't send the SSH key to the instance with EC2 Instance Connect",
     )
     group_ec2ic.add_argument(
         "--use-endpoint",
@@ -231,6 +250,11 @@ def main() -> int:
             sys.exit(1)
 
         login_name, _, host = ssh_args.destination.rpartition("@")  # OpenSSH splits on the last '@'
+        logins = {login for login in (args.user, ssh_args.option("-l"), login_name) if login}
+        if len(logins) > 1:
+            logger.error("Conflicting login names: %s", ", ".join(sorted(logins)))
+            sys.exit(1)
+
         if host:
             instance_id, _ = instance_resolver.resolve_instance(host)
         else:
@@ -239,13 +263,12 @@ def main() -> int:
 
         if instance_id:
             logger.debug("Resolved instance name '%s' to '%s'", host, instance_id)
-            ssh_args.destination = f"{login_name}@{instance_id}" if login_name else instance_id
+            # ssh only sees the instance ID, so ask it which user it would use for the name we were given.
+            # See docs/adr/0004-ec2-ssh-login-user.md
+            login_name = logins.pop() if logins else ssh_login(ssh_args.options, host or instance_id)
+            ssh_args.destination = f"{login_name}@{instance_id}"
             if args.send_key:
-                EC2InstanceConnectHelper(args).send_ssh_key(
-                    instance_id,
-                    login_name or ssh_args.option("-l"),
-                    ssh_args.option("-i"),
-                )
+                EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, ssh_args.option("-i"))
         else:
             # E.g. an ssh_config alias, let ssh resolve it
             logger.info("No instance found for '%s', passing it to ssh as is", host)

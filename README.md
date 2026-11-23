@@ -47,8 +47,11 @@ and for ECS Docker Exec: `ecs-session`
   doesn't require a special agent on the instance, other than the standard
   AWS SSM agent.
 
-  Also supports pushing your SSH key to the instance with `--send-key` (aka
-  *EC2 Instance Connect*, although that's an odd name for this function).
+  It pushes your SSH key to the instance first (aka *EC2 Instance Connect*,
+  although that's an odd name for this function), use `--no-send-key` to
+  skip that. The login user is `-u USER`, `--user USER`, `-l USER` or
+  `USER@INSTANCE`, or else the user `ssh` itself would use, e.g. from a
+  `Host` stanza in `~/.ssh/config` matching the name you typed.
 
 * **ssm-port-forward**
 
@@ -287,6 +290,10 @@ like `ssh` does: options, then `[user@]instance`, then the remote command.
 The remote command is passed through untouched, even if it contains options
 like `--profile`. A name that isn't an SSM instance, e.g. a `Host` alias from
 `~/.ssh/config`, is passed to `ssh` as it is.
+
+`ssh` connects to the instance ID, so `Host i-*` stanzas in `~/.ssh/config`
+apply. From a `Host name` stanza matching the name you typed, only `User` is
+used.
 
 Standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
 `AWS_DEFAULT_REGION`, etc, are also supported.

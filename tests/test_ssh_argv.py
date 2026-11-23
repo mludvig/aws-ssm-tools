@@ -1,3 +1,4 @@
+import shutil
 from typing import Any
 
 import pytest
@@ -94,7 +95,7 @@ class FakeResolver:
         pass
 
     def resolve_instance(self, name: str) -> tuple[str, dict[str, Any]]:
-        return INSTANCES.get(name, ""), {}
+        return INSTANCES.get(name, name if name.startswith("i-") else ""), {}
 
     def print_list(self, quiet: bool = False) -> tuple[str, list[dict[str, str]]]:
         return "headers", [{"InstanceId": "i-0fedcba9876543210"}]
@@ -102,9 +103,12 @@ class FakeResolver:
 
 @pytest.fixture
 def run(monkeypatch: pytest.MonkeyPatch) -> Any:
-    """Run ec2-ssh with 'argv', return the ssh argv and the (instance, login, key) the key was sent for."""
+    """
+    Run ec2-ssh with 'argv', return the ssh argv and the (instance, login, key) the key was sent for.
+    Without 'real_ssh' ssh_login() says "sshuser".
+    """
 
-    def _run(*argv: str) -> tuple[list[str], list[tuple[str, str, str]]]:
+    def _run(*argv: str, real_ssh: bool = False) -> tuple[list[str], list[tuple[str, str, str]]]:
         sent: list[tuple[str, str, str]] = []
         execs: list[list[str]] = []
 
@@ -120,6 +124,8 @@ def run(monkeypatch: pytest.MonkeyPatch) -> Any:
         monkeypatch.setattr(ssm_ssh_cli, "verify_plugin_version", lambda *_args, **_kwargs: True)
         monkeypatch.setattr(ssm_ssh_cli, "target_selector", lambda _headers, targets: targets[0])
         monkeypatch.setattr(ssm_ssh_cli.os, "execvp", lambda _file, command: execs.append(command))
+        if not real_ssh:
+            monkeypatch.setattr(ssm_ssh_cli, "ssh_login", lambda _options, host: f"sshuser-for-{host}")
         monkeypatch.setattr("sys.argv", ["ec2-ssh", *argv])
         ssm_ssh_cli.main()
         return execs[0], sent
@@ -127,37 +133,97 @@ def run(monkeypatch: pytest.MonkeyPatch) -> Any:
     return _run
 
 
+WEB = "i-0123456789abcdef0"
+
+
 @pytest.mark.parametrize(
     ("argv", "ssh_argv", "sent"),
     [
         (
             ["-l", "ec2-user", "web", *RSYNC_COMMAND],
-            ["-l", "ec2-user", "--", "i-0123456789abcdef0", *RSYNC_COMMAND],
-            [("i-0123456789abcdef0", "ec2-user", "")],
+            ["-l", "ec2-user", "--", f"ec2-user@{WEB}", *RSYNC_COMMAND],
+            [(WEB, "ec2-user", "")],
         ),
-        (
-            ["-l", "u", "-s", "--", "web", "sftp"],
-            ["-l", "u", "-s", "--", "i-0123456789abcdef0", "sftp"],
-            [("i-0123456789abcdef0", "u", "")],
-        ),
+        (["-l", "u", "-s", "--", "web", "sftp"], ["-l", "u", "-s", "--", f"u@{WEB}", "sftp"], [(WEB, "u", "")]),
         (
             ["-i", "~/.ssh/k", "a@b@web", "ls", "-la"],
-            ["-i", "~/.ssh/k", "--", "a@b@i-0123456789abcdef0", "ls", "-la"],
-            [("i-0123456789abcdef0", "a@b", "~/.ssh/k")],
+            ["-i", "~/.ssh/k", "--", f"a@b@{WEB}", "ls", "-la"],
+            [(WEB, "a@b", "~/.ssh/k")],
         ),
+        (["--debug", "u@web", "hello"], ["-v", "--", f"u@{WEB}", "hello"], [(WEB, "u", "")]),
+        (["--no-send-key", "-u", "u", "web", "--", "-p", "1"], ["--", f"u@{WEB}", "-p", "1"], []),
+        (["--send-key", "--user", "u", "-l", "u", "u@web"], ["-l", "u", "--", f"u@{WEB}"], [(WEB, "u", "")]),
+        # No user given: ask ssh for the name we were given
+        (["-o", "User=x", "web"], ["-o", "User=x", "--", f"sshuser-for-web@{WEB}"], [(WEB, "sshuser-for-web", "")]),
         (
-            ["--debug", "u@web", "hello"],
-            ["-v", "--", "u@i-0123456789abcdef0", "hello"],
-            [("i-0123456789abcdef0", "u", "")],
+            [WEB, "uptime"],
+            ["--", f"sshuser-for-{WEB}@{WEB}", "uptime"],
+            [(WEB, f"sshuser-for-{WEB}", "")],
         ),
-        (["--no-send-key", "web", "--", "-p", "1"], ["--", "i-0123456789abcdef0", "-p", "1"], []),
         # Not an instance: e.g. an ssh_config alias, passed to ssh untouched and no key sent
         (["-l", "u", "myalias", "uptime"], ["-l", "u", "--", "myalias", "uptime"], []),
         # No destination: the picker
-        (["-l", "u"], ["-l", "u", "--", "i-0fedcba9876543210"], [("i-0fedcba9876543210", "u", "")]),
+        (["-u", "u"], ["--", "u@i-0fedcba9876543210"], [("i-0fedcba9876543210", "u", "")]),
+        (
+            [],
+            ["--", "sshuser-for-i-0fedcba9876543210@i-0fedcba9876543210"],
+            [("i-0fedcba9876543210", "sshuser-for-i-0fedcba9876543210", "")],
+        ),
     ],
 )
 def test_ssh_command(run: Any, argv: list[str], ssh_argv: list[str], sent: list[tuple[str, str, str]]) -> None:
     command, sent_keys = run(*argv)
     assert command == ["ssh", *PROXY, *ssh_argv]
     assert sent_keys == sent
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["-u", "a", "b@web"],
+        ["--user", "a", "-l", "b", "web"],
+        ["-l", "a", "b@web"],
+    ],
+)
+def test_conflicting_logins(run: Any, caplog: pytest.LogCaptureFixture, argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        run(*argv)
+    assert exc.value.code == 1
+    assert "Conflicting login names: a, b" in caplog.text
+
+
+SSH_CONFIG = """
+Host web
+  User webuser
+Host *
+  User defaultuser
+"""
+
+
+@pytest.mark.skipif(not shutil.which("ssh"), reason="needs ssh")
+@pytest.mark.parametrize(
+    ("argv", "login"),
+    [
+        (["web"], "webuser"),
+        (["-o", "User=optuser", "web"], "optuser"),
+        (["-o", "User=optuser", "-l", "luser", "web"], "luser"),
+        (["-u", "uuser", "-o", "User=optuser", "web"], "uuser"),
+        (["--user", "uuser", "web"], "uuser"),
+        (["atuser@web"], "atuser"),
+        ([WEB], "defaultuser"),
+        ([], "defaultuser"),  # the picker
+    ],
+)
+def test_login_precedence(run: Any, tmp_path: Any, argv: list[str], login: str) -> None:
+    config = tmp_path / "ssh_config"
+    config.write_text(SSH_CONFIG)
+    _, sent_keys = run("-F", str(config), *argv, real_ssh=True)
+    assert sent_keys[0][1] == login
+
+
+@pytest.mark.skipif(not shutil.which("ssh"), reason="needs ssh")
+def test_ssh_login_error(caplog: pytest.LogCaptureFixture) -> None:
+    with pytest.raises(SystemExit) as exc:
+        ssm_ssh_cli.ssh_login(["-o", "NoSuchOption=1"], "web")
+    assert exc.value.code == 255
+    assert "ssh -G failed" in caplog.text

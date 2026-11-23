@@ -98,10 +98,6 @@ class EC2InstanceConnectHelper(AWSSessionBase):
         sys.exit(1)
 
     def send_ssh_key(self, instance_id: str, login_name: str, key_file_name: str) -> None:
-        if not login_name:
-            logger.error('Unable to figure out the EC2 login name. Use "-l {user}" or {user}@{instance}.')
-            sys.exit(1)
-
         public_key, private_key_file = self.obtain_ssh_key(key_file_name)
         logger.debug("SSH Key from %s: %s", private_key_file, public_key)
 
