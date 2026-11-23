@@ -1,10 +1,12 @@
+import re
+import shlex
 import shutil
 from typing import Any
 
 import pytest
 
 from ssm_tools import ssm_ssh_cli
-from ssm_tools.ssm_ssh_cli import SshArgs, parse_args
+from ssm_tools.ssm_ssh_cli import SshArgs, parse_args, proxy_command
 
 RSYNC_COMMAND = ["rsync", "--server", "--sender", "-logDtpre.iLsfxCIvu", ".", "/etc/hostname"]
 
@@ -86,7 +88,7 @@ def test_option_value() -> None:
 INSTANCES = {"web": "i-0123456789abcdef0"}
 PROXY = [
     "-o",
-    "ProxyCommand=aws  ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p",
+    "ProxyCommand=aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p",
 ]
 
 
@@ -227,3 +229,30 @@ def test_ssh_login_error(caplog: pytest.LogCaptureFixture) -> None:
         ssm_ssh_cli.ssh_login(["-o", "NoSuchOption=1"], "web")
     assert exc.value.code == 255
     assert "ssh -G failed" in caplog.text
+
+
+def run_proxy_command(proxy: str) -> list[str]:
+    """Expand ssh's %-tokens in 'proxy' like ssh does and split it like the shell does."""
+    tokens = {"%": "%", "h": WEB, "p": "22"}
+    return shlex.split(re.sub("%(.)", lambda match: tokens[match.group(1)], proxy))
+
+
+SSM_ARGV = ["ssm", "start-session", "--target", WEB, "--document-name", "AWS-StartSSHSession"]
+SSM_ARGV += ["--parameters", "portNumber=22"]
+
+
+@pytest.mark.parametrize("reason", ["it's", "100% sure", "ticket%h", "x'$(touch F)'", 'a "b" `c` ; d'])
+def test_proxy_command_reason(reason: str) -> None:
+    proxy = proxy_command("my profile", "ap-southeast-2", use_endpoint=False, reason=reason)
+    assert run_proxy_command(proxy) == [
+        "aws",
+        *["--profile", "my profile", "--region", "ap-southeast-2"],
+        *SSM_ARGV,
+        *["--reason", reason],
+    ]
+
+
+def test_proxy_command_endpoint(caplog: pytest.LogCaptureFixture) -> None:
+    proxy = proxy_command("", "", use_endpoint=True, reason="why")
+    assert run_proxy_command(proxy) == ["aws", "ec2-instance-connect", "open-tunnel", "--instance-id", WEB]
+    assert "--reason is not supported with --use-endpoint" in caplog.text

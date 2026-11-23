@@ -53,6 +53,10 @@ and for ECS Docker Exec: `ecs-session`
   `USER@INSTANCE`, or else the user `ssh` itself would use, e.g. from a
   `Host` stanza in `~/.ssh/config` matching the name you typed.
 
+  With `--use-endpoint` it connects through an *EC2 Instance Connect
+  Endpoint* instead (needs AWS CLI 2.12.0 or newer). Names are looked up in
+  SSM, so give instances without the SSM agent by their instance ID.
+
 * **ssm-port-forward**
 
   Forward a local port to a remote port on an EC2 instance (or any host

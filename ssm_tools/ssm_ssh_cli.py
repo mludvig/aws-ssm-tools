@@ -14,6 +14,7 @@ import argparse
 import dataclasses
 import logging
 import os
+import shlex
 import subprocess
 import sys
 
@@ -202,22 +203,34 @@ Author: Michael Ludvig
     return args, ssh_args
 
 
-def start_ssh_session(ssh_args: SshArgs, profile: str, region: str, use_endpoint: bool, reason: str = "") -> None:
-    aws_args = ""
+def proxy_command(profile: str, region: str, use_endpoint: bool, reason: str = "") -> str:
+    """
+    Return the ssh ProxyCommand. Our values are quoted for the shell that runs it and
+    their '%' escaped from ssh's own %h/%p expansion, see docs/adr/0005-proxycommand-quoting.md
+    """
+
+    def _quote(value: str) -> str:
+        return shlex.quote(value).replace("%", "%%")
+
+    command = "aws"
     if profile:
-        aws_args += f"--profile {profile} "
+        command += f" --profile {_quote(profile)}"
     if region:
-        aws_args += f"--region {region} "
-    if reason:
-        aws_args += f"--reason '{reason}' "
+        command += f" --region {_quote(region)}"
 
     if use_endpoint:
-        proxy_option = ["-o", f"ProxyCommand=aws {aws_args} ec2-instance-connect open-tunnel --instance-id %h"]
-    else:
-        proxy_option = [
-            "-o",
-            f"ProxyCommand=aws {aws_args} ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p",
-        ]
+        if reason:
+            logger.warning("--reason is not supported with --use-endpoint, ignoring it")
+        return f"{command} ec2-instance-connect open-tunnel --instance-id %h"
+
+    command += " ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"
+    if reason:
+        command += f" --reason {_quote(reason)}"
+    return command
+
+
+def start_ssh_session(ssh_args: SshArgs, profile: str, region: str, use_endpoint: bool, reason: str = "") -> None:
+    proxy_option = ["-o", f"ProxyCommand={proxy_command(profile, region, use_endpoint, reason)}"]
     # Nothing after the destination may be read as an ssh option
     command = ["ssh", *proxy_option, *ssh_args.options, "--", ssh_args.destination, *ssh_args.command]
     logger.debug("Running: %s", command)
@@ -240,11 +253,7 @@ def main() -> int:
             sys.exit(0)
 
         if args.use_endpoint and not verify_awscli_version(MIN_AWSCLI_VERSION_ENDPOINT, logger):
-            logger.error(
-                "AWS CLI v%s or newer is required for --use-endpoint, falling back to SSM Session Manager",
-                MIN_AWSCLI_VERSION_ENDPOINT,
-            )
-            args.use_endpoint = False
+            sys.exit(1)
 
         if not args.use_endpoint and not verify_plugin_version(logger, required=MIN_PLUGIN_VERSION):
             sys.exit(1)
