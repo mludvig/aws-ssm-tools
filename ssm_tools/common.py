@@ -293,6 +293,22 @@ def handle_boto_error(e: Exception, logger: logging.Logger, profile: str | None 
 
 # ---------------------------------------------------------
 
+__all__.append("unique_login")
+
+
+def unique_login(*logins: str) -> str:
+    """
+    Return the login name given as -u / -l / --user / USER@TARGET, or '' if none.
+    Raises ValueError if they disagree. See docs/adr/0006-one-login-syntax.md
+    """
+    unique = {login for login in logins if login}
+    if len(unique) > 1:
+        raise ValueError(f"conflicting login names: {', '.join(sorted(unique))}")
+    return unique.pop() if unique else ""
+
+
+# ---------------------------------------------------------
+
 __all__.append("target_selector")
 
 

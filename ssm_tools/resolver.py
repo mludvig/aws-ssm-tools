@@ -145,6 +145,13 @@ class InstanceResolver(AWSSessionBase):
 
         return menu_header, menu_data
 
+    def platform_type(self, instance_id: str) -> str:
+        """Return the SSM PlatformType of the instance, e.g. 'Linux' or 'Windows', or '' if unknown."""
+        response = self.ssm_client.describe_instance_information(
+            Filters=[{"Key": "InstanceIds", "Values": [instance_id]}],
+        )
+        return next((info["PlatformType"] for info in response["InstanceInformationList"]), "")
+
     def resolve_instance(self, instance: str) -> tuple[str, dict[str, Any]]:
         # Is it a valid Instance ID?
         if re.match("^m?i-[a-f0-9]+$", instance):

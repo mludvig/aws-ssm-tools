@@ -119,7 +119,9 @@ and for ECS Docker Exec: `ecs-session`
     This opens an interactive shell session over SSM without the need for
     a password or SSH key. Note that by default the login user is `ssm-user`.
     You can specify most a different user with e.g. `--user ec2-user` or
-    even `--user root`.
+    even `--user root`. `-u USER`, `-l USER`, `--sudo USER` and
+    `USER@INSTANCE` do the same. This runs `sudo -i -u USER` on Linux
+    instances and is refused for Windows instances.
 
 
     Running `ec2-session` without specifying an IP or hostname to connect to will show a simple terminal menu.
@@ -137,6 +139,13 @@ and for ECS Docker Exec: `ecs-session`
     [ec2-user@ip-10-251-128-70] ~ $ hostname
     ip-10-251-128-70.ec2.internal
     ```
+
+    Run a single command with `-c 'COMMAND'`. It reaches the instance's
+    shell exactly as typed, commas, quotes and brackets included. On Windows
+    instances the SSM agent strips double quotes, so use single quotes there.
+    A command that reads input before printing anything hangs, because
+    `session-manager-plugin` only starts sending your keystrokes after the
+    first output. Print something first, e.g. `-c "printf '\r'; read x; ..."`.
 
     You can specify other SSM documents to run with `--document-name AWS-...`
     to customise your session. Refer to AWS docs for details.

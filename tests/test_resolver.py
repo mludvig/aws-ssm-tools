@@ -149,3 +149,13 @@ def test_list_bridge_mode_container(ecs_stub: Any) -> None:
     resolver, add_tasks = ecs_stub
     add_tasks(ecs_task("ccc", {"name": "nginx", "networkInterfaces": []}))
     assert [c["task_id"] for c in resolver.get_list()] == ["ccc"]
+
+
+@pytest.mark.parametrize(("information", "platform"), [([{"PlatformType": "Windows"}], "Windows"), ([], "")])
+def test_platform_type(instance_resolver: InstanceResolver, stub: Any, information: list, platform: str) -> None:
+    stub(instance_resolver.ssm_client).add_response(
+        "describe_instance_information",
+        {"InstanceInformationList": information},
+        {"Filters": [{"Key": "InstanceIds", "Values": ["i-0123456789abcdef0"]}]},
+    )
+    assert instance_resolver.platform_type("i-0123456789abcdef0") == platform

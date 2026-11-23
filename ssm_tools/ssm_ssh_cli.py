@@ -26,6 +26,7 @@ from .common import (
     handle_boto_error,
     show_version,
     target_selector,
+    unique_login,
     verify_awscli_version,
     verify_plugin_version,
 )
@@ -160,6 +161,8 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
         "-u",
         dest="user",
         metavar="USER",
+        action="append",
+        default=[],
         help="Log in as USER, the same as -l USER or USER@INSTANCE. Default: the user ssh would use.",
     )
     group_ec2ic.add_argument("--send-key", dest="send_key", action="store_true", default=True, help=argparse.SUPPRESS)
@@ -192,9 +195,11 @@ Author: Michael Ludvig
     own_options = {option: action.nargs != 0 for action in parser._actions for option in action.option_strings}
     try:
         own_argv, ssh_args = split_ssh_argv(argv, own_options)
+        args = parser.parse_args(own_argv)
+        login, _, args.host = ssh_args.destination.rpartition("@")  # OpenSSH splits on the last '@'
+        args.user = unique_login(*args.user, ssh_args.option("-l"), login)
     except ValueError as e:
         parser.error(str(e))
-    args = parser.parse_args(own_argv)
 
     # If --version do it now and exit
     if args.show_version:
@@ -258,29 +263,23 @@ def main() -> int:
         if not args.use_endpoint and not verify_plugin_version(logger, required=MIN_PLUGIN_VERSION):
             sys.exit(1)
 
-        login_name, _, host = ssh_args.destination.rpartition("@")  # OpenSSH splits on the last '@'
-        logins = {login for login in (args.user, ssh_args.option("-l"), login_name) if login}
-        if len(logins) > 1:
-            logger.error("Conflicting login names: %s", ", ".join(sorted(logins)))
-            sys.exit(1)
-
-        if host:
-            instance_id, _ = instance_resolver.resolve_instance(host)
+        if args.host:
+            instance_id, _ = instance_resolver.resolve_instance(args.host)
         else:
             headers, session_details = instance_resolver.print_list(quiet=True)
             instance_id = target_selector(headers, session_details)["InstanceId"]
 
         if instance_id:
-            logger.debug("Resolved instance name '%s' to '%s'", host, instance_id)
+            logger.debug("Resolved instance name '%s' to '%s'", args.host, instance_id)
             # ssh only sees the instance ID, so ask it which user it would use for the name we were given.
             # See docs/adr/0004-ec2-ssh-login-user.md
-            login_name = logins.pop() if logins else ssh_login(ssh_args.options, host or instance_id)
+            login_name = args.user or ssh_login(ssh_args.options, args.host or instance_id)
             ssh_args.destination = f"{login_name}@{instance_id}"
             if args.send_key:
                 EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, ssh_args.option("-i"))
         else:
             # E.g. an ssh_config alias, let ssh resolve it
-            logger.info("No instance found for '%s', passing it to ssh as is", host)
+            logger.info("No instance found for '%s', passing it to ssh as is", args.host)
 
         start_ssh_session(
             ssh_args=ssh_args,

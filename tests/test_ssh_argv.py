@@ -185,13 +185,14 @@ def test_ssh_command(run: Any, argv: list[str], ssh_argv: list[str], sent: list[
         ["-u", "a", "b@web"],
         ["--user", "a", "-l", "b", "web"],
         ["-l", "a", "b@web"],
+        ["-u", "a", "-u", "b", "web"],
     ],
 )
-def test_conflicting_logins(run: Any, caplog: pytest.LogCaptureFixture, argv: list[str]) -> None:
+def test_conflicting_logins(capsys: pytest.CaptureFixture, argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc:
-        run(*argv)
-    assert exc.value.code == 1
-    assert "Conflicting login names: a, b" in caplog.text
+        parse_args(argv)
+    assert exc.value.code == 2
+    assert "conflicting login names: a, b" in capsys.readouterr().err
 
 
 SSH_CONFIG = """
