@@ -134,6 +134,13 @@ and for ECS Docker Exec: `ecs-session`
     You can specify other SSM documents to run with `--document-name AWS-...`
     to customise your session. Refer to AWS docs for details.
 
+    To end a session that stopped responding press `Enter` then `~.`
+    (tilde, dot), as in SSH. That needs `session-manager-plugin` 1.2.835.0
+    or newer; `ec2-session` and `ecs-session` warn when yours is older.
+    Otherwise kill `ec2-session` from another terminal: it ends the session
+    and restores your terminal. `ec2-ssh` uses SSH's own `~.`, which works
+    even when the network is gone.
+
 3. **Open SSH session** over SSM with *port forwarding*.
 
     The `ec2-ssh` tool provides a connection and authentication mechanism
@@ -313,7 +320,8 @@ and [session-manager-plugin
 installation guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) to install them if needed.
 
 Note that `ec2-ssh` needs `session-manager-plugin` version *1.1.23* or
-newer. Upgrade if your version is older.
+newer, and `Enter ~.` to end a stuck session needs *1.2.835.0* or newer.
+Upgrade if your version is older.
 
 ### Register your instances with Systems Manager
 

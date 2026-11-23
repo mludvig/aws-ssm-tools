@@ -3,6 +3,7 @@ import logging
 import pathlib
 import subprocess
 import sys
+from collections.abc import Callable
 
 import boto3
 import botocore.credentials
@@ -162,33 +163,74 @@ def seconds_to_human(seconds: float, decimal: int = 3) -> str:
 
 # ---------------------------------------------------------
 
+PLUGIN_INSTALL_URL = (
+    "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html"
+)
+# First with 'Enter ~.' to end a shell session, see docs/adr/0002-plugin-version-warning.md
+PLUGIN_ESCAPE_VERSION = "1.2.835.0"
+
+__all__.append("ESCAPE_HELP")
+
+ESCAPE_HELP = f"""
+To end a session that stopped responding type Enter ~. (Enter, tilde, dot).
+That needs session-manager-plugin {PLUGIN_ESCAPE_VERSION} or newer.
+"""
+
+
+def _installed_version(
+    command: list[str],
+    logger: logging.Logger,
+    extract: Callable[[str], str] = lambda output: output,
+) -> packaging.version.Version | None:
+    """
+    Return the version printed by 'command', or None if we can't parse it.
+    Raises OSError if the command isn't installed.
+    """
+    output = subprocess.run(command, stdout=subprocess.PIPE, check=False).stdout.decode(errors="replace").strip()
+    try:
+        version = packaging.version.Version(extract(output))
+    except (IndexError, packaging.version.InvalidVersion):
+        logger.warning("Can't parse the version from '%s': %r", " ".join(command), output)
+        return None
+    logger.debug("%s version %s", command[0], version)
+    return version
+
+
 __all__.append("verify_plugin_version")
 
 
-def verify_plugin_version(version_required: str, logger: logging.Logger) -> bool:
+def verify_plugin_version(logger: logging.Logger, required: str | None = None, interactive: bool = False) -> bool:
     """
-    Verify that a session-manager-plugin is installed
-    and is of a required version or newer.
+    Verify that session-manager-plugin is installed and, if given, of the 'required' version or newer.
+    For 'interactive' sessions warn if it's too old to support 'Enter ~.'.
     """
-    session_manager_plugin = "session-manager-plugin"
-
     try:
-        result = subprocess.run([session_manager_plugin, "--version"], stdout=subprocess.PIPE, check=False)
-        plugin_version = result.stdout.decode("ascii").strip()
-        logger.debug(f"{session_manager_plugin} version {plugin_version}")
+        version = _installed_version(["session-manager-plugin", "--version"], logger)
+    except OSError:
+        logger.error("session-manager-plugin is not installed, see %s", PLUGIN_INSTALL_URL)
+        return False
 
-        if packaging.version.parse(plugin_version) >= packaging.version.parse(version_required):
-            return True
+    if version is None:  # Don't block on output we don't understand
+        return True
 
-        logger.error(f"session-manager-plugin version {plugin_version} is installed, {version_required} is required")
-    except FileNotFoundError:
-        logger.error(f"{session_manager_plugin} not installed")
+    if required and version < packaging.version.Version(required):
+        logger.error(
+            "session-manager-plugin %s is installed, %s or newer is required, see %s",
+            version,
+            required,
+            PLUGIN_INSTALL_URL,
+        )
+        return False
 
-    logger.error(
-        "Check out https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html for instructions",
-    )
+    if interactive and version < packaging.version.Version(PLUGIN_ESCAPE_VERSION):
+        logger.warning(
+            "session-manager-plugin %s can't end a stuck session with 'Enter ~.', upgrade to %s or newer: %s",
+            version,
+            PLUGIN_ESCAPE_VERSION,
+            PLUGIN_INSTALL_URL,
+        )
 
-    return False
+    return True
 
 
 # ---------------------------------------------------------
@@ -201,21 +243,18 @@ def verify_awscli_version(version_required: str, logger: logging.Logger) -> bool
     """
     Verify that the aws-cli is installed and is of a required version or newer.
     """
-    aws_cli = "aws"
-
     try:
-        result = subprocess.run([aws_cli, "--version"], stdout=subprocess.PIPE, check=False)
-        plugin_version = result.stdout.decode("ascii").strip().split(" ")[0].split("/")[1]
-        logger.debug(f"AWS-CLI version {plugin_version}")
-
-        if packaging.version.parse(plugin_version) >= packaging.version.parse(version_required):
-            return True
-
-        logger.error(f"AWS-CLI version {plugin_version} is installed, {version_required} is required")
-    except FileNotFoundError:
+        # E.g. aws-cli/2.15.0 Python/3.11.6 Linux/6.5.0 exe/x86_64.ubuntu.22
+        version = _installed_version(["aws", "--version"], logger, lambda output: output.split(" ")[0].split("/")[1])
+    except OSError:
         logger.error("AWS-CLI is not installed")
+        return False
 
-    return False
+    if version and version < packaging.version.Version(version_required):
+        logger.error("AWS-CLI version %s is installed, %s is required", version, version_required)
+        return False
+
+    return True
 
 
 # ---------------------------------------------------------

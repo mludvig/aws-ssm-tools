@@ -14,7 +14,14 @@ import sys
 
 import botocore.exceptions
 
-from .common import add_general_parameters, configure_logging, handle_boto_error, show_version, target_selector
+from .common import (
+    add_general_parameters,
+    configure_logging,
+    handle_boto_error,
+    show_version,
+    target_selector,
+    verify_plugin_version,
+)
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ssm-port-forward")
@@ -138,6 +145,9 @@ def main() -> int:
         if args.list:
             InstanceResolver(args).print_list()
             sys.exit(0)
+
+        if not verify_plugin_version(logger):
+            sys.exit(1)
 
         if not args.INSTANCE:
             headers, session_details = InstanceResolver(args).print_list(quiet=True)

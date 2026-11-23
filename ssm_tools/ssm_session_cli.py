@@ -19,7 +19,15 @@ import sys
 
 import botocore.exceptions
 
-from .common import add_general_parameters, configure_logging, handle_boto_error, show_version, target_selector
+from .common import (
+    ESCAPE_HELP,
+    add_general_parameters,
+    configure_logging,
+    handle_boto_error,
+    show_version,
+    target_selector,
+    verify_plugin_version,
+)
 from .resolver import InstanceResolver
 from .terminal import run_session
 
@@ -79,7 +87,7 @@ def parse_args(argv: list) -> argparse.Namespace:
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
 before you can start a shell session! Instances not registered in SSM
 will not be recognised by {parser.prog} nor show up in --list output.
-
+{ESCAPE_HELP}
 Visit https://aws.nz/aws-utils/ssm-session for more info and usage examples.
 
 Author: Michael Ludvig
@@ -154,6 +162,9 @@ def main() -> int:
         if args.list:
             InstanceResolver(args).print_list()
             sys.exit(0)
+
+        if not verify_plugin_version(logger, interactive=True):
+            sys.exit(1)
 
         if not args.INSTANCE:
             headers, session_details = InstanceResolver(args).print_list(quiet=True)

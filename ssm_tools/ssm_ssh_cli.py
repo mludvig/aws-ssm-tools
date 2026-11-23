@@ -31,6 +31,9 @@ from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ec2-ssh")
 
+MIN_PLUGIN_VERSION = "1.1.23"  # AWS-StartSSHSession support
+MIN_AWSCLI_VERSION_ENDPOINT = "2.12.0"  # aws ec2-instance-connect open-tunnel
+
 
 def parse_args(argv: list) -> tuple[argparse.Namespace, list[str]]:
     """
@@ -102,13 +105,6 @@ def start_ssh_session(ssh_args: list, profile: str, region: str, use_endpoint: b
         aws_args += f"--reason '{reason}' "
 
     if use_endpoint:
-        min_awscli_version = "2.12.0"
-        if not verify_awscli_version(min_awscli_version, logger):
-            logger.error(
-                f"AWS CLI v{min_awscli_version} or newer is required for --use-endpoint, falling back to SSM Session Manager",
-            )
-            use_endpoint = False
-    if use_endpoint:
         proxy_option = ["-o", f"ProxyCommand=aws {aws_args} ec2-instance-connect open-tunnel --instance-id %h"]
     else:
         proxy_option = [
@@ -129,15 +125,22 @@ def main() -> int:
 
     configure_logging(args.log_level)
 
-    if not verify_plugin_version("1.1.23", logger):
-        sys.exit(1)
-
     try:
         instance_resolver = InstanceResolver(args)
 
         if args.list:
             instance_resolver.print_list()
             sys.exit(0)
+
+        if args.use_endpoint and not verify_awscli_version(MIN_AWSCLI_VERSION_ENDPOINT, logger):
+            logger.error(
+                "AWS CLI v%s or newer is required for --use-endpoint, falling back to SSM Session Manager",
+                MIN_AWSCLI_VERSION_ENDPOINT,
+            )
+            args.use_endpoint = False
+
+        if not args.use_endpoint and not verify_plugin_version(logger, required=MIN_PLUGIN_VERSION):
+            sys.exit(1)
 
         # Loop through all SSH args to find:
         # - instance name

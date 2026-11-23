@@ -17,7 +17,15 @@ from typing import Any
 
 import botocore.exceptions
 
-from .common import add_general_parameters, configure_logging, handle_boto_error, show_version, target_selector
+from .common import (
+    ESCAPE_HELP,
+    add_general_parameters,
+    configure_logging,
+    handle_boto_error,
+    show_version,
+    target_selector,
+    verify_plugin_version,
+)
 from .resolver import ContainerResolver
 from .terminal import run_session
 
@@ -67,7 +75,7 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, list[str]]:
     parser.epilog = f"""
 IMPORTANT: containers must have "execute-command" setting enabled or they
 will not be recognised by {parser.prog} nor show up in --list output.
-
+{ESCAPE_HELP}
 Visit https://aws.nz/aws-utils/ecs-session for more info and usage examples.
 
 Author: Michael Ludvig
@@ -114,6 +122,9 @@ def main() -> int:
         if args.list:
             ContainerResolver(args).print_list()
             sys.exit(0)
+
+        if not verify_plugin_version(logger, interactive=True):
+            sys.exit(1)
 
         if not args.CONTAINER:
             headers, containers = ContainerResolver(args).print_list(quiet=True)
