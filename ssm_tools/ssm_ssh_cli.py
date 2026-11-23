@@ -271,11 +271,18 @@ def main() -> int:
 
         if instance_id:
             logger.debug("Resolved instance name '%s' to '%s'", args.host, instance_id)
+            # EC2 Instance Connect only knows EC2 instances, not hybrid managed instances (mi-)
+            is_ec2 = instance_id.startswith("i-")
+            if args.use_endpoint and not is_ec2:
+                logger.error("--use-endpoint only works with EC2 instances, not with %s", instance_id)
+                sys.exit(1)
             # ssh only sees the instance ID, so ask it which user it would use for the name we were given.
             # See docs/adr/0004-ec2-ssh-login-user.md
             login_name = args.user or ssh_login(ssh_args.options, args.host or instance_id)
             ssh_args.destination = f"{login_name}@{instance_id}"
-            if args.send_key:
+            if args.send_key and not is_ec2:
+                logger.info("Not sending an SSH key to %s, it's not an EC2 instance", instance_id)
+            elif args.send_key:
                 EC2InstanceConnectHelper(args).send_ssh_key(instance_id, login_name, ssh_args.option("-i"))
         else:
             # E.g. an ssh_config alias, let ssh resolve it

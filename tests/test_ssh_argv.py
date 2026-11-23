@@ -97,7 +97,7 @@ class FakeResolver:
         pass
 
     def resolve_instance(self, name: str) -> tuple[str, dict[str, Any]]:
-        return INSTANCES.get(name, name if name.startswith("i-") else ""), {}
+        return INSTANCES.get(name, name if name.startswith(("i-", "mi-")) else ""), {}
 
     def print_list(self, quiet: bool = False) -> tuple[str, list[dict[str, str]]]:
         return "headers", [{"InstanceId": "i-0fedcba9876543210"}]
@@ -136,6 +136,7 @@ def run(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 WEB = "i-0123456789abcdef0"
+HYBRID = "mi-0123456789abcdef0"
 
 
 @pytest.mark.parametrize(
@@ -162,6 +163,8 @@ WEB = "i-0123456789abcdef0"
             ["--", f"sshuser-for-{WEB}@{WEB}", "uptime"],
             [(WEB, f"sshuser-for-{WEB}", "")],
         ),
+        # Hybrid managed instance: EC2 Instance Connect can't send it a key
+        (["u@" + HYBRID], ["--", f"u@{HYBRID}"], []),
         # Not an instance: e.g. an ssh_config alias, passed to ssh untouched and no key sent
         (["-l", "u", "myalias", "uptime"], ["-l", "u", "--", "myalias", "uptime"], []),
         # No destination: the picker
@@ -177,6 +180,18 @@ def test_ssh_command(run: Any, argv: list[str], ssh_argv: list[str], sent: list[
     command, sent_keys = run(*argv)
     assert command == ["ssh", *PROXY, *ssh_argv]
     assert sent_keys == sent
+
+
+def test_use_endpoint_rejects_hybrid(
+    run: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(ssm_ssh_cli, "verify_awscli_version", lambda *_args: True)
+    with pytest.raises(SystemExit) as exc:
+        run("--use-endpoint", f"u@{HYBRID}")
+    assert exc.value.code == 1
+    assert f"--use-endpoint only works with EC2 instances, not with {HYBRID}" in caplog.text
 
 
 @pytest.mark.parametrize(

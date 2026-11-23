@@ -1,7 +1,6 @@
 from typing import Any
 
 import pytest
-from botocore.exceptions import UnStubbedResponseError
 
 from ssm_tools.resolver import ContainerResolver, InstanceResolver
 
@@ -86,18 +85,89 @@ def test_resolve_ambiguous_name_exits(instance_resolver: InstanceResolver, stub:
     assert exc.value.code == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=UnStubbedResponseError,
-    reason="C10: DescribeInstances(InstanceIds=[]) lists the whole region",
-)
-def test_no_ec2_lookup_for_managed_instances_only(instance_resolver: InstanceResolver, stub: Any) -> None:
-    stub(instance_resolver.ssm_client).add_response(
+HYBRID = "mi-0123456789abcdef0"
+DII_PARAMS = {"Filters": [{"Key": "ResourceType", "Values": ["ManagedInstance"]}], "MaxResults": 50}
+
+
+def hybrid_names(**names: str) -> dict[str, Any]:
+    """SSM DescribeInstanceInformation response for hybrid managed instances with these names."""
+    return {"InstanceInformationList": [{"InstanceId": i, "Name": name} for i, name in names.items()]}
+
+
+@pytest.mark.parametrize("target", ["I-0123ABCD", "MI-0123456789ABCDEF0", "i-0123456789abcdef0"])
+def test_instance_id_is_lowercased(instance_resolver: InstanceResolver, stub: Any, target: str) -> None:
+    stub(instance_resolver.ssm_client)
+    stub(instance_resolver.ec2_client)
+    assert instance_resolver.resolve_instance(target) == (target.lower(), {})
+
+
+@pytest.mark.parametrize("target", ["i-0123456", "mi-0123abcd", "i-0123456789abcdef", "i-0123456789abcdefg"])
+def test_malformed_instance_id_is_looked_up_by_name(
+    instance_resolver: InstanceResolver,
+    stub: Any,
+    target: str,
+) -> None:
+    stub(instance_resolver.ssm_client).add_response("get_inventory", inventory({"InstanceId": "i-1"}))
+    stub(instance_resolver.ec2_client).add_response("describe_instances", reservations(ec2("i-1", "10.0.0.1", "web")))
+    assert instance_resolver.resolve_instance(target) == ("", {})
+
+
+def test_managed_instances_only(instance_resolver: InstanceResolver, stub: Any) -> None:
+    ssm = stub(instance_resolver.ssm_client)
+    ssm.add_response(
         "get_inventory",
-        inventory({"InstanceId": "mi-0123456789abcdef0", "ComputerName": "onprem", "IpAddress": "192.168.1.1"}),
+        inventory({"InstanceId": HYBRID, "ComputerName": "onprem", "IpAddress": "192.168.1.1"}),
     )
-    stub(instance_resolver.ec2_client)  # No DescribeInstances call expected
-    assert list(instance_resolver.get_list()) == ["mi-0123456789abcdef0"]
+    ssm.add_response("describe_instance_information", hybrid_names(**{HYBRID: "tagged"}), DII_PARAMS)
+    stub(instance_resolver.ec2_client)  # No DescribeInstances, it would list the whole region
+    assert instance_resolver.get_list() == {
+        HYBRID: {"InstanceId": HYBRID, "InstanceName": "tagged", "HostName": "onprem", "Addresses": ["192.168.1.1"]},
+    }
+
+
+def test_mixed_instances_over_two_pages(instance_resolver: InstanceResolver, stub: Any) -> None:
+    ssm = stub(instance_resolver.ssm_client)
+    ssm.add_response(
+        "get_inventory",
+        inventory({"InstanceId": "i-1"}, {"InstanceId": HYBRID}, {"InstanceId": "i-2"}),
+    )
+    ssm.add_response("describe_instance_information", hybrid_names(**{HYBRID: "onprem"}), DII_PARAMS)
+    ec2_stub = stub(instance_resolver.ec2_client)
+    ec2_stub.add_response(
+        "describe_instances",
+        {**reservations(ec2("i-1", "10.0.0.1", "web")), "NextToken": "page2"},
+        {"InstanceIds": ["i-1", "i-2"]},
+    )
+    ec2_stub.add_response(
+        "describe_instances",
+        reservations(ec2("i-2", "10.0.0.2", "db")),
+        {"InstanceIds": ["i-1", "i-2"], "NextToken": "page2"},
+    )
+    items = instance_resolver.get_list()
+    assert {i: item["InstanceName"] for i, item in items.items()} == {"i-1": "web", HYBRID: "onprem", "i-2": "db"}
+
+
+def test_managed_instance_names_denied(
+    instance_resolver: InstanceResolver,
+    stub: Any,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ssm = stub(instance_resolver.ssm_client)
+    ssm.add_response("get_inventory", inventory({"InstanceId": HYBRID, "ComputerName": "onprem"}))
+    ssm.add_client_error("describe_instance_information", "AccessDeniedException")
+    stub(instance_resolver.ec2_client)
+    assert instance_resolver.get_list()[HYBRID]["InstanceName"] == ""
+    assert "Unable to list managed instance names" in caplog.text
+
+
+def test_resolve_managed_instance_without_ip(instance_resolver: InstanceResolver, stub: Any) -> None:
+    ssm = stub(instance_resolver.ssm_client)
+    ssm.add_response("get_inventory", inventory({"InstanceId": HYBRID, "ComputerName": "onprem"}))
+    ssm.add_response("describe_instance_information", hybrid_names(), DII_PARAMS)
+    stub(instance_resolver.ec2_client)
+    instance_id, details = instance_resolver.resolve_instance("onprem")
+    assert instance_id == HYBRID
+    assert details["Addresses"] == []
 
 
 def ecs_task(task_id: str, container: dict[str, Any]) -> dict[str, Any]:

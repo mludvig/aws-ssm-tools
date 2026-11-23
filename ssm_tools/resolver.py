@@ -14,6 +14,9 @@ from .common import AWSSessionBase
 
 logger = logging.getLogger("ssm-tools.resolver")
 
+# EC2 instance ID (old short or long form) or hybrid managed instance ID
+INSTANCE_ID_RE = re.compile(r"i-[0-9a-f]{8}|m?i-[0-9a-f]{17}", re.IGNORECASE)
+
 
 class InstanceResolver(AWSSessionBase):
     def __init__(self, args: argparse.Namespace) -> None:
@@ -57,16 +60,31 @@ class InstanceResolver(AWSSessionBase):
                     "InstanceId": instance_id,
                     "InstanceName": "",
                     "HostName": content.get("ComputerName", ""),
-                    "Addresses": [content.get("IpAddress")],
+                    "Addresses": [content["IpAddress"]] if content.get("IpAddress") else [],
                 }
                 logger.debug("Added instance: %s: %r", instance_id, items[instance_id])
 
-        # Add attributes from EC2
+        # Add names of hybrid managed instances (mi-*): the Name tag if set, else the activation DefaultInstanceName
+        if any(instance_id.startswith("mi-") for instance_id in items):
+            logger.debug("Fetching SSM managed instance names")
+            paginator = self.ssm_client.get_paginator("describe_instance_information")
+            try:
+                for page in paginator.paginate(
+                    Filters=[{"Key": "ResourceType", "Values": ["ManagedInstance"]}],
+                    PaginationConfig={"PageSize": 50},
+                ):
+                    for info in page["InstanceInformationList"]:
+                        if info["InstanceId"] in items and info.get("Name"):
+                            items[info["InstanceId"]]["InstanceName"] = info["Name"]
+            except ClientError as ex:
+                logger.warning("Unable to list managed instance names: %s", ex)
+
+        # Add attributes from EC2. An empty InstanceIds list would describe the whole region.
         paginator = self.ec2_client.get_paginator("describe_instances")
-        ec2_instance_ids = list(filter(lambda x: x.startswith("i-"), items))
+        ec2_instance_ids = [instance_id for instance_id in items if instance_id.startswith("i-")]
 
         tries = 5
-        while tries:
+        while ec2_instance_ids and tries:
             # The SSM inventory sometimes returns instances that have been terminated
             # a short while ago which makes the following call fail
             # with InvalidInstanceID.NotFound exception. We'll try and remove the invalid
@@ -97,7 +115,7 @@ class InstanceResolver(AWSSessionBase):
                                     items[instance_id]["InstanceName"] = tag["Value"]
 
                             logger.debug("Updated instance: %s: %r", instance_id, items[instance_id])
-                    return items
+                break
 
             except ClientError as ex:
                 if ex.response.get("Error", {}).get("Code", "") != "InvalidInstanceID.NotFound":
@@ -154,8 +172,8 @@ class InstanceResolver(AWSSessionBase):
 
     def resolve_instance(self, instance: str) -> tuple[str, dict[str, Any]]:
         # Is it a valid Instance ID?
-        if re.match("^m?i-[a-f0-9]+$", instance):
-            return instance, {}
+        if INSTANCE_ID_RE.fullmatch(instance):
+            return instance.lower(), {}
 
         # It is not - find it in the list
         instances = []

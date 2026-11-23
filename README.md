@@ -62,6 +62,11 @@ and for ECS Docker Exec: `ecs-session`
   Endpoint* instead (needs AWS CLI 2.12.0 or newer). Names are looked up in
   SSM, so give instances without the SSM agent by their instance ID.
 
+  *Hybrid managed instances* (`mi-...`) work too, but EC2 Instance Connect
+  can't push a key to them, so your key must already be on the instance.
+  `--use-endpoint` doesn't work with them. All the tools need the
+  *advanced-instances tier* to open sessions to hybrid instances.
+
 * **ssm-port-forward**
 
   Forward a local port to a remote port on an EC2 instance (or any host
