@@ -27,10 +27,10 @@ from .common import (
     configure_logging,
     handle_boto_error,
     show_version,
-    target_selector,
     unique_login,
     verify_plugin_version,
 )
+from .picker import target_selector
 from .resolver import InstanceResolver
 from .terminal import run_session
 

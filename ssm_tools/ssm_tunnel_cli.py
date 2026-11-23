@@ -32,8 +32,8 @@ from .common import (
     handle_boto_error,
     seconds_to_human,
     show_version,
-    target_selector,
 )
+from .picker import target_selector
 from .resolver import InstanceResolver
 from .talker import SsmTalker
 

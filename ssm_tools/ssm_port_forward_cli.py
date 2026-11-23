@@ -19,9 +19,9 @@ from .common import (
     configure_logging,
     handle_boto_error,
     show_version,
-    target_selector,
     verify_plugin_version,
 )
+from .picker import target_selector
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ssm-port-forward")

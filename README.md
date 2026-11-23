@@ -405,7 +405,7 @@ on *Amazon Linux 2* instances.
 | `ecs-session` | Yes |
 | `ssm-tunnel` | **No** — requires Linux TUN device and iptables |
 
-The interactive instance-selection menu (shown when no instance name is given) is not available on Windows. Pass an instance name explicitly on the command line instead.
+When no instance name is given, Windows shows a numbered list of instances instead of the interactive menu.
 
 #### Pre-built Windows binaries (no Python required)
 

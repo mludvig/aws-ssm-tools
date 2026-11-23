@@ -25,12 +25,12 @@ from .common import (
     configure_logging,
     handle_boto_error,
     show_version,
-    target_selector,
     unique_login,
     verify_awscli_version,
     verify_plugin_version,
 )
 from .ec2_instance_connect import EC2InstanceConnectHelper
+from .picker import target_selector
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ec2-ssh")

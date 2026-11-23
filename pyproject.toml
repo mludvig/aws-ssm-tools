@@ -34,7 +34,8 @@ dependencies = [
     "pexpect",
     "packaging",
     "tabulate",
-    "simple-term-menu",
+    "simple-term-menu; sys_platform != 'win32'",
+    "wcwidth",
     "botocore",
     "boto3>=1.22.0",
 ]

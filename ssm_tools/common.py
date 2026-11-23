@@ -1,6 +1,7 @@
 import argparse
 import logging
 import pathlib
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -309,31 +310,12 @@ def unique_login(*logins: str) -> str:
 
 # ---------------------------------------------------------
 
-__all__.append("target_selector")
+__all__.append("printable")
 
 
-def target_selector(headers: str, targets: list[dict[str, str]]) -> dict[str, str]:
-    try:
-        from simple_term_menu import TerminalMenu
-    except ImportError:
-        print("ERROR: Interactive instance selection is not supported on this platform.")
-        print("ERROR: Use --list or specify the instance name with --instance.")
-        sys.exit(1)
-    terminal_menu = TerminalMenu(
-        [text["summary"] for text in targets],
-        title=headers,
-        show_search_hint=True,
-        show_search_hint_text="Select a connection. Press 'q' to quit, or '/' to search.",
-    )
-    selected_index = terminal_menu.show()
-    if selected_index is None:
-        sys.exit(0)
-
-    selected_target = targets[int(selected_index)]  # Cast to int to make mypy happy
-    print(headers)
-    print(f"  {selected_target['summary']}")
-
-    return selected_target
+def printable(text: str) -> str:
+    """Replace control characters, e.g. ESC from an instance's self-reported name, with '?'."""
+    return re.sub(r"[\x00-\x1f\x7f-\x9f]", "?", text)
 
 
 # ---------------------------------------------------------
