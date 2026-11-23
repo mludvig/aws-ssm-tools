@@ -18,7 +18,7 @@ usage() {
     echo "Development Commands:"
     echo "  check [tool] Run linting and type checking (black, ruff, mypy, or all)"
     echo "  format       Format code with black and ruff"
-    echo "  test         Run tests (if any)"
+    echo "  test [args]  Run the test suite (pytest, extra args are passed through)"
     echo ""
     echo "Build & Release Commands:"
     echo "  build        Build the package"
@@ -228,9 +228,9 @@ run_checks() {
         black|all)
             echo "Running black..."
             if [ -n "$python_scripts" ]; then
-                uv run black --line-length 120 --check --diff $python_scripts ssm_tools/*.py
+                uv run black --line-length 120 --check --diff $python_scripts ssm_tools/*.py tests/*.py
             else
-                uv run black --line-length 120 --check --diff ssm_tools/*.py
+                uv run black --line-length 120 --check --diff ssm_tools/*.py tests/*.py
             fi
             [ "$tool" = "black" ] && return 0
             ;;
@@ -279,16 +279,16 @@ case "${1:-}" in
         echo "Formatting code..."
         python_scripts="$(grep -l '#!/usr/bin/env python3' ssm-* ecs-* ec2-* 2>/dev/null || true)"
         if [ -n "$python_scripts" ]; then
-            uv run black --line-length 120 $python_scripts ssm_tools/*.py
+            uv run black --line-length 120 $python_scripts ssm_tools/*.py tests/*.py
         else
-            uv run black --line-length 120 ssm_tools/*.py
+            uv run black --line-length 120 ssm_tools/*.py tests/*.py
         fi
         uv run ruff check --fix .
         ;;
     test)
         echo "Running tests..."
-        # Add test command here when tests are available
-        echo "No tests configured yet"
+        shift
+        uv run pytest "$@"
         ;;
     build)
         echo "Building package..."

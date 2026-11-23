@@ -12,8 +12,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+
+    env:
+      # Overrides .python-version, otherwise every matrix job runs on 3.12
+      UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
     - uses: actions/checkout@v4
@@ -29,6 +34,11 @@ jobs:
 
     - name: Run code quality checks
       run: ./dev.sh check
+
+    - name: Run tests
+      run: |
+        uv run python -VV
+        ./dev.sh test
 
   build:
     runs-on: ubuntu-latest

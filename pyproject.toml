@@ -24,6 +24,8 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: System :: Systems Administration",
     "Topic :: System :: Networking",
 ]
@@ -74,6 +76,9 @@ include = [
 [tool.black]
 target-version = ["py310"]
 line-length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 # Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
@@ -151,6 +156,7 @@ dev = [
     "hatch",
     "mypy",
     "pylint",
+    "pytest",
     "ruff",
     "setuptools",
     "twine",

@@ -24,11 +24,6 @@ from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ec2-session")
 
-# Only on Linux / Unix / Mac because Windows don't interpret Ctrl-Z
-if os.name == "posix":
-    # Ignore Ctrl-Z - pass it to the shell
-    signal.signal(signal.SIGTSTP, signal.SIG_IGN)
-
 
 def parse_args(argv: list) -> argparse.Namespace:
     """
@@ -144,6 +139,11 @@ def start_session(instance_id: str, args: argparse.Namespace) -> None:
 
 
 def main() -> int:
+    # Only on Linux / Unix / Mac because Windows don't interpret Ctrl-Z
+    if os.name == "posix":
+        # Ignore Ctrl-Z - pass it to the shell
+        signal.signal(signal.SIGTSTP, signal.SIG_IGN)
+
     ## Split command line to main args and optional command to run
     args = parse_args(sys.argv[1:])
 

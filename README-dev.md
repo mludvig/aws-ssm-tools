@@ -46,7 +46,7 @@ The `dev.sh` script provides all development functionality in one place:
   - `./dev.sh check black` - Run only black
   - `./dev.sh check mypy` - Run only mypy
 - `./dev.sh format` - Format code with black and ruff
-- `./dev.sh test` - Run tests (when available)
+- `./dev.sh test [pytest args]` - Run the test suite
 
 ### Build & Release Commands
 - `./dev.sh build` - Build the package
