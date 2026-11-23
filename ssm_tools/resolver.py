@@ -194,9 +194,17 @@ class ContainerResolver(AWSSessionBase):
         self.args = args
         self.containers: list[dict[str, Any]] = []
         self._tasks: dict[str, Any] = {}
+        self._hosts: dict[str, str] = {}  # containerInstanceArn -> "host:<EC2 instance ID>"
 
     def add_container(self, container: dict[str, Any]) -> None:
         _task_parsed = container["taskArn"].split(":")[-1].split("/")
+        task = self._tasks[container["taskArn"]]
+        # Bridge / host network mode tasks have no ENI, show their EC2 host instead
+        nics = container.get("networkInterfaces")
+        if nics:
+            address = nics[0].get("privateIpv4Address") or nics[0].get("ipv6Address", "")
+        else:
+            address = self._hosts.get(task.get("containerInstanceArn", ""), "")
         self.containers.append(
             {
                 "cluster_name": _task_parsed[1],
@@ -205,7 +213,7 @@ class ContainerResolver(AWSSessionBase):
                 "task_arn": container["taskArn"],
                 "group_name": self._tasks[container["taskArn"]]["group"],
                 "container_name": container["name"],
-                "container_ip": container["networkInterfaces"][0]["privateIpv4Address"],
+                "address": address,
             },
         )
 
@@ -242,6 +250,20 @@ class ContainerResolver(AWSSessionBase):
                     logger.debug(f"No tasks found in cluster {cluster}")
                     break
                 response = self.ecs_client.describe_tasks(cluster=cluster, tasks=page["taskArns"])
+
+                host_arns = {
+                    task["containerInstanceArn"]
+                    for task in response["tasks"]
+                    if "containerInstanceArn" in task
+                    and not all(c.get("networkInterfaces") for c in task["containers"])
+                } - self._hosts.keys()
+                if host_arns:
+                    hosts = self.ecs_client.describe_container_instances(
+                        cluster=cluster,
+                        containerInstances=sorted(host_arns),
+                    )
+                    for host in hosts["containerInstances"]:
+                        self._hosts[host["containerInstanceArn"]] = f"host:{host.get('ec2InstanceId', '')}"
 
                 # Filter containers that have a running ExecuteCommandAgent
                 for task in response["tasks"]:
@@ -300,7 +322,7 @@ class ContainerResolver(AWSSessionBase):
                     container["group_name"],
                     container["task_id"],
                     container["container_name"],
-                    container["container_ip"],
+                    container["address"],
                 ):
                     logger.debug(
                         "IGNORED: Container %s/%s doesn't match keyword: %s",

@@ -32,7 +32,7 @@ from .terminal import run_session
 logger = logging.getLogger("ssm-tools.ecs-session")
 
 
-def parse_args(argv: list) -> tuple[argparse.Namespace, list[str]]:
+def parse_args(argv: list) -> argparse.Namespace:
     """
     Parse command line arguments.
     """
@@ -82,13 +82,13 @@ Author: Michael Ludvig
 """
 
     # Parse supplied arguments
-    args, extras = parser.parse_known_args(argv)
+    args = parser.parse_args(argv)
 
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
 
-    return args, extras
+    return args
 
 
 def execute_command(container: dict[str, Any], args: argparse.Namespace, command: str) -> int:
@@ -114,7 +114,7 @@ def execute_command(container: dict[str, Any], args: argparse.Namespace, command
 
 def main() -> int:
     ## Split command line to main args and optional command to run
-    args, _ = parse_args(sys.argv[1:])
+    args = parse_args(sys.argv[1:])
 
     configure_logging(args.log_level)
 

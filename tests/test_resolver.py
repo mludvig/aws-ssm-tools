@@ -126,6 +126,7 @@ def ecs_stub(cli_args: Any, stub: Any) -> Any:
         stubber.add_response("list_clusters", {"clusterArns": [tasks[0]["clusterArn"]]})
         stubber.add_response("list_tasks", {"taskArns": [task["taskArn"] for task in tasks]})
         stubber.add_response("describe_tasks", {"tasks": list(tasks)})
+        return stubber
 
     return resolver, add_tasks
 
@@ -140,15 +141,30 @@ def test_resolve_container_by_keywords(ecs_stub: Any) -> None:
     assert container["task_id"] == "bbb"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=IndexError,
-    reason="C08: bridge/host-mode containers have no networkInterfaces",
-)
-def test_list_bridge_mode_container(ecs_stub: Any) -> None:
+HOST_ARN = f"arn:aws:ecs:{REGION}:{ACCOUNT}:container-instance/lab/0123"
+
+
+def test_bridge_mode_container_shows_its_host(ecs_stub: Any) -> None:
     resolver, add_tasks = ecs_stub
-    add_tasks(ecs_task("ccc", {"name": "nginx", "networkInterfaces": []}))
-    assert [c["task_id"] for c in resolver.get_list()] == ["ccc"]
+    bridge = {**ecs_task("ccc", {"name": "nginx", "networkInterfaces": []}), "containerInstanceArn": HOST_ARN}
+    add_tasks(bridge).add_response(
+        "describe_container_instances",
+        {"containerInstances": [{"containerInstanceArn": HOST_ARN, "ec2InstanceId": "i-0123456789abcdef0"}]},
+        {"cluster": bridge["clusterArn"], "containerInstances": [HOST_ARN]},
+    )
+    assert resolver.resolve_container(["host:i-0123456789abcdef0"])["task_id"] == "ccc"
+
+
+def test_container_addresses(ecs_stub: Any) -> None:
+    resolver, add_tasks = ecs_stub
+    add_tasks(  # no describe_container_instances: both have an ENI
+        {
+            **ecs_task("aaa", {"name": "a", "networkInterfaces": [{"privateIpv4Address": "10.0.1.1"}]}),
+            "containerInstanceArn": HOST_ARN,
+        },
+        ecs_task("bbb", {"name": "b", "networkInterfaces": [{"ipv6Address": "2001:db8::1"}]}),
+    )
+    assert [c["address"] for c in resolver.get_list()] == ["10.0.1.1", "2001:db8::1"]
 
 
 @pytest.mark.parametrize(("information", "platform"), [([{"PlatformType": "Windows"}], "Windows"), ([], "")])
