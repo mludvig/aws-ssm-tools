@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Convenience wrapper around 'aws ssm start-session' for port forwarding.
+# Convenience wrapper around Session Manager's StartSession for port forwarding.
 # Supports both local port forwarding and remote host forwarding.
 #
 # See https://github.com/mludvig/aws-ssm-tools for more info.
@@ -9,8 +9,8 @@
 
 import argparse
 import logging
-import os
 import sys
+from typing import Any
 
 import botocore.exceptions
 
@@ -22,6 +22,7 @@ from .common import (
     verify_plugin_version,
 )
 from .picker import target_selector
+from .plugin import PLUGIN_ENV_VERSION, run_plugin
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ssm-port-forward")
@@ -97,43 +98,20 @@ Author: Michael Ludvig
     return args
 
 
-def start_port_forward(instance_id: str, args: argparse.Namespace) -> None:
-    exec_args = ["aws", "ssm", "start-session"]
-    if args.profile:
-        exec_args += ["--profile", args.profile]
-    if args.region:
-        exec_args += ["--region", args.region]
-    if args.reason:
-        exec_args += ["--reason", args.reason]
-
+def start_port_forward(ssm_client: Any, instance_id: str, args: argparse.Namespace) -> int:
+    parameters: dict[str, Any] = {
+        "Target": instance_id,
+        "DocumentName": "AWS-StartPortForwardingSession",
+        "Parameters": {"portNumber": [str(args.remote_port)], "localPortNumber": [str(args.local_port)]},
+    }
     if args.remote_host:
-        exec_args += [
-            "--document-name",
-            "AWS-StartPortForwardingSessionToRemoteHost",
-            "--parameters",
-            f"portNumber={args.remote_port},localPortNumber={args.local_port},host={args.remote_host}",
-        ]
-    else:
-        exec_args += [
-            "--document-name",
-            "AWS-StartPortForwardingSession",
-            "--parameters",
-            f"portNumber={args.remote_port},localPortNumber={args.local_port}",
-        ]
+        parameters["DocumentName"] = "AWS-StartPortForwardingSessionToRemoteHost"
+        parameters["Parameters"]["host"] = [args.remote_host]
+    if args.reason:
+        parameters["Reason"] = args.reason
 
-    exec_args += ["--target", instance_id]
-    logger.debug("Running: %s", exec_args)
-
-    if os.name == "nt":
-        # os.execvp doesn't replace the process on Windows; use subprocess instead
-        import subprocess
-
-        try:
-            sys.exit(subprocess.call(exec_args))
-        except KeyboardInterrupt:
-            sys.exit(0)
-    else:
-        os.execvp(exec_args[0], exec_args)
+    logger.debug("Starting session: %s", parameters)
+    return run_plugin(ssm_client, ssm_client.start_session(**parameters), parameters, args.profile)
 
 
 def main() -> int:
@@ -142,33 +120,33 @@ def main() -> int:
     configure_logging(args.log_level)
 
     try:
+        instance_resolver = InstanceResolver(args)
+
         if args.list:
-            InstanceResolver(args).print_list()
+            instance_resolver.print_list()
             sys.exit(0)
 
-        if not verify_plugin_version(logger):
+        if not verify_plugin_version(logger, required=PLUGIN_ENV_VERSION):
             sys.exit(1)
 
         if not args.INSTANCE:
-            headers, session_details = InstanceResolver(args).print_list(quiet=True)
+            headers, session_details = instance_resolver.print_list(quiet=True)
             selected_session = target_selector(headers, session_details)
             instance_id = selected_session["InstanceId"]
         else:
-            instance_id, _ = InstanceResolver(args).resolve_instance(args.INSTANCE)
+            instance_id, _ = instance_resolver.resolve_instance(args.INSTANCE)
 
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
             logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
             sys.exit(1)
 
-        start_port_forward(instance_id, args)
+        return start_port_forward(instance_resolver.ssm_client, instance_id, args)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         handle_boto_error(e, logger, args.profile)
         sys.exit(1)
 
-    return 0
-
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

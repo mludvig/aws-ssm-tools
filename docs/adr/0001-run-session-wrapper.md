@@ -30,4 +30,4 @@ It returns the child's exit code, or 128+N for a signal. If stdin isn't our fore
 - **Alternatives rejected:**
   - Keeping the child in the same process group: in the lab this still leaked the orphan.
   - A pty proxy: too complex.
-  - Running the plugin directly: deferred to C17. It needs boto3 `StartSession`, and this wrapper would still be used for it.
+  - Running the plugin directly: done later, in ADR 0011, through this wrapper.

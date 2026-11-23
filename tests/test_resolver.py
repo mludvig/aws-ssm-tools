@@ -346,10 +346,14 @@ def test_resolve_container_by_keywords(ecs_stub: Any) -> None:
     resolver, add_tasks = ecs_stub
     add_tasks(
         ecs_task("aaa", {"name": "nginx", "networkInterfaces": [{"privateIpv4Address": "10.0.1.1"}]}),
-        ecs_task("bbb", {"name": "nginx", "networkInterfaces": [{"privateIpv4Address": "10.0.1.2"}]}),
+        ecs_task(
+            "bbb",
+            {"name": "nginx", "runtimeId": "bbb-1", "networkInterfaces": [{"privateIpv4Address": "10.0.1.2"}]},
+        ),
     )
     container = resolver.resolve_container(["nginx", "10.0.1.2"])
     assert container["task_id"] == "bbb"
+    assert container["runtime_id"] == "bbb-1"  # For the plugin's target
 
 
 HOST_ARN = f"arn:aws:ecs:{REGION}:{ACCOUNT}:container-instance/lab/0123"

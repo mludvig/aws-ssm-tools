@@ -1,4 +1,3 @@
-import json
 import shlex
 from typing import Any
 
@@ -43,8 +42,14 @@ def test_bad_user(capsys: pytest.CaptureFixture, argv: list[str], message: str) 
     assert message in capsys.readouterr().err
 
 
+class FakeSSM:
+    def start_session(self, **parameters: Any) -> dict[str, Any]:
+        return {"SessionId": "s-1", **parameters}
+
+
 class FakeResolver:
     platform = "Linux"
+    ssm_client = FakeSSM()
 
     def __init__(self, _args: Any) -> None:
         pass
@@ -58,27 +63,31 @@ class FakeResolver:
 
 @pytest.fixture
 def run(monkeypatch: pytest.MonkeyPatch) -> Any:
-    """Run ec2-session with 'argv' and return the aws argv it would run, or None."""
+    """Run ec2-session with 'argv' and return the StartSession parameters it would use, or None."""
 
-    def _run(*argv: str) -> list[str] | None:
-        commands: list[list[str]] = []
+    def _run(*argv: str) -> dict[str, Any] | None:
+        sessions: list[dict[str, Any]] = []
+
+        def run_plugin(_client: Any, response: dict[str, Any], parameters: dict[str, Any], _profile: Any) -> int:
+            assert response == {"SessionId": "s-1", **parameters}  # The plugin gets the session we started
+            sessions.append(parameters)
+            return 0
+
         monkeypatch.setattr(ssm_session_cli, "InstanceResolver", FakeResolver)
         monkeypatch.setattr(ssm_session_cli, "verify_plugin_version", lambda *_args, **_kwargs: True)
-        monkeypatch.setattr(ssm_session_cli, "run_session", lambda command: commands.append(command) or 0)
+        monkeypatch.setattr(ssm_session_cli, "run_plugin", run_plugin)
         monkeypatch.setattr("sys.argv", ["ec2-session", *argv])
         ssm_session_cli.main()
-        return commands[0] if commands else None
+        return sessions[0] if sessions else None
 
     return _run
 
 
-def remote_command(aws_argv: list[str]) -> str:
+def remote_command(parameters: dict[str, Any]) -> str:
     """The command the instance runs, as AWS-StartInteractiveCommand gets it."""
-    assert aws_argv[aws_argv.index("--document-name") + 1] == "AWS-StartInteractiveCommand"
-    parameters = json.loads(aws_argv[aws_argv.index("--parameters") + 1])
-    assert list(parameters) == ["command"]
-    assert len(parameters["command"]) == 1
-    return parameters["command"][0]
+    assert parameters["DocumentName"] == "AWS-StartInteractiveCommand"
+    assert parameters["Parameters"] == {"command": [parameters["Parameters"]["command"][0]]}
+    return parameters["Parameters"]["command"][0]
 
 
 @pytest.mark.parametrize(
@@ -95,9 +104,21 @@ def test_sudo_user(run: Any, user: str) -> None:
 
 
 def test_plain_session(run: Any) -> None:
-    assert run("--reason", "a, \"b\" 'c'", "web") == [
-        *["aws", "ssm", "start-session", "--reason", "a, \"b\" 'c'", "--target", WEB],
-    ]
+    assert run("web") == {"Target": WEB}
+    assert run("--reason", "a, \"b\" 'c'", "web") == {"Target": WEB, "Reason": "a, \"b\" 'c'"}
+
+
+def test_document(run: Any, capsys: pytest.CaptureFixture) -> None:
+    document = ["--document-name", "AWS-StartInteractiveCommand"]
+    assert run(*document, "--parameters", '{"command": ["echo a,b"]}', "web") == {
+        "Target": WEB,
+        "DocumentName": "AWS-StartInteractiveCommand",
+        "Parameters": {"command": ["echo a,b"]},
+    }
+    with pytest.raises(SystemExit) as exc:
+        run(*document, "--parameters", 'command=["top"]', "web")  # The aws CLI shorthand
+    assert exc.value.code == 2
+    assert "--parameters must be JSON" in capsys.readouterr().err
 
 
 def test_user_on_windows(run: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

@@ -1,9 +1,12 @@
 import os
 import shlex
 import subprocess
+from collections.abc import Callable
 from typing import Any
 
+import boto3
 import pytest
+from botocore.stub import Stubber
 
 from ssm_tools import ecs_session_cli
 from ssm_tools.ecs_session_cli import USER_SWITCH_SCRIPT, parse_args, user_command
@@ -73,7 +76,41 @@ def test_main_runs_command_as_user(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(ecs_session_cli, "ContainerResolver", FakeResolver)
     monkeypatch.setattr(ecs_session_cli, "verify_plugin_version", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(ecs_session_cli, "execute_command", lambda _container, _args, command: commands.append(command))
+    monkeypatch.setattr(ecs_session_cli, "execute_command", lambda *args: commands.append(args[-1]))
     monkeypatch.setattr("sys.argv", ["ecs-session", "-c", "id", "nobody@web"])
     ecs_session_cli.main()
     assert commands == [user_command("nobody", "id")]
+
+
+def test_execute_command(monkeypatch: pytest.MonkeyPatch, stub: Callable[[Any], Stubber]) -> None:
+    class Resolver:
+        session = boto3.session.Session()
+        ecs_client = session.client("ecs")
+
+    container = {
+        "cluster_name": "lab",
+        "cluster_arn": "arn:aws:ecs:ap-southeast-2:123456789012:cluster/lab",
+        "task_id": "0123456789abcdef0123456789abcdef",
+        "task_arn": "arn:aws:ecs:ap-southeast-2:123456789012:task/lab/0123456789abcdef0123456789abcdef",
+        "container_name": "app",
+        "runtime_id": "0123456789abcdef0123456789abcdef-1234567890",
+    }
+    request = {
+        "cluster": container["cluster_arn"],
+        "task": container["task_arn"],
+        "container": "app",
+        "command": "id",
+        "interactive": True,
+    }
+    session = {"sessionId": "ecs-execute-command-1", "tokenValue": "secret", "streamUrl": "wss://ssm/1"}
+    stub(Resolver.ecs_client).add_response("execute_command", {"session": session}, request)
+    calls = []
+    monkeypatch.setattr(ecs_session_cli, "run_plugin", lambda *args: calls.append(args) or 0)
+
+    args = parse_args(["--profile", "lab", "web"])
+    assert ecs_session_cli.execute_command(Resolver(), container, args, "id") == 0  # type: ignore[arg-type]
+    [(ssm_client, response, parameters, profile)] = calls
+    assert ssm_client.meta.service_model.service_name == "ssm"
+    assert response == {"SessionId": "ecs-execute-command-1", "TokenValue": "secret", "StreamUrl": "wss://ssm/1"}
+    assert parameters == {"Target": f"ecs:lab_{container['task_id']}_{container['runtime_id']}"}
+    assert profile == "lab"

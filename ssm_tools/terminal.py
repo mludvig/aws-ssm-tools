@@ -1,5 +1,5 @@
 """
-Run an interactive session child (aws + session-manager-plugin) and keep the terminal sane.
+Run an interactive session child (session-manager-plugin, or ssh) and keep the terminal sane.
 
 See docs/adr/0001-run-session-wrapper.md for why this replaces os.execvp().
 """
@@ -26,24 +26,26 @@ _SOFT_RESET = (
 )
 
 
-def run_session(exec_args: list[str]) -> int:
+def run_session(exec_args: list[str], env: dict[str, str] | None = None) -> int:
     """
-    Run exec_args and return its exit code (128+N if it, or we, got signal N).
+    Run exec_args, with 'env' added to the environment, and return its exit code
+    (128+N if it, or we, got signal N).
     """
     executable = shutil.which(exec_args[0])
     if not executable:
         logger.error("Command not found: %s", exec_args[0])
         return 127
     command = [executable, *exec_args[1:]]
+    child_env = {**os.environ, **env} if env else None
 
     # Nothing of ours must end up after the child's output
     sys.stdout.flush()
     sys.stderr.flush()
 
     if os.name == "posix" and os.isatty(0) and os.tcgetpgrp(0) == os.getpgrp():
-        return _run_foreground_job(command)
+        return _run_foreground_job(command, child_env)
 
-    return _run_child(command)
+    return _run_child(command, child_env)
 
 
 def _exit_code(received: list[int], returncode: int) -> int:
@@ -52,13 +54,13 @@ def _exit_code(received: list[int], returncode: int) -> int:
     return returncode if returncode >= 0 else 128 - returncode
 
 
-def _run_child(command: list[str]) -> int:
+def _run_child(command: list[str], env: dict[str, str] | None) -> int:
     """
     No terminal of ours to manage (or Windows). Pass TERM and HUP on, and wait for the child,
     so that our caller still cleans up.
     """
     received: list[int] = []
-    proc = subprocess.Popen(command)
+    proc = subprocess.Popen(command, env=env)
 
     def _forward(signum: int, _frame: object) -> None:
         received.append(signum)
@@ -68,7 +70,7 @@ def _run_child(command: list[str]) -> int:
     old_handlers = {signum: signal.signal(signum, _forward) for signum in forwarded}
     try:
         returncode = proc.wait()
-    except KeyboardInterrupt:  # As subprocess.call() did: aws ignores it during a session
+    except KeyboardInterrupt:  # As subprocess.call() did
         received.append(signal.SIGINT)
         proc.kill()
         returncode = proc.wait()
@@ -84,10 +86,10 @@ def _killpg(pgid: int, signum: int) -> None:
         os.killpg(pgid, signum)
 
 
-def _run_foreground_job(command: list[str]) -> int:
+def _run_foreground_job(command: list[str], env: dict[str, str] | None) -> int:
     """
     Run the command as the terminal's foreground process group, like a shell job,
-    so that we can kill all of it (aws *and* the plugin) and then restore the terminal.
+    so that we can kill all of it (e.g. ssh *and* its ProxyCommand) and then restore the terminal.
     """
     import termios  # POSIX only
 
@@ -102,11 +104,11 @@ def _run_foreground_job(command: list[str]) -> int:
 
     # We're in the background while the child runs; the child resets this in _child_setup()
     old_handlers = {signal.SIGTTOU: signal.signal(signal.SIGTTOU, signal.SIG_IGN)}
-    proc = subprocess.Popen(command, preexec_fn=_child_setup)
+    proc = subprocess.Popen(command, env=env, preexec_fn=_child_setup)
 
     def _forward(signum: int, _frame: object) -> None:
         received.append(signum)
-        _killpg(proc.pid, signum)  # aws doesn't pass TERM / HUP on to the plugin
+        _killpg(proc.pid, signum)  # The child may not pass TERM / HUP on to its own children
 
     # Set after Popen() so that the child doesn't inherit SIG_IGN
     for signum, new_handler in (
@@ -121,7 +123,7 @@ def _run_foreground_job(command: list[str]) -> int:
     try:
         returncode = proc.wait()
     finally:
-        # If aws died first the plugin is still in the group, reading the terminal.
+        # If the child died first its own children may still be in the group, reading the terminal.
         # Kill it before taking the terminal back, or it eats the user's next line.
         _killpg(proc.pid, signal.SIGTERM)
         with contextlib.suppress(OSError):  # The terminal may be gone (SIGHUP)

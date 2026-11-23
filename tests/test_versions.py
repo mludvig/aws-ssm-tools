@@ -7,6 +7,7 @@ import pytest
 
 from ssm_tools import common, ssm_ssh_cli
 from ssm_tools.common import verify_awscli_version, verify_plugin_version
+from ssm_tools.plugin import PLUGIN_ENV_VERSION
 
 
 def assert_logged(caplog: pytest.LogCaptureFixture, message: str) -> None:
@@ -116,6 +117,26 @@ def test_list_skips_plugin_check(monkeypatch: pytest.MonkeyPatch, module: str, r
     with pytest.raises(SystemExit) as exc:
         cli.main()
     assert exc.value.code == 0
+
+
+@pytest.mark.parametrize(
+    ("module", "resolver", "target"),
+    [
+        ("ssm_session_cli", "InstanceResolver", "web"),
+        ("ecs_session_cli", "ContainerResolver", "web"),
+        ("ssm_port_forward_cli", "InstanceResolver", "web"),
+    ],
+)
+def test_old_plugin_exits(monkeypatch: pytest.MonkeyPatch, module: str, resolver: str, target: str) -> None:
+    checks: list[dict[str, Any]] = []
+    cli = importlib.import_module(f"ssm_tools.{module}")
+    monkeypatch.setattr(cli, resolver, FakeResolver)
+    monkeypatch.setattr(cli, "verify_plugin_version", lambda _logger, **kwargs: checks.append(kwargs) and False)
+    monkeypatch.setattr("sys.argv", [module, target, *(["--remote-port", "80"] if "port" in module else [])])
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+    assert exc.value.code == 1
+    assert checks[0]["required"] == PLUGIN_ENV_VERSION
 
 
 def test_ssh_use_endpoint_skips_plugin_check(monkeypatch: pytest.MonkeyPatch) -> None:

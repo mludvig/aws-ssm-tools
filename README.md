@@ -11,8 +11,8 @@ and for ECS Docker Exec: `ecs-session`
 
 * **ec2-session** (formerly _ssm-session_)
 
-  Wrapper around `aws ssm start-session` that can open
-  SSM Session to an instance specified by *Name* or *IP Address*.
+  Like `aws ssm start-session`, but opens an SSM Session to an
+  instance specified by *Name* or *IP Address*.
 
   It doesn't need user credentials or even `sshd` running on the instance.
 
@@ -23,7 +23,7 @@ and for ECS Docker Exec: `ecs-session`
 
 * **ecs-session**
 
-  Wrapper around `aws ecs execute-command` that can run a command
+  Like `aws ecs execute-command`, but can run a command
   or open an interactive session to an Exec-enabled ECS container
   specified by the service, name, IP address, etc.
 
@@ -161,6 +161,7 @@ and for ECS Docker Exec: `ecs-session`
     first output. Print something first, e.g. `-c "printf '\r'; read x; ..."`.
 
     You can specify other SSM documents to run with `--document-name AWS-...`
+    and their parameters as JSON, e.g. `--parameters '{"command": ["top"]}'`,
     to customise your session. Refer to AWS docs for details.
 
     To end a session that stopped responding press `Enter` then `~.`
@@ -334,8 +335,9 @@ Standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
 
 ## Installation
 
-All the tools use **AWS CLI** to open **SSM Session** and then use that
-session to run commands on the target instance. The target instances **must be
+The tools open an **SSM Session** and then use that session to run commands
+on the target instance. `ec2-ssh` and `ssm-tunnel` open it through the
+**AWS CLI**; the others open it themselves and need only `session-manager-plugin`. The target instances **must be
 registered in SSM**, which means they need:
 
 - **connectivity to SSM endpoint**, e.g. through public IP, NAT Gateway, or
@@ -348,15 +350,15 @@ for more informations.
 
 ### Install *AWS CLI* and `session-manager-plugin`
 
-Make sure you've got `aws` and `session-manager-plugin` installed locally
-on your laptop.
+Make sure you've got `session-manager-plugin` installed locally on your
+laptop, and `aws` too if you use `ec2-ssh` or `ssm-tunnel`.
 
 ```
 ~ $ aws --version
 aws-cli/1.18.31 Python/3.6.9 Linux/5.3.0-42-generic botocore/1.15.31
 
 ~ $ session-manager-plugin --version
-1.1.56.0
+1.2.835.0
 ```
 
 Follow [AWS CLI installation
@@ -364,8 +366,10 @@ guide](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html)
 and [session-manager-plugin
 installation guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) to install them if needed.
 
-Note that `ec2-ssh` needs `session-manager-plugin` version *1.1.23* or
-newer, and `Enter ~.` to end a stuck session needs *1.2.835.0* or newer.
+Note that `ec2-session`, `ecs-session` and `ssm-port-forward` need
+`session-manager-plugin` version *1.2.497.0* or newer, `ec2-ssh` needs
+*1.1.23* or newer, and `Enter ~.` to end a stuck session needs *1.2.835.0*
+or newer.
 Upgrade if your version is older.
 
 ### Register your instances with Systems Manager
@@ -419,8 +423,8 @@ If you don't have Python installed, download the pre-built zip bundle from the
 Extract it — you'll get a single `aws-ssm-tools\` folder containing all four `.exe` files and a shared `_internal\` directory with the Python runtime and libraries.
 Add the `aws-ssm-tools\` folder to your `PATH` to use the tools from anywhere.
 
-You still need **AWS CLI** and **session-manager-plugin** installed — the bundles
-only contain the Python code, not the AWS CLI itself.
+You still need **session-manager-plugin** installed, and **AWS CLI** for
+`ec2-ssh` — the bundles only contain the Python code, not the AWS CLI itself.
 
 ### Standalone *ssm-tunnel-agent* installation
 

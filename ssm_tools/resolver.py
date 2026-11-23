@@ -237,7 +237,7 @@ class InstanceResolver(AWSSessionBase):
 
 
 class ContainerResolver(AWSSessionBase):
-    HIDDEN = ("cluster_arn", "task_arn")  # Not shown in tables
+    HIDDEN = ("cluster_arn", "task_arn", "runtime_id")  # Not shown in tables
 
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__(args)
@@ -267,6 +267,7 @@ class ContainerResolver(AWSSessionBase):
                 "task_arn": container["taskArn"],
                 "group_name": self._tasks[container["taskArn"]]["group"],
                 "container_name": container["name"],
+                "runtime_id": container.get("runtimeId", ""),  # Not there until the container started
                 "address": address,
             },
         )

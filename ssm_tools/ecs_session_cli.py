@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-# Convenience wrapper around 'aws ecs execute-command'
+# Convenience wrapper around ECS Exec ('aws ecs execute-command')
 #
 # See https://aws.nz/aws-utils/ecs-session for more info.
 #
 # Author: Michael Ludvig (https://aws.nz)
 
 # The script can list the available containers across all your ECS clusters.
-# In the end it executes 'aws ecs execute-command' with the appropriate parameters.
+# In the end it calls ExecuteCommand and runs session-manager-plugin on the session.
 # Supports both EC2 and Fargate ECS tasks.
 
 import argparse
@@ -29,8 +29,8 @@ from .common import (
     verify_plugin_version,
 )
 from .picker import target_selector
+from .plugin import PLUGIN_ENV_VERSION, run_plugin
 from .resolver import ContainerResolver
-from .terminal import run_session
 
 logger = logging.getLogger("ssm-tools.ecs-session")
 
@@ -138,25 +138,28 @@ def user_command(user: str, command: str) -> str:
     return shlex.join(["/bin/sh", "-c", USER_SWITCH_SCRIPT, user, command])
 
 
-def execute_command(container: dict[str, Any], args: argparse.Namespace, command: str) -> int:
-    exec_args = ["aws", "ecs", "execute-command"]
-    if args.profile:
-        exec_args += ["--profile", args.profile]
-    if args.region:
-        exec_args += ["--region", args.region]
-
-    # fmt: off
-    exec_args += [
-        "--cluster", container["cluster_arn"],
-        "--task", container["task_arn"],
-        "--container", container["container_name"],
-        "--command", command,
-        "--interactive",
-    ]
-    # fmt: on
-
-    logger.debug("Running: %s", exec_args)
-    return run_session(exec_args)
+def execute_command(
+    resolver: ContainerResolver,
+    container: dict[str, Any],
+    args: argparse.Namespace,
+    command: str,
+) -> int:
+    logger.debug("Running %r in %s", command, container["container_name"])
+    session = resolver.ecs_client.execute_command(
+        cluster=container["cluster_arn"],
+        task=container["task_arn"],
+        container=container["container_name"],
+        command=command,
+        interactive=True,
+    )["session"]
+    # The plugin wants StartSession's keys and the ECS target
+    response = {
+        "SessionId": session["sessionId"],
+        "TokenValue": session["tokenValue"],
+        "StreamUrl": session["streamUrl"],
+    }
+    target = f"ecs:{container['cluster_name']}_{container['task_id']}_{container['runtime_id']}"
+    return run_plugin(resolver.session.client("ssm"), response, {"Target": target}, args.profile)
 
 
 def main() -> int:
@@ -170,7 +173,7 @@ def main() -> int:
             ContainerResolver(args).print_list()
             sys.exit(0)
 
-        if not verify_plugin_version(logger, interactive=True):
+        if not verify_plugin_version(logger, required=PLUGIN_ENV_VERSION, interactive=True):
             sys.exit(1)
 
         if not args.CONTAINER:
@@ -181,14 +184,15 @@ def main() -> int:
                 selected_session["container_name"],
             ]
 
-        container = ContainerResolver(args).resolve_container(keywords=args.CONTAINER)
+        resolver = ContainerResolver(args)
+        container = resolver.resolve_container(keywords=args.CONTAINER)
 
         if not container:
             logger.warning("Could not find any container matching: %s", " AND ".join(args.CONTAINER))
             sys.exit(1)
 
         command = user_command(args.user, args.command) if args.user else args.command
-        return execute_command(container, args, command)
+        return execute_command(resolver, container, args, command)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         handle_boto_error(e, logger, args.profile)

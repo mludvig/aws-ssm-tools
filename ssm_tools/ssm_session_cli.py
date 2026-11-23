@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Convenience wrapper around 'aws ssm start-session'
+# Convenience wrapper around Session Manager's StartSession
 # can resolve instance id from Name tag, hostname, IP address, etc.
 #
 # See https://aws.nz/aws-utils/ssm-session for more info.
@@ -8,8 +8,8 @@
 # Author: Michael Ludvig (https://aws.nz)
 
 # The script can list available instances, resolve instance names,
-# and host names, etc. In the end it executes 'aws' to actually
-# start the session.
+# and host names, etc. In the end it runs session-manager-plugin to
+# actually start the session.
 
 import argparse
 import json
@@ -18,6 +18,7 @@ import os
 import shlex
 import signal
 import sys
+from typing import Any
 
 import botocore.exceptions
 
@@ -31,8 +32,8 @@ from .common import (
     verify_plugin_version,
 )
 from .picker import target_selector
+from .plugin import PLUGIN_ENV_VERSION, run_plugin
 from .resolver import InstanceResolver
-from .terminal import run_session
 
 logger = logging.getLogger("ssm-tools.ec2-session")
 
@@ -90,7 +91,7 @@ def parse_args(argv: list) -> argparse.Namespace:
     group_session.add_argument(
         "--parameters",
         dest="parameters",
-        help="Parameters for the --document-name, e.g. 'command=[\"sudo -i -u ec2-user\"]' (optional)",
+        help='Parameters for the --document-name in JSON, e.g. \'{"command": ["sudo -i -u ec2-user"]}\' (optional)',
     )
 
     parser.description = "Start SSM Shell Session to an EC2 instance"
@@ -120,6 +121,11 @@ Author: Michael Ludvig
 
     if args.parameters and not args.document_name:
         parser.error("--parameters can only be used together with --document-name")
+    if args.parameters:
+        try:
+            args.parameters = json.loads(args.parameters)
+        except ValueError as e:
+            parser.error(f'--parameters must be JSON, e.g. \'{{"command": ["top"]}}\': {e}')
 
     if bool(args.user) + bool(args.command) + bool(args.document_name) > 1:
         parser.error(
@@ -133,35 +139,25 @@ the command with the appropriate: sudo -i -u USER COMMAND
     return args
 
 
-def start_session(instance_id: str, args: argparse.Namespace) -> int:
-    exec_args = ["aws", "ssm", "start-session"]
-    if args.profile:
-        exec_args += ["--profile", args.profile]
-    if args.region:
-        exec_args += ["--region", args.region]
+def start_session(ssm_client: Any, instance_id: str, args: argparse.Namespace) -> int:
+    parameters: dict[str, Any] = {"Target": instance_id}
     if args.reason:
-        exec_args += ["--reason", args.reason]
+        parameters["Reason"] = args.reason
 
-    # Run --user / --command through AWS-StartInteractiveCommand. JSON, not the AWS CLI
-    # shorthand syntax, so that commas, quotes and brackets reach the instance as typed.
+    # Run --user / --command through AWS-StartInteractiveCommand
     command = f"sudo -i -u {shlex.quote(args.user)}" if args.user else args.command
     if command:
-        exec_args += [
-            "--document-name",
-            "AWS-StartInteractiveCommand",
-            "--parameters",
-            json.dumps({"command": [command]}),
-        ]
+        parameters["DocumentName"] = "AWS-StartInteractiveCommand"
+        parameters["Parameters"] = {"command": [command]}
     else:
         # Or use the provided values
         if args.document_name:
-            exec_args += ["--document-name", args.document_name]
+            parameters["DocumentName"] = args.document_name
         if args.parameters:
-            exec_args += ["--parameters", args.parameters]
+            parameters["Parameters"] = args.parameters
 
-    exec_args += ["--target", instance_id]
-    logger.debug("Running: %s", exec_args)
-    return run_session(exec_args)
+    logger.debug("Starting session: %s", parameters)
+    return run_plugin(ssm_client, ssm_client.start_session(**parameters), parameters, args.profile)
 
 
 def main() -> int:
@@ -182,7 +178,7 @@ def main() -> int:
             instance_resolver.print_list()
             sys.exit(0)
 
-        if not verify_plugin_version(logger, interactive=True):
+        if not verify_plugin_version(logger, required=PLUGIN_ENV_VERSION, interactive=True):
             sys.exit(1)
 
         if not args.INSTANCE:
@@ -202,7 +198,7 @@ def main() -> int:
             logger.error("--user is not supported on Windows instances")
             sys.exit(1)
 
-        return start_session(instance_id, args)
+        return start_session(instance_resolver.ssm_client, instance_id, args)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         handle_boto_error(e, logger, args.profile)
