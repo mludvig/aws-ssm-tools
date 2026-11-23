@@ -83,7 +83,7 @@ and for ECS Docker Exec: `ecs-session`
 * **ssm-tunnel**
 
   Open *IP tunnel* to the SSM instance and to enable *network access*
-  to the instance VPC. This requires [ssm-tunnel-agent](README-agent.md)
+  to the instance VPC. This requires [ssm-tunnel-agent](#standalone-ssm-tunnel-agent-installation)
   installed on the instance.
 
   Works with *Amazon Linux 2* instances and probably other recent Linux
@@ -336,7 +336,7 @@ Standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
 ## Installation
 
 The tools open an **SSM Session** and then use that session to run commands
-on the target instance. `ec2-ssh` and `ssm-tunnel` open it through the
+on the target instance. `ec2-ssh` opens it through the
 **AWS CLI**; the others open it themselves and need only `session-manager-plugin`. The target instances **must be
 registered in SSM**, which means they need:
 
@@ -351,7 +351,7 @@ for more informations.
 ### Install *AWS CLI* and `session-manager-plugin`
 
 Make sure you've got `session-manager-plugin` installed locally on your
-laptop, and `aws` too if you use `ec2-ssh` or `ssm-tunnel`.
+laptop, and `aws` too if you use `ec2-ssh`.
 
 ```
 ~ $ aws --version
@@ -366,7 +366,7 @@ guide](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-install.html)
 and [session-manager-plugin
 installation guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) to install them if needed.
 
-Note that `ec2-session`, `ecs-session` and `ssm-port-forward` need
+Note that `ec2-session`, `ecs-session`, `ssm-port-forward` and `ssm-tunnel` need
 `session-manager-plugin` version *1.2.497.0* or newer, `ec2-ssh` needs
 *1.1.23* or newer, and `Enter ~.` to end a stuck session needs *1.2.835.0*
 or newer.
@@ -428,12 +428,11 @@ You still need **session-manager-plugin** installed, and **AWS CLI** for
 
 ### Standalone *ssm-tunnel-agent* installation
 
-Refer to *[README-agent.md](README-agent.md)* for `ssm-tunnel-agent`
-installation details.
-
-Alternatively it's also bundled with this package, you can take it from here and
-copy to `/usr/local/bin/ssm-tunnel-agent` on the instance. Make it executable
-and it should just work.
+`ssm-tunnel-agent` is bundled with this package as `ssm_tools/ssm_tunnel_agent.py`.
+Copy it to `/usr/local/bin/ssm-tunnel-agent` on the instance and make it
+executable. If it's missing, `ssm-tunnel` tells you where the file is on your
+computer. The instance needs Python 3.8 or newer, `ip`, `iptables`, and `sudo`
+for the session user.
 
 ## Other AWS Utilities
 

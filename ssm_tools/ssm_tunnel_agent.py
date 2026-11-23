@@ -38,6 +38,10 @@ def create_tun(tun_name: str, local_ip: str, remote_ip: str) -> None:
     }
     try:
         run_command("sudo ip tuntap add {tun_name} mode tun user {user_id}".format(**params))
+    except AssertionError:
+        print(f"# ERROR: Can't create {tun_name}. Is another ssm-tunnel using it?")
+        sys.exit(1)  # It isn't ours, so don't delete it
+    try:
         run_command("sudo ip addr add {local_ip} peer {remote_ip} dev {tun_name}".format(**params))
         run_command("sudo ip link set {tun_name} up".format(**params))
         # Enable forwarding

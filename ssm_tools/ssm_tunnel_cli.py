@@ -8,12 +8,12 @@
 
 import argparse
 import copy
-import errno
 import fcntl
 import ipaddress
 import logging
 import os
 import random
+import re
 import select
 import signal
 import struct
@@ -26,6 +26,7 @@ from typing import Any
 import botocore.exceptions
 import pexpect
 
+from . import ssm_tunnel_agent
 from .common import (
     add_general_parameters,
     bytes_to_human,
@@ -34,15 +35,18 @@ from .common import (
     handle_boto_error,
     seconds_to_human,
     show_version,
+    verify_plugin_version,
 )
 from .picker import target_selector
+from .plugin import PLUGIN_ENV_VERSION
 from .resolver import InstanceResolver
-from .talker import SsmTalker
+from .talker import PROMPT, SessionError, SsmTalker
 
 logger = logging.getLogger("ssm-tools.ssm-tunnel")
 
 tunnel_cidr = "100.64.0.0/16"
 keepalive_sec = 10
+agent_timeout_sec = 3 * keepalive_sec  # The agent sends keepalives too
 
 
 def parse_args(argv: list) -> argparse.Namespace:
@@ -67,7 +71,7 @@ def parse_args(argv: list) -> argparse.Namespace:
     group_network = parser.add_argument_group("Networking Options")
     group_network.add_argument(
         "--route",
-        "-r",
+        "-R",
         metavar="ROUTE",
         dest="routes",
         type=str,
@@ -82,6 +86,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         default=tunnel_cidr,
         help=f"By default the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598). This should be ok for most users.",
     )
+    group_network.add_argument("--reason", "-r", help="The reason for the session.")
     group_network.add_argument(
         "--up-down",
         metavar="SCRIPT",
@@ -141,39 +146,38 @@ class SsmTunnel(SsmTalker):
 
         # Open remote tun0 device
         self._child.sendline(f"ssm-tunnel-agent {self.remote_ip} {self.local_ip}")
-        patterns = ["# Agent device .* is ready", "command not found"]
-        match = self._child.expect(patterns)
-        if match != 0:  # Index matched in the 'patterns'
-            logger.error("Unable to establish the tunnel!")
-            logger.error("ssm-tunnel-agent: command not found on the target instance %s.", self._instance_id)
-            logger.error(
-                "Install with: ec2-session %s --command 'sudo pip install aws-ssm-tunnel-agent'",
-                self._instance_id,
+        patterns = ["# Agent device .* is ready", "ssm-tunnel-agent: .*not found", re.escape(PROMPT)]
+        match = self.expect(patterns, "ssm-tunnel-agent")
+        if match == 1:
+            raise SessionError(
+                f"ssm-tunnel-agent is not installed on {self._instance_id}. Copy {ssm_tunnel_agent.__file__} "
+                "to /usr/local/bin/ssm-tunnel-agent there and make it executable (it needs Python 3.8+).",
             )
-            logger.error("(replace 'pip' with 'pip3' above if the former doesn't work)")
-            sys.exit(1)
+        if match == 2:  # It has exited
+            raise SessionError(f"ssm-tunnel-agent failed: {self.output()}")
         logger.debug(self._child.after)
 
     def open_local_tunnel(self) -> None:
         tun_suffix = ".".join(self.local_ip.split(".")[2:])
-        self.tun_name = f"tunSSM.{tun_suffix}"
-
-        self.create_tun()
+        self.create_tun(f"tunSSM.{tun_suffix}")
         self._tun_fd = self.open_tun()
 
         logger.debug("# Local device %s is ready", self.tun_name)
         logger.info("Local IP: %s / Remote IP: %s", self.local_ip, self.remote_ip)
 
-    def create_tun(self) -> None:
+    def create_tun(self, tun_name: str) -> None:
         try:
             user_id = os.getuid()
-            self.run_command(f"sudo ip tuntap add {self.tun_name} mode tun user {user_id}")
+            self.run_command(f"sudo ip tuntap add {tun_name} mode tun user {user_id}")
+            self.tun_name = tun_name  # Only now is it ours to delete
             self.run_command(f"sudo ip addr add {self.local_ip} peer {self.remote_ip} dev {self.tun_name}")
             self.run_command(f"sudo ip link set {self.tun_name} up")
             # Configure routes
             for route in self.routes:
                 self.run_command(f"sudo ip route add {route} via {self.remote_ip}")
         except AssertionError:
+            if not self.tun_name:
+                logger.error("Can't create %s. Is another ssm-tunnel using the same IPs? Try again.", tun_name)
             self.delete_tun()
             sys.exit(1)
         except Exception as e:
@@ -222,8 +226,10 @@ class SsmTunnel(SsmTalker):
                 buf = os.read(self._tun_fd, 1504)  # Virtual GRE header adds 4 bytes
                 self._child.sendline(f"%{b64encode(buf).decode('ascii')}")
             except OSError as e:
-                if e.errno == errno.EBADF and self._exiting:
-                    break
+                if not self._exiting:  # Else it's the tun device closing under us
+                    logger.error("Tunnel failed: %s", e)
+                    self._exiting = True
+                break
 
             last_ts = time.time()
             # Update stats
@@ -234,22 +240,39 @@ class SsmTunnel(SsmTalker):
         logger.debug("local_to_remote() has exited.")
 
     def remote_to_local(self) -> None:
+        last_ts = time.time()
         while True:
             if self._exiting:
                 break
             try:
-                line = self._child.readline()
-            except pexpect.exceptions.TIMEOUT:
-                # This is a long timeout, 30 sec, not very useful
+                # Our prompt means the agent has exited. It comes without a newline.
+                match = self._child.expect(["\r\n", re.escape(PROMPT), pexpect.EOF])
+            except pexpect.exceptions.TIMEOUT:  # Nothing for the child's timeout (10 s)
+                if self._exiting:
+                    break
+                if last_ts + agent_timeout_sec < time.time():
+                    logger.warning(
+                        "Nothing from the agent for %d s, not even a keepalive - tunnel went down?",
+                        agent_timeout_sec,
+                    )
+                    self._exiting = True
                 continue
-            if self._child.after is pexpect.EOF:
+            last_ts = time.time()
+            if self._exiting:  # We're closing the session ourselves
+                break
+            if match == 1:
+                logger.warning("ssm-tunnel-agent has exited - tunnel went down?")
+                self._exiting = True
+                break
+            if match == 2:
                 logger.warning("Received unexpected EOF - tunnel went down?")
                 self._exiting = True
                 break
+            line = self._child.before
             if not line or line[0] != "%":
                 continue
 
-            buf = b64decode(line[1:].strip("\r\n"))
+            buf = b64decode(line[1:])
             os.write(self._tun_fd, buf)
             # Update stats
             self.stats_lock.acquire()
@@ -297,10 +320,6 @@ class SsmTunnel(SsmTalker):
         self.routes = routes
         self.updown_script = updown_script
 
-        # Close the session and delete the tun device and its routes in 'finally'
-        for signum in (signal.SIGTERM, signal.SIGHUP):
-            signal.signal(signum, exit_on_signal)
-
         try:
             self.open_remote_tunnel()
             self.open_local_tunnel()
@@ -312,8 +331,8 @@ class SsmTunnel(SsmTalker):
         finally:
             logger.info("Closing tunnel, please wait...")
             self.run_updown("down")
+            self._exiting = True  # Before exit(), so the threads don't report it as the tunnel going down
             self.exit()
-            self._exiting = True
             self.delete_tun()
 
     def display_stats(self) -> None:
@@ -373,6 +392,9 @@ def random_ips(network: str) -> tuple[str, str]:
 
 
 def main() -> int:
+    ## Split command line args
+    args = parse_args(sys.argv[1:])
+
     if sys.platform != "linux":
         print("The 'ssm-tunnel' program only works on Linux at the moment!", file=sys.stderr)
         print(
@@ -381,35 +403,47 @@ def main() -> int:
         )
         sys.exit(1)
 
-    ## Split command line args
-    args = parse_args(sys.argv[1:])
-
     configure_logging(args.log_level)
 
     tunnel = None
     try:
+        instance_resolver = InstanceResolver(args)
         if args.list:
-            InstanceResolver(args).print_list()
+            instance_resolver.print_list()
             sys.exit(0)
 
+        if not verify_plugin_version(logger, required=PLUGIN_ENV_VERSION):
+            sys.exit(1)
+
         if not args.INSTANCE:
-            headers, session_details = InstanceResolver(args).print_list(quiet=True)
+            headers, session_details = instance_resolver.print_list(quiet=True)
             selected_session = target_selector(headers, session_details)
             args.INSTANCE = selected_session["InstanceId"]
 
-        instance_id, _ = InstanceResolver(args).resolve_instance(args.INSTANCE)
+        instance_id, _ = instance_resolver.resolve_instance(args.INSTANCE)
         if not instance_id:
             logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
             logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
             sys.exit(1)
 
         local_ip, remote_ip = random_ips(args.tunnel_cidr)
-        tunnel = SsmTunnel(instance_id, profile=args.profile, region=args.region)
+        # Close the session, and delete the tun device and its routes, in the 'finally's
+        for signum in (signal.SIGTERM, signal.SIGHUP):
+            signal.signal(signum, exit_on_signal)
+        tunnel = SsmTunnel(instance_resolver.ssm_client, instance_id, args.profile, args.reason)
         tunnel.start(local_ip, remote_ip, list(args.routes) or [], args.updown_script)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         handle_boto_error(e, logger, args.profile)
         sys.exit(1)
+
+    except SessionError as e:
+        logger.error("%s", e)
+        sys.exit(1)
+
+    except KeyboardInterrupt:
+        print("", file=sys.stderr)  # Just to avoid "^C" at the end of line
+        sys.exit(130)
 
     finally:
         if tunnel:
