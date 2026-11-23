@@ -1,4 +1,5 @@
 import argparse
+import io
 import logging
 import pathlib
 import re
@@ -28,6 +29,10 @@ def configure_logging(level: int) -> None:
         logging_format = "[%(name)s] %(levelname)s: %(message)s"
     else:
         logging_format = "%(levelname)s: %(message)s"
+
+    # Names can hold characters that e.g. an ASCII or cp1252 stdout can't show. Don't crash on them.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(errors="replace")
 
     # Default log level is set to WARNING
     logging.basicConfig(level=logging.WARNING, format=logging_format)

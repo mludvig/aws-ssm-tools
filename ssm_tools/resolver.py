@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
 import argparse
-import copy
 import logging
 import re
 import sys
-from typing import Any
+from typing import Any, TextIO
 
 from botocore.exceptions import ClientError
 from tabulate import tabulate
 
-from .common import AWSSessionBase
+from .common import AWSSessionBase, printable
+from .picker import has_terminal, target_selector
 
 logger = logging.getLogger("ssm-tools.resolver")
 
@@ -18,7 +18,47 @@ logger = logging.getLogger("ssm-tools.resolver")
 INSTANCE_ID_RE = re.compile(r"i-[0-9a-f]{8}|m?i-[0-9a-f]{17}", re.IGNORECASE)
 
 
+def print_targets(
+    rows: list[dict[str, Any]],
+    quiet: bool = False,
+    file: TextIO | None = None,
+    hidden: tuple[str, ...] = (),
+) -> tuple[str, list[Any]]:
+    """
+    Print the rows as a table without the 'hidden' columns, unless quiet. Return the menu
+    header and the rows, each with its table line as "summary", for target_selector().
+    """
+    cells = [
+        {
+            key: printable(", ".join(value) if isinstance(value, list) else str(value))
+            for key, value in row.items()
+            if key not in hidden
+        }
+        for row in rows
+    ]
+    lines = tabulate(cells, headers="keys").split("\n")
+    if not quiet:
+        print("\n".join(lines), file=file or sys.stdout)
+
+    menu_header = "\n".join(f"  {line}" for line in lines[:2])
+    return menu_header, [{"summary": line, **row} for row, line in zip(rows, lines[2:])]
+
+
+def choose_target(matches: str, rows: list[dict[str, Any]], hint: str, hidden: tuple[str, ...] = ()) -> dict[str, Any]:
+    """
+    'matches' found several rows. Let the user pick one, or list them and exit without a terminal.
+    """
+    logger.warning("Found %d matches for %s", len(rows), matches)
+    headers, targets = print_targets(rows, quiet=has_terminal(), file=sys.stderr, hidden=hidden)
+    if has_terminal():
+        return target_selector(headers, targets)
+    logger.warning(hint)
+    sys.exit(1)
+
+
 class InstanceResolver(AWSSessionBase):
+    HIDDEN = ("AvailabilityZone",)  # Not shown in tables
+
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__(args)
 
@@ -146,22 +186,7 @@ class InstanceResolver(AWSSessionBase):
         del items
         items_list.sort(key=lambda x: x.get("InstanceName") or x.get("HostName"))  # type: ignore
 
-        for instance in items_list:
-            if isinstance(instance.get("Addresses"), list | tuple):
-                instance["Addresses"] = ", ".join([a for a in instance["Addresses"] if a])
-            instance.pop("AvailabilityZone", None)
-
-        table = tabulate(items_list, headers="keys")
-        if not quiet:
-            print(table)
-
-        menu_header = "\n".join([f"  {line}" for line in table.split("\n")[:2]])
-        menu_data = []
-
-        for container_data, container_text in zip(items_list, table.split("\n")[2:]):
-            menu_data.append({"summary": container_text, **container_data})
-
-        return menu_header, menu_data
+        return print_targets(items_list, quiet=quiet, hidden=self.HIDDEN)
 
     def platform_type(self, instance_id: str) -> str:
         """Return the SSM PlatformType of the instance, e.g. 'Linux' or 'Windows', or '' if unknown."""
@@ -187,9 +212,9 @@ class InstanceResolver(AWSSessionBase):
             return "", {}
 
         if len(instances) > 1:
-            logger.warning("Found %d instances for '%s': %s", len(instances), instance, " ".join(instances))
-            logger.warning("Use INSTANCE_ID to connect to a specific one")
-            sys.exit(1)
+            rows = [items[instance_id] for instance_id in sorted(instances)]
+            chosen = choose_target(f"'{instance}'", rows, "Use INSTANCE_ID to connect to a specific one", self.HIDDEN)
+            return chosen["InstanceId"], items[chosen["InstanceId"]]
 
         instance_id = instances[0]
         if by_name:
@@ -203,17 +228,17 @@ class InstanceResolver(AWSSessionBase):
             else:
                 logger.info("'%s' is the %s of %s", instance, field, instance_id)
 
-        # Print the matched instance we are connecting to
-        row = []
-        for v in items[instance_id].values():
-            row.append(", ".join(v) if isinstance(v, list) else v)
-        print(tabulate([row], headers=list(items[instance_id].keys())))
+        # Show the matched instance we are connecting to
+        quiet = not logger.isEnabledFor(logging.INFO)
+        print_targets([items[instance_id]], quiet=quiet, file=sys.stderr, hidden=self.HIDDEN)
 
         # Found only one instance - return it
         return instance_id, items[instance_id]
 
 
 class ContainerResolver(AWSSessionBase):
+    HIDDEN = ("cluster_arn", "task_arn")  # Not shown in tables
+
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__(args)
 
@@ -307,26 +332,6 @@ class ContainerResolver(AWSSessionBase):
 
         return self.containers
 
-    def print_containers(self, containers: list[dict[str, Any]], quiet: bool = False) -> tuple[str, list[Any]]:
-        table_data = copy.deepcopy(containers)
-
-        table_data.sort(key=lambda x: [x["cluster_name"], x["container_name"]])
-
-        for container_details in table_data:
-            del container_details["cluster_arn"], container_details["task_arn"]
-
-        table = tabulate(table_data, headers="keys")
-        if not quiet:
-            print(table)
-
-        menu_header = "\n".join([f"  {line}" for line in table.split("\n")[:2]])
-        menu_data = []
-
-        for container_data, container_text in zip(table_data, table.split("\n")[2:]):
-            menu_data.append({"summary": container_text, **container_data})
-
-        return menu_header, menu_data
-
     def print_list(self, quiet: bool = False) -> tuple[str, list[Any]]:
         containers = self.get_list()
 
@@ -334,7 +339,7 @@ class ContainerResolver(AWSSessionBase):
             logger.warning("No Execute-Command capable containers found!")
             sys.exit(1)
 
-        return self.print_containers(containers, quiet=quiet)
+        return print_targets(sorted(containers, key=self._sort_key), quiet=quiet, hidden=self.HIDDEN)
 
     def resolve_container(self, keywords: list[str]) -> dict[str, Any]:
         containers = self.get_list()
@@ -372,11 +377,12 @@ class ContainerResolver(AWSSessionBase):
         if not candidates:
             logger.warning("No container matches: %s", " AND ".join(keywords))
             sys.exit(1)
-        elif len(candidates) == 1:
-            self.print_containers(candidates, quiet=True)
-            return candidates[0]
-        else:
-            logger.warning("Found %d instances for: %s", len(candidates), keyword)
-            logger.warning("Use Container IP or Task ID to connect to a specific one")
-            self.print_containers(candidates, quiet=True)
-            sys.exit(1)
+        if len(candidates) > 1:
+            matches = " AND ".join(f"'{keyword}'" for keyword in keywords)
+            hint = "Use Container IP or Task ID to connect to a specific one"
+            return choose_target(matches, sorted(candidates, key=self._sort_key), hint, self.HIDDEN)
+        return candidates[0]
+
+    @staticmethod
+    def _sort_key(container: dict[str, Any]) -> list[str]:
+        return [container["cluster_name"], container["container_name"]]

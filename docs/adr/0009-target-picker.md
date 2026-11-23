@@ -19,6 +19,8 @@ With no target given, every tool opens simple-term-menu. The lab found these pro
 - while the menu is up, ignores SIGTSTP, and turns SIGQUIT, SIGTERM and SIGHUP into an exit of 128+N, so that the menu's own `finally` restores the terminal;
 - exits 130 with "No target selected" on cancel, and echoes the choice to stderr.
 
+A name that matches several targets opens the same picker with only those targets (`resolver.choose_target`). Without a terminal, they are listed on stderr and the tool exits 1, as gcloud does.
+
 ## Consequences
 - Scripts get an error instead of a hang. Windows and dumb terminals get a usable picker.
 - Adds `wcwidth` as a dependency. simple-term-menu is no longer installed on Windows.

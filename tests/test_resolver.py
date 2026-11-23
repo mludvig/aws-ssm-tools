@@ -1,8 +1,14 @@
+import io
+import logging
+import sys
 from typing import Any
 
 import pytest
+from wcwidth import wcswidth
 
-from ssm_tools.resolver import ContainerResolver, InstanceResolver
+from ssm_tools import resolver as resolver_module
+from ssm_tools.common import configure_logging
+from ssm_tools.resolver import ContainerResolver, InstanceResolver, print_targets
 
 ACCOUNT = "123456789012"
 REGION = "ap-southeast-2"
@@ -223,6 +229,88 @@ def test_ambiguous_within_a_tier_exits(
     assert exc.value.code == 1
 
 
+def test_ambiguous_without_terminal_lists_the_candidates(
+    instance_resolver: InstanceResolver,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    items = [item("i-2", name="web"), item("i-1", name="web"), item("i-3", name="db")]
+    monkeypatch.setattr(instance_resolver, "get_list", lambda: {i["InstanceId"]: i for i in items})
+    with pytest.raises(SystemExit) as exc:
+        instance_resolver.resolve_instance("web")
+    assert exc.value.code == 1
+    assert "Found 2 matches for 'web'" in caplog.text
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert [line.split()[0] for line in err.splitlines()[2:]] == ["i-1", "i-2"]
+
+
+def test_ambiguous_with_terminal_picks_from_the_candidates(
+    instance_resolver: InstanceResolver,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    items = [item("i-2", name="web"), item("i-1", name="web"), item("i-3", name="db")]
+    monkeypatch.setattr(instance_resolver, "get_list", lambda: {i["InstanceId"]: i for i in items})
+    monkeypatch.setattr(resolver_module, "has_terminal", lambda: True)
+    offered: list[str] = []
+
+    def pick(_headers: str, targets: list[dict[str, Any]]) -> dict[str, Any]:
+        offered.extend(target["InstanceId"] for target in targets)
+        return targets[1]
+
+    monkeypatch.setattr(resolver_module, "target_selector", pick)
+    assert instance_resolver.resolve_instance("web") == ("i-2", items[0])
+    assert offered == ["i-1", "i-2"]
+    assert capsys.readouterr().err == ""  # The picker shows them
+
+
+def test_matched_instance_goes_to_stderr_unless_quiet(
+    instance_resolver: InstanceResolver,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    monkeypatch.setattr(instance_resolver, "get_list", lambda: {"i-1": item("i-1", name="web", ip="10.0.0.1")})
+    caplog.set_level(logging.INFO, logger="ssm-tools")
+    instance_resolver.resolve_instance("web")
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err.splitlines()[2].split() == ["i-1", "web", "10.0.0.1"]
+    caplog.set_level(logging.WARNING, logger="ssm-tools")
+    instance_resolver.resolve_instance("web")
+    assert capsys.readouterr() == ("", "")
+
+
+ROWS = [
+    {"Id": "i-1", "Name": "名前🚀", "Ip": ["10.0.0.1", "10.0.0.2"], "Zone": "a", "Arn": "arn:1"},
+    {"Id": "i-2", "Name": "evil\x1b[2J|x", "Ip": [], "Zone": "b", "Arn": "arn:2"},
+]
+
+
+def test_print_targets(capsys: pytest.CaptureFixture) -> None:
+    headers, targets = print_targets(ROWS, hidden=("Arn",))
+    lines = capsys.readouterr().out.splitlines()
+    # Wide characters keep the columns aligned: the last one starts at the same display column
+    assert len({wcswidth(line[: line.rindex(line.split()[-1])]) for line in lines}) == 1
+    assert lines[2].split() == ["i-1", "名前🚀", "10.0.0.1,", "10.0.0.2", "a"]
+    assert lines[3].split() == ["i-2", "evil?[2J|x", "b"]
+    assert headers == "\n".join(f"  {line}" for line in lines[:2])
+    assert [target["summary"] for target in targets] == lines[2:]
+    assert targets[1]["Arn"] == "arn:2"  # Hidden from the table, not from the targets
+
+
+def test_print_targets_to_an_ascii_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    stdout = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
+    monkeypatch.setattr(sys, "stdout", stdout)
+    configure_logging(logging.INFO)
+    print_targets(ROWS)
+    stdout.flush()
+    lines = stdout.buffer.getvalue().decode().splitlines()  # type: ignore[attr-defined]
+    assert lines[2].split()[:2] == ["i-1", "???"]
+
+
 def ecs_task(task_id: str, container: dict[str, Any]) -> dict[str, Any]:
     task_arn = f"arn:aws:ecs:{REGION}:{ACCOUNT}:task/lab/{task_id}"
     return {
@@ -298,3 +386,30 @@ def test_platform_type(instance_resolver: InstanceResolver, stub: Any, informati
         {"Filters": [{"Key": "InstanceIds", "Values": ["i-0123456789abcdef0"]}]},
     )
     assert instance_resolver.platform_type("i-0123456789abcdef0") == platform
+
+
+@pytest.mark.parametrize("terminal", [True, False])
+def test_ambiguous_container(
+    ecs_stub: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture,
+    terminal: bool,
+) -> None:
+    resolver, add_tasks = ecs_stub
+    add_tasks(
+        ecs_task("bbb", {"name": "nginx", "networkInterfaces": [{"privateIpv4Address": "10.0.1.2"}]}),
+        ecs_task("aaa", {"name": "nginx", "networkInterfaces": [{"privateIpv4Address": "10.0.1.1"}]}),
+    )
+    monkeypatch.setattr(resolver_module, "has_terminal", lambda: terminal)
+    monkeypatch.setattr(resolver_module, "target_selector", lambda _headers, targets: targets[1])
+    if terminal:
+        container = resolver.resolve_container(["nginx", "service:web"])
+        assert container["task_arn"].endswith("/aaa")  # The whole container, hidden columns too
+        return
+    with pytest.raises(SystemExit) as exc:
+        resolver.resolve_container(["nginx", "service:web"])
+    assert exc.value.code == 1
+    assert "Found 2 matches for 'nginx' AND 'service:web'" in caplog.text
+    err = capsys.readouterr().err
+    assert "aaa" in err and "bbb" in err and "arn:" not in err

@@ -323,6 +323,8 @@ match wins over host names and IPs, because instances report those
 themselves, and the tools say so when they match only a host name or IP.
 Hybrid instances get their *Name* from their activation, so anyone with the
 activation code can register more instances with the same *Name*.
+A name that matches several instances opens the instance menu with just
+those, or, without a terminal, lists them and exits.
 
 Standard AWS environment variables like `AWS_DEFAULT_PROFILE`,
 `AWS_DEFAULT_REGION`, etc, are also supported.

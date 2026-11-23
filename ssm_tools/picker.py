@@ -14,16 +14,23 @@ from wcwidth import wcwidth
 
 from .common import printable
 
-__all__ = ["target_selector"]
+__all__ = ["has_terminal", "target_selector"]
 
 logger = logging.getLogger("ssm-tools.picker")
 
 
-def target_selector(headers: str, targets: list[dict[str, str]]) -> dict[str, str]:
+def has_terminal() -> bool:
+    """
+    Is there a user at a terminal to pick a target?
+    """
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def target_selector(headers: str, targets: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Show the targets' summaries under the table headers and return the target the user picked.
     """
-    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+    if not has_terminal():
         logger.error("No target given and no terminal to pick one on. Name it on the command line, see --list.")
         sys.exit(2)
 
