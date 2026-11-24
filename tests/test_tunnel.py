@@ -1,5 +1,7 @@
+import ipaddress
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -12,7 +14,7 @@ import pytest
 
 from ssm_tools import ssm_tunnel_agent, ssm_tunnel_cli
 from ssm_tools.common import exit_on_signal
-from ssm_tools.ssm_tunnel_cli import SsmTunnel, parse_args
+from ssm_tools.ssm_tunnel_cli import SsmTunnel, parse_args, random_ips
 from ssm_tools.talker import PROMPT, SessionError, SsmTalker
 
 
@@ -20,14 +22,11 @@ from ssm_tools.talker import PROMPT, SessionError, SsmTalker
 def tunnel(monkeypatch: pytest.MonkeyPatch) -> Iterator[SsmTunnel]:
     """An SsmTunnel without a session, its child a shell that prints one packet ('hi') and exits."""
     monkeypatch.setattr(SsmTalker, "connect", lambda *_args: None)
-    old_handlers = {signum: signal.getsignal(signum) for signum in (signal.SIGTERM, signal.SIGHUP)}
     tunnel = SsmTunnel(Mock(), "i-1", None)
     tunnel._session_id = "s-1"
     tunnel._child = pexpect.spawn("sh", ["-c", "echo %aGk=; echo not-a-packet"], encoding="utf-8", timeout=5)
     yield tunnel
     tunnel._child.close(force=True)
-    for signum, handler in old_handlers.items():
-        signal.signal(signum, handler)
 
 
 def run_briefly(target: Any) -> None:
@@ -85,9 +84,27 @@ def respond(tunnel: SsmTunnel, output: str) -> None:
     tunnel._child = pexpect.spawn("sh", ["-c", script], encoding="utf-8", echo=False, timeout=5)
 
 
-def test_open_remote_tunnel(tunnel: SsmTunnel) -> None:
-    respond(tunnel, "# sudo ip link set tunSSM.0.3 up\n# Agent device tunSSM.0.3 is ready [100.64.0.3]\n")
-    tunnel.open_remote_tunnel()  # No error
+@pytest.mark.parametrize(("version", "outdated"), [("", True), (" version 1", True), (" version 2", False)])
+def test_open_remote_tunnel(
+    tunnel: SsmTunnel,
+    caplog: pytest.LogCaptureFixture,
+    version: str,
+    outdated: bool,
+) -> None:
+    # The session ends lines with \r\r\n
+    respond(tunnel, f"# ip link set tunSSM.0.3 up\r\n# Agent device tunSSM.0.3 is ready [100.64.0.3]{version}\r\n")
+    tunnel.open_remote_tunnel()
+    assert (f"Update it from {ssm_tunnel_agent.__file__}" in caplog.text) == outdated
+
+
+def test_open_remote_tunnel_waits_for_the_version(tunnel: SsmTunnel, caplog: pytest.LogCaptureFixture) -> None:
+    tunnel._child.close(force=True)
+    script = (
+        "read line; printf '# Agent device tunSSM.0.3 is ready [100.64.0.3]'; sleep 0.2; echo ' version 2'; sleep 5"
+    )
+    tunnel._child = pexpect.spawn("sh", ["-c", script], encoding="utf-8", echo=False, timeout=5)
+    tunnel.open_remote_tunnel()
+    assert "Update it" not in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -165,9 +182,10 @@ def test_create_tun_deletes_only_its_own(
 ) -> None:
     commands = []
 
-    def run_command(command: str, assert_0: bool = True) -> None:
-        commands.append(command)
-        assert failing not in command or not assert_0
+    def run_command(*command: str, check: bool = True) -> None:
+        commands.append(" ".join(command))
+        if failing in commands[-1] and check:
+            raise subprocess.CalledProcessError(2, command)
 
     monkeypatch.setattr(tunnel, "run_command", run_command)
     with pytest.raises(SystemExit):
@@ -175,13 +193,28 @@ def test_create_tun_deletes_only_its_own(
     assert any("tuntap del tunSSM.0.2" in command for command in commands) == deleted
 
 
+def test_create_tun_without_sudo(
+    tunnel: SsmTunnel,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def run_command(*command: str, check: bool = True) -> None:
+        raise FileNotFoundError(2, "No such file or directory", command[0])
+
+    monkeypatch.setattr(tunnel, "run_command", run_command)
+    with pytest.raises(SystemExit):
+        tunnel.create_tun("tunSSM.0.2")
+    assert "No such file or directory: 'sudo'" in caplog.text
+
+
 @pytest.mark.parametrize(("failing", "deleted"), [("tuntap add", False), ("addr add", True)])
 def test_agent_create_tun_deletes_only_its_own(monkeypatch: pytest.MonkeyPatch, failing: str, deleted: bool) -> None:
     commands = []
 
-    def run_command(command: str, assert_0: bool = True) -> None:
-        commands.append(command)
-        assert failing not in command or not assert_0
+    def run_command(*command: str, check: bool = True) -> None:
+        commands.append(" ".join(command))
+        if failing in commands[-1] and check:
+            raise subprocess.CalledProcessError(2, command)
 
     monkeypatch.setattr(ssm_tunnel_agent, "run_command", run_command)
     with pytest.raises(SystemExit):
@@ -190,8 +223,65 @@ def test_agent_create_tun_deletes_only_its_own(monkeypatch: pytest.MonkeyPatch, 
 
 
 def test_args() -> None:
-    args = parse_args(["-R", "10.0.0.0/8", "--route", "10.1.0.0/16", "-r", "why", "i-1"])
-    assert (args.routes, args.reason, args.INSTANCE) == (["10.0.0.0/8", "10.1.0.0/16"], "why", "i-1")
+    args = parse_args(["-R", "10.0.0.0/8", "--route", "10.1.2.3", "-r", "why", "i-1"])
+    assert ([str(route) for route in args.routes], args.reason, args.INSTANCE) == (
+        ["10.0.0.0/8", "10.1.2.3/32"],
+        "why",
+        "i-1",
+    )
+    assert args.tunnel_cidr == ipaddress.IPv4Network("100.64.0.0/16")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["-R", "10.0.0.0/8; touch /tmp/pwned"],
+        ["-R", "10.1.0.0/8"],  # Host bits set
+        ["-R", "fd00::/8"],  # Can't go via an IPv4 peer
+        ["--tunnel-cidr", "100.64.0.0/30"],  # random_ips() would hand out the network address
+        ["--tunnel-cidr", "100.64.0.0/32"],
+        ["--tunnel-cidr", "fd00::/64"],
+        ["--tunnel-cidr", "100.64.0.1/16"],
+        ["--tunnel-cidr", "bogus"],
+    ],
+)
+def test_invalid_args(argv: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parse_args([*argv, "i-1"])
+    assert exc.value.code == 2
+    assert "Traceback" not in capsys.readouterr().err
+
+
+def test_random_ips_in_the_smallest_network() -> None:
+    network = parse_args(["--tunnel-cidr", "100.64.0.8/29", "i-1"]).tunnel_cidr
+    assert random_ips(network) == ("100.64.0.10", "100.64.0.11")
+
+
+def test_updown_gets_its_arguments_unquoted(tunnel: SsmTunnel, tmp_path: Any) -> None:
+    script = tmp_path / "up down"
+    script.write_text(f'#!/bin/sh\nprintf "%s|" "$@" > "{tmp_path}/args"\n')
+    script.chmod(0o755)
+    tunnel.updown_script, tunnel.tun_name = str(script), "tunSSM.0.2"
+    tunnel.local_ip, tunnel.remote_ip, tunnel.routes = "100.64.0.2", "100.64.0.3", ["10.0.0.0/8", "10.1.0.0/16"]
+    tunnel.run_updown("up")
+    assert (tmp_path / "args").read_text() == "up|tunSSM.0.2|100.64.0.2|100.64.0.3|10.0.0.0/8|10.1.0.0/16|"
+
+
+@pytest.mark.parametrize("script", ["false", "/no/such/script"])
+def test_updown_failure_exits(tunnel: SsmTunnel, caplog: pytest.LogCaptureFixture, script: str) -> None:
+    tunnel.updown_script = script
+    with pytest.raises(SystemExit) as exc:
+        tunnel.run_updown("up")
+    assert exc.value.code == 1
+    assert f"Updown script {script} failed" in caplog.text
+
+
+def test_updown_down_failure_carries_on(tunnel: SsmTunnel, caplog: pytest.LogCaptureFixture) -> None:
+    """start()'s 'finally' still has the session to close."""
+    tunnel.updown_script = "false"
+    tunnel.updown_up_success = True
+    tunnel.run_updown("down")
+    assert "Updown script false failed" in caplog.text
 
 
 def test_ctrl_c_exits_130(monkeypatch: pytest.MonkeyPatch) -> None:

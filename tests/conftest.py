@@ -1,5 +1,6 @@
 import argparse
 import os
+import signal
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -19,6 +20,16 @@ def aws_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "ap-southeast-2")
+
+
+@pytest.fixture(autouse=True)
+def signal_handlers() -> Iterator[None]:
+    """Undo the handlers that the code under test installs."""
+    signums = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+    handlers = {signum: signal.getsignal(signum) for signum in signums}
+    yield
+    for signum, handler in handlers.items():
+        signal.signal(signum, handler)
 
 
 @pytest.fixture

@@ -15,8 +15,10 @@ import os
 import random
 import re
 import select
+import shlex
 import signal
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -49,6 +51,17 @@ keepalive_sec = 10
 agent_timeout_sec = 3 * keepalive_sec  # The agent sends keepalives too
 
 
+def tunnel_network(value: str) -> ipaddress.IPv4Network:
+    """An IPv4 network big enough for random_ips()."""
+    try:
+        network = ipaddress.IPv4Network(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"{value} isn't an IPv4 network: {e}") from None
+    if network.prefixlen > 29:
+        raise argparse.ArgumentTypeError(f"{value} is too small for a tunnel, it needs to be /29 or bigger")
+    return network
+
+
 def parse_args(argv: list) -> argparse.Namespace:
     """
     Parse command line arguments.
@@ -74,7 +87,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         "-R",
         metavar="ROUTE",
         dest="routes",
-        type=str,
+        type=ipaddress.IPv4Network,
         action="append",
         default=[],
         help="CIDR(s) to route through this tunnel. May be used multiple times.",
@@ -82,7 +95,7 @@ def parse_args(argv: list) -> argparse.Namespace:
     group_network.add_argument(
         "--tunnel-cidr",
         metavar="CIDR",
-        type=str,
+        type=tunnel_network,
         default=tunnel_cidr,
         help=f"By default the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598). This should be ok for most users.",
     )
@@ -135,19 +148,18 @@ class SsmTunnel(SsmTalker):
         self.updown_script = ""
         self.updown_up_success = False
 
-    def run_command(self, command: str, assert_0: bool = True) -> None:
-        logger.debug("command: %s", command)
-        ret = os.system(command)
-        if assert_0:
-            assert ret == 0
+    def run_command(self, *command: str, check: bool = True) -> None:
+        logger.debug("command: %s", shlex.join(command))
+        subprocess.run(command, check=check)
 
     def open_remote_tunnel(self) -> None:
         logger.debug("Creating tunnel")
 
         # Open remote tun0 device
         self._child.sendline(f"ssm-tunnel-agent {self.remote_ip} {self.local_ip}")
-        patterns = ["# Agent device .* is ready", "ssm-tunnel-agent: .*not found", re.escape(PROMPT)]
-        match = self.expect(patterns, "ssm-tunnel-agent")
+        # See docs/adr/0013-ssm-tunnel-agent-cleanup.md
+        ready = r"# Agent device \S+ is ready \[[^\]]*\](?: version (\d+))?\r*\n"  # Version 1 didn't say
+        match = self.expect([ready, "ssm-tunnel-agent: .*not found", re.escape(PROMPT)], "ssm-tunnel-agent")
         if match == 1:
             raise SessionError(
                 f"ssm-tunnel-agent is not installed on {self._instance_id}. Copy {ssm_tunnel_agent.__file__} "
@@ -156,6 +168,16 @@ class SsmTunnel(SsmTalker):
         if match == 2:  # It has exited
             raise SessionError(f"ssm-tunnel-agent failed: {self.output()}")
         logger.debug(self._child.after)
+        version = int(self._child.match.group(1) or 1)
+        if version < ssm_tunnel_agent.AGENT_VERSION:
+            logger.warning(
+                "ssm-tunnel-agent on %s is version %d, this ssm-tunnel has version %d. "
+                "Update it from %s to get its fixes.",
+                self._instance_id,
+                version,
+                ssm_tunnel_agent.AGENT_VERSION,
+                ssm_tunnel_agent.__file__,
+            )
 
     def open_local_tunnel(self) -> None:
         tun_suffix = ".".join(self.local_ip.split(".")[2:])
@@ -167,16 +189,17 @@ class SsmTunnel(SsmTalker):
 
     def create_tun(self, tun_name: str) -> None:
         try:
-            user_id = os.getuid()
-            self.run_command(f"sudo ip tuntap add {tun_name} mode tun user {user_id}")
+            self.run_command("sudo", "ip", "tuntap", "add", tun_name, "mode", "tun", "user", str(os.getuid()))
             self.tun_name = tun_name  # Only now is it ours to delete
-            self.run_command(f"sudo ip addr add {self.local_ip} peer {self.remote_ip} dev {self.tun_name}")
-            self.run_command(f"sudo ip link set {self.tun_name} up")
+            self.run_command("sudo", "ip", "addr", "add", self.local_ip, "peer", self.remote_ip, "dev", self.tun_name)
+            self.run_command("sudo", "ip", "link", "set", self.tun_name, "up")
             # Configure routes
             for route in self.routes:
-                self.run_command(f"sudo ip route add {route} via {self.remote_ip}")
-        except AssertionError:
-            if not self.tun_name:
+                self.run_command("sudo", "ip", "route", "add", route, "via", self.remote_ip)
+        except (subprocess.CalledProcessError, OSError) as e:  # OSError: e.g. no sudo
+            if isinstance(e, OSError):
+                logger.error("%s", e)
+            elif not self.tun_name:
                 logger.error("Can't create %s. Is another ssm-tunnel using the same IPs? Try again.", tun_name)
             self.delete_tun()
             sys.exit(1)
@@ -194,8 +217,8 @@ class SsmTunnel(SsmTalker):
             except Exception as e:
                 logger.exception(e)
         if self.tun_name:
-            self.run_command(f"sudo ip link set {self.tun_name} down", assert_0=False)
-            self.run_command(f"sudo ip tuntap del {self.tun_name} mode tun", assert_0=False)
+            self.run_command("sudo", "ip", "link", "set", self.tun_name, "down", check=False)
+            self.run_command("sudo", "ip", "tuntap", "del", self.tun_name, "mode", "tun", check=False)
             self.tun_name = ""
 
     def open_tun(self) -> int:
@@ -304,15 +327,15 @@ class SsmTunnel(SsmTalker):
             # If 'up' failed we are immediately called with 'down' - don't do anything.
             return
 
-        routes = " ".join(self.routes)
+        command = [self.updown_script, status, self.tun_name, self.local_ip, self.remote_ip, *self.routes]
         try:
-            cmd = f"{self.updown_script} {status} {self.tun_name} {self.local_ip} {self.remote_ip} {routes}"
-            logger.info("Running --up-down script: %s", cmd)
-            self.run_command(cmd)
+            logger.info("Running --up-down script: %s", shlex.join(command))
+            self.run_command(*command)
             self.updown_up_success = True
-        except AssertionError:
-            logger.error("Updown script %s exitted with error.", self.updown_script)
-            sys.exit(1)
+        except (subprocess.CalledProcessError, OSError) as e:  # OSError: not found, not executable, ...
+            logger.error("Updown script %s failed: %s", self.updown_script, e)
+            if status == "up":  # Else we're in start()'s 'finally', with the session still to close
+                sys.exit(1)
 
     def start(self, local_ip: str, remote_ip: str, routes: list[str], updown_script: str) -> None:
         self.local_ip = local_ip
@@ -380,9 +403,7 @@ class SsmTunnel(SsmTalker):
             )
 
 
-def random_ips(network: str) -> tuple[str, str]:
-    # Network address
-    net = ipaddress.ip_network(network)
+def random_ips(net: ipaddress.IPv4Network) -> tuple[str, str]:
     # Random host-part
     host_bytes = int(random.uniform(2, 2 ** (net.max_prefixlen - net.prefixlen) - 4)) & 0xFFFFFFFE
     # Construct local/remote IP
@@ -431,7 +452,7 @@ def main() -> int:
         for signum in (signal.SIGTERM, signal.SIGHUP):
             signal.signal(signum, exit_on_signal)
         tunnel = SsmTunnel(instance_resolver.ssm_client, instance_id, args.profile, args.reason)
-        tunnel.start(local_ip, remote_ip, list(args.routes) or [], args.updown_script)
+        tunnel.start(local_ip, remote_ip, [str(route) for route in args.routes], args.updown_script)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         handle_boto_error(e, logger, args.profile)

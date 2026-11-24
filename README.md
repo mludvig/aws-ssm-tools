@@ -432,7 +432,11 @@ You still need **session-manager-plugin** installed, and **AWS CLI** for
 Copy it to `/usr/local/bin/ssm-tunnel-agent` on the instance and make it
 executable. If it's missing, `ssm-tunnel` tells you where the file is on your
 computer. The instance needs Python 3.8 or newer, `ip`, `iptables`, and `sudo`
-for the session user.
+for the session user. `ssm-tunnel` also warns when the instance's agent is older
+than the bundled one. Copy the new file over the old one to update it.
+
+`--up-down SCRIPT` is called as `SCRIPT up|down DEVICE LOCAL_IP REMOTE_IP [ROUTE ...]`.
+It must be a path to an executable, with no arguments of its own.
 
 ## Other AWS Utilities
 
