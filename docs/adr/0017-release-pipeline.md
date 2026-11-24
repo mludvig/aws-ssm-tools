@@ -9,7 +9,7 @@ The workflow token could write to everything in every job, and actions were pinn
 ## Decision
 - The token is read-only by default. Only the tag-only `release` job gets `contents: write` and the attestation permissions.
 - `release` needs `build` and `build-windows`. It publishes their artifacts as they are: it checks the tag against the wheel version, writes `SHA256SUMS`, attests provenance, creates the GitHub release (a pre-release when the version has a letter, e.g. `3.0.0b1`), and runs `uv publish` last, because a PyPI upload can't be undone. PyPI is reached through Trusted Publishing (OIDC) in the `release` environment, so there's no long-lived token.
-- Actions are pinned by commit SHA within their current major. Dependabot proposes the bumps.
+- Actions are pinned by commit SHA. Dependabot proposes the bumps, majors included; the latest majors run on Node 24.
 - The Windows build runs `uv sync --locked --group windows`, so pyinstaller is in `uv.lock`.
 
 ## Consequences
@@ -17,5 +17,4 @@ The workflow token could write to everything in every job, and actions were pinn
 - If PyPI fails after the GitHub release exists, re-running the job updates that release and retries the upload.
 - **Alternatives rejected.**
   - A `PYPI_API_TOKEN` secret: long-lived, and usable by any job that can read secrets. Used until 2026-11-25.
-  - Bumping the actions to their latest majors: version updates were out of scope for the audit.
   - Authenticode signing of the exes: costs a certificate; the attestation and checksums cover integrity for now.
