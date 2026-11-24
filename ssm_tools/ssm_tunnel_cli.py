@@ -89,7 +89,7 @@ def parse_args(argv: list) -> argparse.Namespace:
     group_network = parser.add_argument_group("Networking Options")
     group_network.add_argument(
         "--route",
-        "-R",
+        "-r",
         metavar="ROUTE",
         dest="routes",
         type=ipaddress.IPv4Network,
@@ -104,7 +104,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         default=tunnel_cidr,
         help=f"By default the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598). This should be ok for most users.",
     )
-    group_network.add_argument("--reason", "-r", type=session_reason, help="The reason for the session.")
+    group_network.add_argument("--reason", type=session_reason, help="The reason for the session.")
     group_network.add_argument(
         "--up-down",
         metavar="SCRIPT",

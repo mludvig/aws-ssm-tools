@@ -223,7 +223,7 @@ def test_agent_create_tun_deletes_only_its_own(monkeypatch: pytest.MonkeyPatch, 
 
 
 def test_args() -> None:
-    args = parse_args(["-R", "10.0.0.0/8", "--route", "10.1.2.3", "-r", "why", "i-1"])
+    args = parse_args(["-r", "10.0.0.0/8", "--route", "10.1.2.3", "--reason", "why", "i-1"])
     assert ([str(route) for route in args.routes], args.reason, args.INSTANCE) == (
         ["10.0.0.0/8", "10.1.2.3/32"],
         "why",
@@ -235,9 +235,9 @@ def test_args() -> None:
 @pytest.mark.parametrize(
     "argv",
     [
-        ["-R", "10.0.0.0/8; touch /tmp/pwned"],
-        ["-R", "10.1.0.0/8"],  # Host bits set
-        ["-R", "fd00::/8"],  # Can't go via an IPv4 peer
+        ["-r", "10.0.0.0/8; touch /tmp/pwned"],
+        ["-r", "10.1.0.0/8"],  # Host bits set
+        ["-r", "fd00::/8"],  # Can't go via an IPv4 peer
         ["--tunnel-cidr", "100.64.0.0/30"],  # random_ips() would hand out the network address
         ["--tunnel-cidr", "100.64.0.0/32"],
         ["--tunnel-cidr", "fd00::/64"],

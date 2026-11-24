@@ -1,7 +1,7 @@
 # 0012. ssm-tunnel: its own session, a known prompt, and dead-agent detection
 
 ## Status
-Accepted (2026-11-24)
+Accepted (2026-11-24), amended 2026-11-25
 
 ## Context
 `ssm-tunnel` ran `aws ssm start-session` under pexpect from a space-split string, so a profile with spaces broke it and the session stayed Active after a kill. It matched only a `$ ` prompt and let a `pexpect.TIMEOUT` traceback escape when the agent failed. A silent agent was never noticed. On a tun-name collision, both the client and the agent deleted the other tunnel's device.
@@ -14,7 +14,7 @@ Accepted (2026-11-24)
 
 ## Consequences
 - `ssm-tunnel` no longer needs the AWS CLI. It needs plugin 1.2.497.0 or newer, and `ssm:TerminateSession` for the cleanup.
-- Breaking: `-r` now means `--reason`, as in `ec2-session` and `ssm-port-forward`, and `--route` is `-R`. An old `-r CIDR` becomes the session reason and adds no route.
+- `-r` stays `--route`, as in 2.2.1. `--reason` is long-only in every tool (amended 2026-11-25: it's rarely used, and freeing `-r` for it broke `ssm-tunnel -r CIDR` silently). The 3.0.0b1 beta had `-R` for `--route` and `-r` for `--reason`.
 - A tunnel whose agent stops answering ends within about 30 s rather than hanging.
 - The tun name still comes from the IPs, so two tunnels with the same random IPs still collide. The second one now fails with a hint to retry, and the first keeps working.
 - **Alternatives rejected.**

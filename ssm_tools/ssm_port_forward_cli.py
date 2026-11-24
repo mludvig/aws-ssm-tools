@@ -91,7 +91,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         help="Forward to this host instead of the SSM instance itself (e.g. an RDS endpoint). "
         "Uses AWS-StartPortForwardingSessionToRemoteHost document.",
     )
-    group_fwd.add_argument("--reason", "-r", type=session_reason, help="The reason for the session.")
+    group_fwd.add_argument("--reason", type=session_reason, help="The reason for the session.")
 
     parser.description = "Port-forward through an SSM Session to an EC2 instance"
     parser.epilog = f"""

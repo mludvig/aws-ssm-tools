@@ -109,3 +109,15 @@ def test_reason(name: str, reason: str, valid: bool, capsys: pytest.CaptureFixtu
         parse_args(argv)
     assert exc.value.code == 2
     assert "must be 1-256 characters on one line" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("name", "argv"),
+    [("ssm_session_cli", []), ("ssm_port_forward_cli", ["--remote-port", "80"])],
+)
+def test_reason_has_no_short_form(name: str, argv: list[str], capsys: pytest.CaptureFixture) -> None:
+    """-r was --reason in 2.2.1. It's long-only now, and ssm-tunnel's -r is --route."""
+    with pytest.raises(SystemExit) as exc:
+        importlib.import_module(f"ssm_tools.{name}").parse_args([*argv, "-r", "why", "i-1"])
+    assert exc.value.code == 2
+    assert "unrecognized arguments: -r" in capsys.readouterr().err

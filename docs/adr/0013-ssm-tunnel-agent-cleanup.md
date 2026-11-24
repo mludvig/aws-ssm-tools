@@ -4,7 +4,7 @@
 Accepted (2026-11-24)
 
 ## Context
-A server-side TerminateSession or a `pkill` left the remote tun device and NAT rule behind. The agent turned on `ip_forward` and never turned it off. A closed stdin crashed it with IndexError. `--route` values went unquoted into `os.system()`, so `-R '10.0.0.0/8; cmd'` ran `cmd`. A bad `--tunnel-cidr` crashed or handed out the network address. Users had no way to tell that an instance's agent was older than their `ssm-tunnel`.
+A server-side TerminateSession or a `pkill` left the remote tun device and NAT rule behind. The agent turned on `ip_forward` and never turned it off. A closed stdin crashed it with IndexError. `--route` values went unquoted into `os.system()`, so `--route '10.0.0.0/8; cmd'` ran `cmd`. A bad `--tunnel-cidr` crashed or handed out the network address. Users had no way to tell that an instance's agent was older than their `ssm-tunnel`.
 
 ## Decision
 - **Cleanup.** The agent exits through its `finally` on SIGTERM, SIGHUP, or EOF on stdin. It then ignores these signals and SIGINT, because bash sends SIGHUP twice when the session goes. It stops its tun reader thread through a pipe and waits for it before deleting the device. A device that a `select()` still holds open is busy, and `ip tuntap del` fails. The reader also stops on any read or write error.
