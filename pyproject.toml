@@ -163,3 +163,6 @@ dev = [
     "twine",
     "types-tabulate",
 ]
+windows = [
+    "pyinstaller>=6.22.3",
+]

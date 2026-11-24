@@ -9,21 +9,12 @@
 # Before running: generate the _entry_*.py entry-point stubs (see ci.yml).
 # Usage: pyinstaller aws-ssm-tools.spec --distpath dist
 
-import botocore
-from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
-
-# Only bundle botocore service data for the services we actually use
-_botocore_data = Path(botocore.__file__).parent / "data"
-_services = ["ssm", "ec2", "ecs", "sts", "sso", "sso-oidc"]
-datas = [
-    (str(_botocore_data / svc), f"botocore/data/{svc}") for svc in _services
-]
 
 common = dict(
     pathex=[],
     binaries=[],
-    datas=datas,
+    datas=[],  # PyInstaller's botocore hook bundles all of botocore/data anyway
     hiddenimports=collect_submodules("botocore"),
     hookspath=[],
     runtime_hooks=[],

@@ -8,6 +8,10 @@ on:
   pull_request:
     branches: [ main, master ]
 
+# Only the release job writes, see docs/adr/0017-release-pipeline.md
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,10 +25,12 @@ jobs:
       UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
 
     - name: Install uv
-      uses: astral-sh/setup-uv@v4
+      uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
 
     - name: Set up Python ${{ matrix.python-version }}
       run: uv python install ${{ matrix.python-version }}
@@ -45,10 +51,12 @@ jobs:
     needs: test
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
 
     - name: Install uv
-      uses: astral-sh/setup-uv@v4
+      uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
 
     - name: Set up Python
       run: uv python install 3.10
@@ -60,7 +68,7 @@ jobs:
       run: ./dev.sh build
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: dist
         path: dist/
@@ -70,16 +78,18 @@ jobs:
     needs: test
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
 
     - name: Install uv
-      uses: astral-sh/setup-uv@v4
+      uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
 
     - name: Set up Python
       run: uv python install 3.12
 
     - name: Install package and PyInstaller
-      run: uv pip install --system -e ".[dev]" pyinstaller || uv pip install --system -e . pyinstaller
+      run: uv sync --locked --no-dev --group windows
 
     - name: Build executables
       run: |
@@ -101,7 +111,8 @@ jobs:
           )
           $lines -join "`n" | Set-Content $tool.stub
         }
-        pyinstaller aws-ssm-tools.spec
+        uv run --no-sync pyinstaller aws-ssm-tools.spec
+        if ($LASTEXITCODE -ne 0) { throw "pyinstaller failed with $LASTEXITCODE" }
         foreach ($tool in $tools) { Remove-Item $tool.stub }
       shell: pwsh
 
@@ -119,55 +130,77 @@ jobs:
 
     - name: Create zip bundle
       run: |
-        $version = python -c "import ssm_tools; print(ssm_tools.__version__)"
+        $version = uv run --no-sync python -c "import ssm_tools; print(ssm_tools.__version__)"
         Compress-Archive -Path dist\aws-ssm-tools `
           -DestinationPath "dist\aws-ssm-tools-windows-$version.zip"
       shell: pwsh
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: windows-dist
         path: dist/
 
-    - name: Attach to GitHub Release
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: dist/*.zip
-
-  publish:
-    needs: [test, build]
+  # Publishes what build and build-windows tested, see docs/adr/0017-release-pipeline.md
+  release:
+    needs: [build, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write      # the GitHub release
+      id-token: write      # the provenance attestation
+      attestations: write
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Download build artifacts
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        name: dist
+        path: dist/
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v4
-
-    - name: Set up Python
-      run: uv python install 3.10
-
-    - name: Install dependencies
-      run: ./dev.sh install
+    - name: Download Windows build artifacts
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        name: windows-dist
+        path: windows/
 
     - name: Verify version matches tag
+      id: version
+      env:
+        TAG: ${{ github.ref_name }}
       run: |
-        tag_version="${{ github.ref_name }}"
-        # Remove 'v' prefix if present
-        tag_version="${tag_version#v}"
-        package_version=$(./dev.sh version)
-        echo "Tag version: $tag_version"
-        echo "Package version: $package_version"
-        if [ "$tag_version" != "$package_version" ]; then
-          echo "Error: Tag version ($tag_version) does not match package version ($package_version)"
+        # The wheel has the normalised version, e.g. aws_ssm_tools-3.0.0b1-py3-none-any.whl
+        version=$(basename dist/*.whl | cut -d- -f2)
+        echo "Tag: $TAG, package version: $version"
+        if [ "$TAG" != "v$version" ]; then
+          echo "Error: tag $TAG doesn't match the package version, it must be v$version"
           exit 1
         fi
+        # 3.0.0b1, 3.0.0rc1 etc. are pre-releases
+        if [[ $version =~ [a-z] ]]; then prerelease=true; else prerelease=false; fi
+        echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
-    - name: Build and publish to PyPI
+    - name: Collect release files and checksums
+      run: |
+        mkdir release
+        cp dist/* windows/*.zip release/
+        cd release && sha256sum * > SHA256SUMS && cat SHA256SUMS
+
+    - name: Attest build provenance
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-checksums: release/SHA256SUMS
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+      with:
+        files: release/*
+        prerelease: ${{ steps.version.outputs.prerelease }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+
+    - name: Publish to PyPI
       env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: ./dev.sh upload
+        UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+      run: uv publish dist/*
