@@ -417,3 +417,79 @@ def test_ambiguous_container(
     assert "Found 2 matches for 'nginx' AND 'service:web'" in caplog.text
     err = capsys.readouterr().err
     assert "aaa" in err and "bbb" in err and "arn:" not in err
+
+
+@pytest.mark.parametrize(
+    ("keywords", "task_ids"),
+    [
+        (["service:web"], ["aaa"]),
+        (["web"], ["aaa"]),  # The service without "service:"
+        (["batch"], ["bbb"]),  # A RunTask family without "family:"
+        (["NGINX", "Service:Web"], ["aaa"]),  # Any case
+        (["BBB"], ["bbb"]),
+        (["worker", "10.0.1.2"], ["bbb"]),
+        (["web", "worker"], []),
+        ([""], []),  # Not an empty field
+    ],
+)
+def test_container_keywords(ecs_stub: Any, keywords: list[str], task_ids: list[str]) -> None:
+    resolver, add_tasks = ecs_stub
+    add_tasks(
+        ecs_task("aaa", {"name": "nginx", "networkInterfaces": [{"privateIpv4Address": "10.0.1.1"}]}),
+        {
+            **ecs_task("bbb", {"name": "Worker", "networkInterfaces": [{"privateIpv4Address": "10.0.1.2"}]}),
+            "group": "family:batch",
+        },
+        {**ecs_task("ccc", {"name": "nginx", "networkInterfaces": []}), "group": ""},
+    )
+    if not task_ids:
+        with pytest.raises(SystemExit):
+            resolver.resolve_container(keywords)
+        return
+    assert [resolver.resolve_container(keywords)["task_id"]] == task_ids
+
+
+def test_unknown_cluster(cli_args: Any, stub: Any, caplog: pytest.LogCaptureFixture) -> None:
+    resolver = ContainerResolver(cli_args(cluster="nosuch"))
+    stub(resolver.ecs_client).add_response(
+        "list_clusters",
+        {"clusterArns": [f"arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/lab"]},
+    )
+    with pytest.raises(SystemExit) as exc:
+        resolver.get_list()
+    assert exc.value.code == 1
+    assert "ECS cluster nosuch not found." in caplog.text
+
+
+def skipped_tasks() -> list[dict[str, Any]]:
+    """Tasks with containers that ECS Exec can't reach."""
+    no_exec = ecs_task("aaa", {"name": "db"})
+    del no_exec["containers"][0]["managedAgents"]
+    pending = {**ecs_task("bbb", {"name": "db"}), "enableExecuteCommand": True}
+    pending["containers"][0]["managedAgents"][0]["lastStatus"] = "PENDING"
+    no_agent = {**ecs_task("ccc", {"name": "app", "managedAgents": []}), "enableExecuteCommand": True}
+    return [no_exec, pending, no_agent]
+
+
+def test_skipped_containers_that_match(ecs_stub: Any, caplog: pytest.LogCaptureFixture) -> None:
+    resolver, add_tasks = ecs_stub
+    add_tasks(*skipped_tasks(), ecs_task("ddd", {"name": "web"}))
+    with pytest.raises(SystemExit) as exc:
+        resolver.resolve_container(["db"])
+    assert exc.value.code == 1
+    assert "No container matches: db" in caplog.text
+    assert "Container db in task aaa matches, but ECS Exec isn't enabled on its task." in caplog.text
+    assert "Container db in task bbb matches, but its ExecuteCommandAgent is PENDING." in caplog.text
+    assert "task ccc" not in caplog.text and "task ddd" not in caplog.text
+
+
+def test_skipped_containers_summary(ecs_stub: Any, caplog: pytest.LogCaptureFixture) -> None:
+    resolver, add_tasks = ecs_stub
+    add_tasks(*skipped_tasks(), skipped_tasks()[0])
+    with pytest.raises(SystemExit) as exc:
+        resolver.print_list()
+    assert exc.value.code == 1
+    assert "No Execute-Command capable containers found!" in caplog.text
+    assert "Skipped 2 container(s): ECS Exec isn't enabled on its task." in caplog.text
+    assert "Skipped 1 container(s): its ExecuteCommandAgent is PENDING." in caplog.text
+    assert "Skipped 1 container(s): it has no ExecuteCommandAgent." in caplog.text

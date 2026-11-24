@@ -4,6 +4,7 @@ import argparse
 import logging
 import re
 import sys
+from collections import Counter
 from typing import Any, TextIO
 
 from botocore.exceptions import ClientError
@@ -247,10 +248,11 @@ class ContainerResolver(AWSSessionBase):
 
         self.args = args
         self.containers: list[dict[str, Any]] = []
+        self.skipped: list[dict[str, Any]] = []  # Containers without ECS Exec, with a "reason"
         self._tasks: dict[str, Any] = {}
         self._hosts: dict[str, str] = {}  # containerInstanceArn -> "host:<EC2 instance ID>"
 
-    def add_container(self, container: dict[str, Any]) -> None:
+    def add_container(self, container: dict[str, Any], skipped_reason: str = "") -> None:
         _task_parsed = container["taskArn"].split(":")[-1].split("/")
         task = self._tasks[container["taskArn"]]
         # Bridge / host network mode tasks have no ENI, show their EC2 host instead
@@ -259,18 +261,20 @@ class ContainerResolver(AWSSessionBase):
             address = nics[0].get("privateIpv4Address") or nics[0].get("ipv6Address", "")
         else:
             address = self._hosts.get(task.get("containerInstanceArn", ""), "")
-        self.containers.append(
-            {
-                "cluster_name": _task_parsed[1],
-                "task_id": _task_parsed[2],
-                "cluster_arn": self._tasks[container["taskArn"]]["clusterArn"],
-                "task_arn": container["taskArn"],
-                "group_name": self._tasks[container["taskArn"]]["group"],
-                "container_name": container["name"],
-                "runtime_id": container.get("runtimeId", ""),  # Not there until the container started
-                "address": address,
-            },
-        )
+        row = {
+            "cluster_name": _task_parsed[1],
+            "task_id": _task_parsed[2],
+            "cluster_arn": self._tasks[container["taskArn"]]["clusterArn"],
+            "task_arn": container["taskArn"],
+            "group_name": self._tasks[container["taskArn"]]["group"],
+            "container_name": container["name"],
+            "runtime_id": container.get("runtimeId", ""),  # Not there until the container started
+            "address": address,
+        }
+        if skipped_reason:
+            self.skipped.append({**row, "reason": skipped_reason})
+        else:
+            self.containers.append(row)
 
     def get_list(self) -> list[dict[str, Any]]:
         # List ECS Clusters
@@ -289,6 +293,9 @@ class ContainerResolver(AWSSessionBase):
                     filtered_clusters.append(cluster)
                     break
             clusters = filtered_clusters
+            if not clusters:
+                logger.error("ECS cluster %s not found.", self.args.cluster)
+                sys.exit(1)
 
         if not clusters:
             logger.warning("No ECS Clusters found.")
@@ -320,16 +327,12 @@ class ContainerResolver(AWSSessionBase):
                     for host in hosts["containerInstances"]:
                         self._hosts[host["containerInstanceArn"]] = f"host:{host.get('ec2InstanceId', '')}"
 
-                # Filter containers that have a running ExecuteCommandAgent
+                # Keep the containers that have a running ExecuteCommandAgent, and say why we skip the rest
                 for task in response["tasks"]:
                     logger.debug(task)
                     self._tasks[task["taskArn"]] = task
                     for container in task["containers"]:
-                        if "managedAgents" not in container:
-                            continue
-                        for agent in container["managedAgents"]:
-                            if agent["name"] == "ExecuteCommandAgent" and agent["lastStatus"] == "RUNNING":
-                                self.add_container(container)
+                        self.add_container(container, self._exec_unavailable(task, container))
 
         return self.containers
 
@@ -338,51 +341,58 @@ class ContainerResolver(AWSSessionBase):
 
         if not containers:
             logger.warning("No Execute-Command capable containers found!")
+            for reason, count in Counter(container["reason"] for container in self.skipped).items():
+                logger.warning("Skipped %d container(s): %s.", count, reason)
             sys.exit(1)
 
         return print_targets(sorted(containers, key=self._sort_key), quiet=quiet, hidden=self.HIDDEN)
 
     def resolve_container(self, keywords: list[str]) -> dict[str, Any]:
         containers = self.get_list()
-        if not containers:
-            logger.warning("No Execute-Command capable containers found!")
-            sys.exit(1)
-
         logger.debug("Searching for containers matching all keywords: %s", " ".join(keywords))
-
-        candidates: list[dict[str, Any]] = []
-        for container in containers:
-            for keyword in keywords:
-                if keyword not in (
-                    container["group_name"],
-                    container["task_id"],
-                    container["container_name"],
-                    container["address"],
-                ):
-                    logger.debug(
-                        "IGNORED: Container %s/%s doesn't match keyword: %s",
-                        container["task_id"],
-                        container["container_name"],
-                        keyword,
-                    )
-                    container = {}
-                    break
-            if container:
-                logger.debug(
-                    "ADDED: Container %s/%s matches all keywords: %s",
-                    container["task_id"],
-                    container["container_name"],
-                    " ".join(keywords),
-                )
-                candidates.append(container)
+        candidates = [container for container in containers if self._matches(container, keywords)]
         if not candidates:
             logger.warning("No container matches: %s", " AND ".join(keywords))
+            for container in self.skipped:
+                if self._matches(container, keywords):
+                    logger.warning(
+                        "Container %s in task %s matches, but %s.",
+                        container["container_name"],
+                        container["task_id"],
+                        container["reason"],
+                    )
             sys.exit(1)
         if len(candidates) > 1:
             matches = " AND ".join(f"'{keyword}'" for keyword in keywords)
             hint = "Use Container IP or Task ID to connect to a specific one"
             return choose_target(matches, sorted(candidates, key=self._sort_key), hint, self.HIDDEN)
         return candidates[0]
+
+    @staticmethod
+    def _exec_unavailable(task: dict[str, Any], container: dict[str, Any]) -> str:
+        """Why we can't ECS Exec into this container, or "" if we can."""
+        agent = next((a for a in container.get("managedAgents", []) if a["name"] == "ExecuteCommandAgent"), None)
+        if agent and agent["lastStatus"] == "RUNNING":
+            return ""
+        if not task.get("enableExecuteCommand"):
+            return "ECS Exec isn't enabled on its task"
+        if not agent:
+            return "it has no ExecuteCommandAgent"
+        return f"its ExecuteCommandAgent is {agent['lastStatus']}"
+
+    @staticmethod
+    def _matches(container: dict[str, Any], keywords: list[str]) -> bool:
+        """Case-insensitive, and the group matches with or without its "service:" / "family:" prefix."""
+        group = container["group_name"]
+        fields = {
+            group,
+            group.partition(":")[2],
+            container["task_id"],
+            container["container_name"],
+            container["address"],
+        }
+        fields = {field.lower() for field in fields} - {""}
+        return all(keyword.lower() in fields for keyword in keywords)
 
     @staticmethod
     def _sort_key(container: dict[str, Any]) -> list[str]:

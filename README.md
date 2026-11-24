@@ -30,6 +30,11 @@ and for ECS Docker Exec: `ecs-session`
   It doesn't need user credentials or `sshd` running on the container,
   however the containers must be configured to allow this access.
 
+  Each keyword matches a service (with or without `service:`), task ID,
+  container name or IP address, in any case. `-c 'COMMAND'` runs it with
+  `/bin/sh -c`, so pipes and `$VARS` work. `ecs-session CONTAINER -- COMMAND
+  ARG ...` runs it without a shell, for example in a distroless image.
+
   ECS Exec always runs as root. `-u USER`, `-l USER`, `--user USER` or
   `USER@CONTAINER` run the shell or `-c` command as USER instead, through
   `runuser`, `su` or `chroot --userspec`, whichever the container has.

@@ -51,6 +51,15 @@ USER_SWITCH_SCRIPT = (
 # A leading '-' would be an option to su / runuser
 USER_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 
+EXEC_CHECKER = "https://github.com/aws-containers/amazon-ecs-exec-checker"
+EXEC_HINTS = {  # ExecuteCommand error code -> what usually causes it
+    "TargetNotConnectedException": "The task can't reach SSM: check that its task role allows ssmmessages:*, "
+    "that it has a route to SSM, and that Fargate tasks run platform version 1.4.0 or newer.",
+    "AccessDeniedException": "Your IAM identity needs ecs:ExecuteCommand on this task.",
+    "InvalidParameterException": "ECS Exec isn't enabled on the task, or its agent isn't running. "
+    "Enable it on the service or task definition, and start new tasks.",
+}
+
 
 def parse_args(argv: list) -> argparse.Namespace:
     """
@@ -87,8 +96,8 @@ def parse_args(argv: list) -> argparse.Namespace:
         "-c",
         dest="command",
         metavar="COMMAND",
-        default="/bin/sh",
-        help="Command to run inside the container. Default: /bin/sh",
+        help="Shell command to run inside the container, with /bin/sh -c. Or put the command and its arguments "
+        "after '--' to run them without a shell. Default: /bin/sh",
     )
     group_session.add_argument(
         "--user",
@@ -106,14 +115,28 @@ def parse_args(argv: list) -> argparse.Namespace:
     parser.epilog = f"""
 IMPORTANT: containers must have "execute-command" setting enabled or they
 will not be recognised by {parser.prog} nor show up in --list output.
+
+To run a command without a shell, for example in a distroless container:
+  {parser.prog} CONTAINER -- COMMAND [ARG ...]
 {ESCAPE_HELP}
 Visit https://aws.nz/aws-utils/ecs-session for more info and usage examples.
 
 Author: Michael Ludvig
 """
 
+    # Everything after '--' is the command, see docs/adr/0015-ecs-session-commands.md
+    command_argv = None
+    if "--" in argv:
+        split = argv.index("--")
+        argv, command_argv = argv[:split], argv[split + 1 :]
+
     # Parse supplied arguments
     args = parser.parse_args(argv)
+    args.argv = command_argv or []
+    if command_argv == []:
+        parser.error("'--' needs a command after it")
+    if command_argv and args.command:
+        parser.error("use either --command or '-- COMMAND', not both")
 
     # USER@ goes on the first keyword, see docs/adr/0006-one-login-syntax.md
     login = ""
@@ -136,6 +159,18 @@ Author: Michael Ludvig
 def user_command(user: str, command: str) -> str:
     """Return the ECS Exec command that runs 'command' as 'user'. The agent splits it like a shell."""
     return shlex.join(["/bin/sh", "-c", USER_SWITCH_SCRIPT, user, command])
+
+
+def container_command(user: str, command: str | None, argv: list[str]) -> str:
+    """
+    Return the ECS Exec command for -u, -c and '-- COMMAND [ARG ...]'. The agent splits it like a shell,
+    but runs no shell, so -c goes through /bin/sh -c. See docs/adr/0015-ecs-session-commands.md
+    """
+    if user:
+        return user_command(user, shlex.join(argv) if argv else command or "/bin/sh")
+    if argv:
+        return shlex.join(argv)
+    return shlex.join(["/bin/sh", "-c", command]) if command else "/bin/sh"
 
 
 def execute_command(
@@ -191,11 +226,15 @@ def main() -> int:
             logger.warning("Could not find any container matching: %s", " AND ".join(args.CONTAINER))
             sys.exit(1)
 
-        command = user_command(args.user, args.command) if args.user else args.command
+        command = container_command(args.user, args.command, args.argv)
         return execute_command(resolver, container, args, command)
 
     except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
         handle_boto_error(e, logger, args.profile)
+        if isinstance(e, botocore.exceptions.ClientError) and e.operation_name == "ExecuteCommand":
+            hint = EXEC_HINTS.get(e.response["Error"]["Code"])
+            if hint:
+                logger.error("%s See %s", hint, EXEC_CHECKER)
         sys.exit(1)
 
 

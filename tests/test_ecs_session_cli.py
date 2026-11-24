@@ -6,10 +6,11 @@ from typing import Any
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from botocore.stub import Stubber
 
 from ssm_tools import ecs_session_cli
-from ssm_tools.ecs_session_cli import USER_SWITCH_SCRIPT, parse_args, user_command
+from ssm_tools.ecs_session_cli import EXEC_CHECKER, USER_SWITCH_SCRIPT, container_command, parse_args, user_command
 
 
 @pytest.mark.parametrize(
@@ -64,22 +65,109 @@ def test_user_switch_script_without_tools() -> None:
     assert f"cannot switch to user {pwd.getpwuid(os.getuid()).pw_name}: " in result.stderr
 
 
-def test_main_runs_command_as_user(monkeypatch: pytest.MonkeyPatch) -> None:
-    commands: list[str] = []
+@pytest.mark.parametrize(
+    ("argv", "keywords", "command", "command_argv"),
+    [
+        (["web"], ["web"], None, []),
+        (["-c", "id | cat", "web"], ["web"], "id | cat", []),
+        (["web", "nginx", "--", "id", "-u"], ["web", "nginx"], None, ["id", "-u"]),
+        (["-u", "nobody", "web", "--", "ls", "--", "-c"], ["web"], None, ["ls", "--", "-c"]),  # Only the first '--'
+    ],
+)
+def test_command(argv: list[str], keywords: list[str], command: str | None, command_argv: list[str]) -> None:
+    args = parse_args(argv)
+    assert (args.CONTAINER, args.command, args.argv) == (keywords, command, command_argv)
 
-    class FakeResolver:
-        def __init__(self, _args: Any) -> None:
-            pass
 
-        def resolve_container(self, keywords: list[str]) -> dict[str, Any]:
-            return {"keywords": keywords}
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["web", "--"], "'--' needs a command after it"),
+        (["-c", "id", "web", "--", "ls"], "use either --command or '-- COMMAND', not both"),
+    ],
+)
+def test_bad_command(capsys: pytest.CaptureFixture, argv: list[str], message: str) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parse_args(argv)
+    assert exc.value.code == 2
+    assert message in capsys.readouterr().err
 
+
+@pytest.mark.parametrize(
+    ("user", "command", "argv", "expected"),
+    [
+        ("", None, [], ["/bin/sh"]),
+        ("", "id | cat", [], ["/bin/sh", "-c", "id | cat"]),  # The agent has no shell, so pipes need one
+        ("", None, ["echo", "a b; $c"], ["echo", "a b; $c"]),  # No shell, the exact argv
+        ("nobody", None, [], ["/bin/sh", "-c", USER_SWITCH_SCRIPT, "nobody", "/bin/sh"]),
+        ("nobody", "id | cat", [], ["/bin/sh", "-c", USER_SWITCH_SCRIPT, "nobody", "id | cat"]),
+        ("nobody", None, ["echo", "a b; $c"], ["/bin/sh", "-c", USER_SWITCH_SCRIPT, "nobody", "echo 'a b; $c'"]),
+    ],
+)
+def test_container_command(user: str, command: str | None, argv: list[str], expected: list[str]) -> None:
+    assert shlex.split(container_command(user, command, argv)) == expected
+
+
+class FakeResolver:
+    def __init__(self, _args: Any) -> None:
+        pass
+
+    def resolve_container(self, keywords: list[str]) -> dict[str, Any]:
+        return {"keywords": keywords}
+
+
+@pytest.fixture
+def fake_main(monkeypatch: pytest.MonkeyPatch) -> Callable[..., None]:
+    """Return a function that runs main() with the given argv and execute_command(), and no AWS."""
     monkeypatch.setattr(ecs_session_cli, "ContainerResolver", FakeResolver)
     monkeypatch.setattr(ecs_session_cli, "verify_plugin_version", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(ecs_session_cli, "execute_command", lambda *args: commands.append(args[-1]))
-    monkeypatch.setattr("sys.argv", ["ecs-session", "-c", "id", "nobody@web"])
-    ecs_session_cli.main()
-    assert commands == [user_command("nobody", "id")]
+
+    def _run(argv: list[str], execute: Callable[..., Any]) -> None:
+        monkeypatch.setattr(ecs_session_cli, "execute_command", execute)
+        monkeypatch.setattr("sys.argv", ["ecs-session", *argv])
+        ecs_session_cli.main()
+
+    return _run
+
+
+@pytest.mark.parametrize(
+    ("argv", "command"),
+    [
+        (["-c", "id", "nobody@web"], user_command("nobody", "id")),
+        (["web", "--", "id", "-u"], "id -u"),
+    ],
+)
+def test_main_runs_the_command(fake_main: Callable[..., None], argv: list[str], command: str) -> None:
+    commands: list[str] = []
+    fake_main(argv, lambda *args: commands.append(args[-1]))
+    assert commands == [command]
+
+
+@pytest.mark.parametrize(
+    ("operation", "code", "hint"),
+    [
+        ("ExecuteCommand", "TargetNotConnectedException", "its task role allows ssmmessages:*"),
+        ("ExecuteCommand", "AccessDeniedException", "needs ecs:ExecuteCommand"),
+        ("ExecuteCommand", "InvalidParameterException", "start new tasks"),
+        ("ExecuteCommand", "ClusterNotFoundException", ""),
+        ("DescribeTasks", "InvalidParameterException", ""),
+    ],
+)
+def test_execute_command_hints(
+    fake_main: Callable[..., None],
+    caplog: pytest.LogCaptureFixture,
+    operation: str,
+    code: str,
+    hint: str,
+) -> None:
+    def execute(*_args: Any) -> None:
+        raise ClientError({"Error": {"Code": code, "Message": "nope"}}, operation)
+
+    with pytest.raises(SystemExit) as exc:
+        fake_main(["web"], execute)
+    assert exc.value.code == 1
+    assert "nope" in caplog.text
+    assert (hint in caplog.text and EXEC_CHECKER in caplog.text) if hint else EXEC_CHECKER not in caplog.text
 
 
 def test_execute_command(monkeypatch: pytest.MonkeyPatch, stub: Callable[[Any], Stubber]) -> None:
