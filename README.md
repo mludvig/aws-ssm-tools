@@ -412,7 +412,7 @@ pip install aws-ssm-tools
 pip install .
 ```
 
-**NOTE:** SSM Tools require **Python 3.10 or newer**. Only `ssm-tunnel-agent`
+**NOTE:** SSM Tools require **Python 3.11 or newer**. Only `ssm-tunnel-agent`
 requires **Python 3.8 or newer** as that's what's available by default
 on *Amazon Linux 2* instances.
 

@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Tools for AWS Systems Manager: ec2-session ecs-session ec2-ssh ssm-tunnel ssm-port-forward"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"  # see docs/adr/0018-python-3-11.md
 authors = [
     { name = "Michael Ludvig", email = "mludvig@logix.net.nz" },
 ]
@@ -20,7 +20,6 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -75,7 +74,7 @@ include = [
 ]
 
 [tool.black]
-target-version = ["py310"]
+target-version = ["py311"]
 line-length = 120
 
 [tool.pytest.ini_options]
