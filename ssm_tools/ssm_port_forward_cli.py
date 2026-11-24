@@ -27,7 +27,7 @@ from .common import (
 )
 from .picker import target_selector
 from .plugin import PLUGIN_ENV_VERSION, run_plugin
-from .resolver import InstanceResolver
+from .resolver import InstanceResolver, instance_not_found
 
 logger = logging.getLogger("ssm-tools.ssm-port-forward")
 
@@ -47,7 +47,11 @@ def port_number(lowest: int) -> Callable[[str], int]:
 
 
 def parse_args(argv: list) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
+    parser = argparse.ArgumentParser(
+        prog="ssm-port-forward",  # Python 3.14 on Windows says "python.exe C:\...\Scripts\ssm-port-forward"
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
 
     add_general_parameters(parser)
 
@@ -173,9 +177,7 @@ def main() -> int:
             instance_id, _ = instance_resolver.resolve_instance(args.INSTANCE)
 
         if not instance_id:
-            logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
-            logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
-            sys.exit(1)
+            instance_not_found(args.INSTANCE)
 
         return start_port_forward(instance_resolver.ssm_client, instance_id, args)
 

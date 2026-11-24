@@ -5,7 +5,7 @@ import logging
 import re
 import sys
 from collections import Counter
-from typing import Any, TextIO
+from typing import Any, NoReturn, TextIO
 
 from botocore.exceptions import ClientError
 from tabulate import tabulate
@@ -14,6 +14,16 @@ from .common import AWSSessionBase, printable
 from .picker import has_terminal, target_selector
 
 logger = logging.getLogger("ssm-tools.resolver")
+
+
+def instance_not_found(instance: str) -> NoReturn:
+    """--list shows only the instances that SSM has online, so that's where to look."""
+    logger.error(
+        "No online SSM instance matches '%s'. It may be stopped, offline or not registered in SSM, see --list.",
+        instance,
+    )
+    sys.exit(1)
+
 
 # EC2 instance ID (old short or long form) or hybrid managed instance ID
 INSTANCE_ID_RE = re.compile(r"i-[0-9a-f]{8}|m?i-[0-9a-f]{17}", re.IGNORECASE)

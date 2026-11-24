@@ -143,6 +143,7 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
     """
 
     parser = argparse.ArgumentParser(
+        prog="ec2-ssh",  # Python 3.14 on Windows says "python.exe C:\...\Scripts\ec2-ssh"
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False,
         allow_abbrev=False,

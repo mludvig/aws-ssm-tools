@@ -66,7 +66,11 @@ def parse_args(argv: list) -> argparse.Namespace:
     Parse command line arguments.
     """
 
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
+    parser = argparse.ArgumentParser(
+        prog="ecs-session",  # Python 3.14 on Windows says "python.exe C:\...\Scripts\ecs-session"
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
 
     add_general_parameters(parser)
 

@@ -42,7 +42,7 @@ from .common import (
 )
 from .picker import target_selector
 from .plugin import PLUGIN_ENV_VERSION
-from .resolver import InstanceResolver
+from .resolver import InstanceResolver, instance_not_found
 from .talker import PROMPT, SessionError, SsmTalker
 
 logger = logging.getLogger("ssm-tools.ssm-tunnel")
@@ -68,7 +68,11 @@ def parse_args(argv: list) -> argparse.Namespace:
     Parse command line arguments.
     """
 
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False)
+    parser = argparse.ArgumentParser(
+        prog="ssm-tunnel",  # Python 3.14 on Windows says "python.exe C:\...\Scripts\ssm-tunnel"
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+    )
 
     add_general_parameters(parser)
 
@@ -444,9 +448,7 @@ def main() -> int:
 
         instance_id, _ = instance_resolver.resolve_instance(args.INSTANCE)
         if not instance_id:
-            logger.warning("Could not resolve Instance ID for '%s'", args.INSTANCE)
-            logger.warning("Perhaps the '%s' is not registered in SSM?", args.INSTANCE)
-            sys.exit(1)
+            instance_not_found(args.INSTANCE)
 
         local_ip, remote_ip = random_ips(args.tunnel_cidr)
         # Close the session, and delete the tun device and its routes, in the 'finally's

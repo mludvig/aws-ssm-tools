@@ -11,6 +11,13 @@ from ssm_tools import ecs_session_cli
 
 ALL_MODULES = sorted(m.name for m in pkgutil.iter_modules(ssm_tools.__path__))
 CLI_MODULES = ["ecs_session_cli", "ssm_port_forward_cli", "ssm_session_cli", "ssm_ssh_cli", "ssm_tunnel_cli"]
+PROGS = {
+    "ecs_session_cli": "ecs-session",
+    "ssm_port_forward_cli": "ssm-port-forward",
+    "ssm_session_cli": "ec2-session",
+    "ssm_ssh_cli": "ec2-ssh",
+    "ssm_tunnel_cli": "ssm-tunnel",
+}
 
 
 @pytest.mark.parametrize("name", ALL_MODULES)
@@ -19,12 +26,46 @@ def test_import(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", CLI_MODULES)
-def test_help(name: str, capsys: pytest.CaptureFixture) -> None:
+def test_help(name: str, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     module = importlib.import_module(f"ssm_tools.{name}")
+    monkeypatch.setattr(sys, "argv", ["C:\\Python314\\Scripts\\ssm-ssh"])  # Not what we call ourselves
     with pytest.raises(SystemExit) as exc:
         module.parse_args(["--help"])
     assert exc.value.code == 0
-    assert capsys.readouterr().out.startswith("usage:")
+    assert capsys.readouterr().out.startswith(f"usage: {PROGS[name]} ")
+
+
+@pytest.mark.parametrize(
+    ("name", "argv"),
+    [
+        ("ssm_session_cli", ["nosuch"]),
+        ("ssm_port_forward_cli", ["nosuch", "--remote-port", "80", "--local-port", "0"]),
+        ("ssm_tunnel_cli", ["nosuch"]),
+    ],
+)
+def test_instance_not_found(
+    name: str,
+    argv: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class Resolver:
+        def __init__(self, _args: object) -> None:
+            pass
+
+        def resolve_instance(self, _instance: str) -> tuple[str, dict]:
+            return "", {}
+
+    module = importlib.import_module(f"ssm_tools.{name}")
+    monkeypatch.setattr(module, "InstanceResolver", Resolver)
+    monkeypatch.setattr(module, "verify_plugin_version", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(sys, "platform", "linux")  # ssm-tunnel
+    monkeypatch.setattr(signal, "signal", lambda *_args: None)  # ec2-session ignores Ctrl-Z, not in pytest
+    monkeypatch.setattr(sys, "argv", [PROGS[name], *argv])
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 1
+    assert "No online SSM instance matches 'nosuch'. It may be stopped" in caplog.text
 
 
 @pytest.mark.parametrize("name", CLI_MODULES)

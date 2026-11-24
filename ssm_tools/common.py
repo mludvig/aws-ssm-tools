@@ -11,6 +11,7 @@ from typing import Any
 import boto3
 import botocore.credentials
 import botocore.exceptions
+import botocore.session
 import packaging.version
 
 from . import __version__ as ssm_tools_version
@@ -39,6 +40,9 @@ def configure_logging(level: int) -> None:
     logging.basicConfig(level=logging.WARNING, format=logging_format)
     # Except for our modules
     logging.getLogger("ssm-tools").setLevel(level)
+    # botocore warns with a traceback before it raises, e.g. on an expired SSO token. We report what it raises.
+    # See docs/adr/0016-error-hints-and-botocore-logging.md
+    logging.getLogger("botocore").setLevel(logging.WARNING if level == logging.DEBUG else logging.ERROR)
 
 
 # ---------------------------------------------------------
@@ -269,33 +273,26 @@ def verify_awscli_version(version_required: str, logger: logging.Logger) -> bool
 
 __all__.append("handle_boto_error")
 
-_AUTH_ERROR_CODES = {
-    "ExpiredTokenException",
-    "ExpiredToken",
-    "InvalidClientTokenId",
-    "AuthFailure",
-    "AccessDenied",
-}
-_AUTH_ERROR_MSGS = {
-    "token",
-    "credential",
-    "auth",
-    "sso",
-    "expired",
-    "not authorized",
-    "access denied",
-}
+# Errors that 'aws sso login' fixes, for an SSO profile. See docs/adr/0016-error-hints-and-botocore-logging.md
+_SSO_ERRORS = (botocore.exceptions.SSOError, botocore.exceptions.TokenRetrievalError)
+_EXPIRED_CODES = {"ExpiredToken", "ExpiredTokenException"}
+
+
+def is_sso_profile(profile: str | None) -> bool:
+    """Does the profile (or the default one) get its credentials from AWS SSO / IAM Identity Center?"""
+    try:
+        config = botocore.session.Session(profile=profile).get_scoped_config()
+    except botocore.exceptions.ProfileNotFound:
+        return False
+    return "sso_session" in config or "sso_start_url" in config
 
 
 def handle_boto_error(e: Exception, logger: logging.Logger, profile: str | None = None) -> None:
     logger.error(e)
-    msg = str(e).lower()
-    is_auth = (
-        isinstance(e, botocore.exceptions.ClientError) and e.response["Error"]["Code"] in _AUTH_ERROR_CODES
-    ) or any(kw in msg for kw in _AUTH_ERROR_MSGS)
-    if is_auth:
+    expired = isinstance(e, botocore.exceptions.ClientError) and e.response["Error"]["Code"] in _EXPIRED_CODES
+    if (expired or isinstance(e, _SSO_ERRORS)) and is_sso_profile(profile):
         profile_flag = f" --profile {profile}" if profile else ""
-        logger.error("Hint: try re-authenticating with: aws sso login%s", profile_flag)
+        logger.error("Hint: log in again with: aws sso login%s", profile_flag)
 
 
 # ---------------------------------------------------------
