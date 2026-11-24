@@ -18,6 +18,8 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: Apache Software License",
     "Development Status :: 5 - Production/Stable",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
@@ -64,12 +66,9 @@ packages = ["ssm_tools"]
 [tool.hatch.build.targets.sdist]
 include = [
     "ssm_tools/",
-    "ec2-session",
-    "ec2-ssh",
-    "ecs-session",
-    "ssm-tunnel",
     "ssm-tunnel-updown.dns-example",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
 ]
 

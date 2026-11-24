@@ -165,6 +165,11 @@ and for ECS Docker Exec: `ecs-session`
     `session-manager-plugin` only starts sending your keystrokes after the
     first output. Print something first, e.g. `-c "printf '\r'; read x; ..."`.
 
+    `ec2-session` and `ecs-session` don't return the remote command's exit
+    code: `session-manager-plugin` exits with 0 either way
+    ([aws/session-manager-plugin#59](https://github.com/aws/session-manager-plugin/issues/59)).
+    In scripts use `ec2-ssh INSTANCE COMMAND`, which does.
+
     You can specify other SSM documents to run with `--document-name AWS-...`
     and their parameters as JSON, e.g. `--parameters '{"command": ["top"]}'`,
     to customise your session. Refer to AWS docs for details.
@@ -412,9 +417,10 @@ pip install aws-ssm-tools
 pip install .
 ```
 
-**NOTE:** SSM Tools require **Python 3.11 or newer**. Only `ssm-tunnel-agent`
-requires **Python 3.8 or newer** as that's what's available by default
-on *Amazon Linux 2* instances.
+**NOTE:** SSM Tools require **Python 3.11 or newer**. The `python3` that
+comes with macOS is older, so install a newer one first, e.g. with
+`brew install python`. `ssm-tunnel-agent` on the instance only needs
+Python 3.8, see below.
 
 #### Windows compatibility
 
