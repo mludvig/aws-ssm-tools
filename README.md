@@ -266,6 +266,13 @@ and for ECS Docker Exec: `ecs-session`
     ```
 
     If `--local-port` is omitted it defaults to the same value as `--remote-port`.
+    With `--local-port 0` the plugin picks a free port and prints it.
+
+    The SSM agent on the instance makes the connection to the remote host,
+    out of `ssm-port-forward`'s sight. If the host refuses it or its name
+    doesn't resolve, the session ends with exit code 0. If a security group
+    drops it, your connection just hangs. Check the host and port from the
+    instance itself, e.g. in `ec2-session`.
 
     Like `ec2-session`, running without an instance name shows an interactive
     selection menu.

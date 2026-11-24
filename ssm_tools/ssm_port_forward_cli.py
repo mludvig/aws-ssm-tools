@@ -9,7 +9,10 @@
 
 import argparse
 import logging
+import os
+import socket
 import sys
+from collections.abc import Callable
 from typing import Any
 
 import botocore.exceptions
@@ -18,6 +21,7 @@ from .common import (
     add_general_parameters,
     configure_logging,
     handle_boto_error,
+    session_reason,
     show_version,
     verify_plugin_version,
 )
@@ -26,6 +30,20 @@ from .plugin import PLUGIN_ENV_VERSION, run_plugin
 from .resolver import InstanceResolver
 
 logger = logging.getLogger("ssm-tools.ssm-port-forward")
+
+
+def port_number(lowest: int) -> Callable[[str], int]:
+    """argparse type for a port from 'lowest' to 65535. See docs/adr/0014-validate-before-start-session.md"""
+
+    def port(value: str) -> int:
+        try:
+            if lowest <= int(value) <= 65535:
+                return int(value)
+        except ValueError:
+            pass
+        raise argparse.ArgumentTypeError(f"{value} isn't a port number from {lowest} to 65535")
+
+    return port
 
 
 def parse_args(argv: list) -> argparse.Namespace:
@@ -49,13 +67,15 @@ def parse_args(argv: list) -> argparse.Namespace:
         "-L",
         dest="local_port",
         metavar="PORT",
+        type=port_number(0),
         required=False,
-        help="Local port to listen on. If omitted, same as --remote-port.",
+        help="Local port to listen on, 0 for any free one. If omitted, same as --remote-port.",
     )
     group_fwd.add_argument(
         "--remote-port",
         dest="remote_port",
         metavar="PORT",
+        type=port_number(1),
         required=False,
         help="Remote port to forward to (on the instance, or on --remote-host).",
     )
@@ -67,7 +87,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         help="Forward to this host instead of the SSM instance itself (e.g. an RDS endpoint). "
         "Uses AWS-StartPortForwardingSessionToRemoteHost document.",
     )
-    group_fwd.add_argument("--reason", "-r", help="The reason for the session.")
+    group_fwd.add_argument("--reason", "-r", type=session_reason, help="The reason for the session.")
 
     parser.description = "Port-forward through an SSM Session to an EC2 instance"
     parser.epilog = f"""
@@ -92,10 +112,24 @@ Author: Michael Ludvig
     if not args.list and not args.remote_port:
         parser.error("--remote-port is required")
 
-    if not args.local_port:
+    if args.local_port is None:
         args.local_port = args.remote_port
 
     return args
+
+
+def check_local_port(port: int) -> None:
+    """Exit if we can't listen on the port. Else the plugin waits silently. See docs/adr/0014-validate-before-start-session.md"""
+    if port == 0:  # The plugin picks a free one
+        return
+    with socket.socket() as sock:
+        if os.name != "nt":  # Like the plugin's listener. On Windows it would let us share a port in use.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError as e:
+            logger.error("Can't listen on local port %d: %s. Choose another with --local-port.", port, e.strerror)
+            sys.exit(1)
 
 
 def start_port_forward(ssm_client: Any, instance_id: str, args: argparse.Namespace) -> int:
@@ -128,6 +162,8 @@ def main() -> int:
 
         if not verify_plugin_version(logger, required=PLUGIN_ENV_VERSION):
             sys.exit(1)
+
+        check_local_port(args.local_port)
 
         if not args.INSTANCE:
             headers, session_details = instance_resolver.print_list(quiet=True)

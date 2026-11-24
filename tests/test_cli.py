@@ -50,3 +50,21 @@ def test_ecs_session_rejects_unknown_options(capsys: pytest.CaptureFixture) -> N
         ecs_session_cli.parse_args(["--comand", "id", "web"])
     assert exc.value.code == 2
     assert "unrecognized arguments: --comand" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name", ["ssm_port_forward_cli", "ssm_session_cli", "ssm_ssh_cli", "ssm_tunnel_cli"])
+@pytest.mark.parametrize(("reason", "valid"), [("x" * 256, True), ("x" * 257, False), ("", False), ("a\nb", False)])
+def test_reason(name: str, reason: str, valid: bool, capsys: pytest.CaptureFixture) -> None:
+    """What StartSession accepts, checked before we call it."""
+    argv = ["--reason", reason, "i-1"]
+    if name == "ssm_port_forward_cli":
+        argv = ["--remote-port", "80", *argv]
+    parse_args = importlib.import_module(f"ssm_tools.{name}").parse_args
+    if valid:
+        args = parse_args(argv)
+        assert (args[0] if isinstance(args, tuple) else args).reason == reason
+        return
+    with pytest.raises(SystemExit) as exc:
+        parse_args(argv)
+    assert exc.value.code == 2
+    assert "must be 1-256 characters on one line" in capsys.readouterr().err

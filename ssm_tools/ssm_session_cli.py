@@ -27,6 +27,7 @@ from .common import (
     add_general_parameters,
     configure_logging,
     handle_boto_error,
+    session_reason,
     show_version,
     unique_login,
     verify_plugin_version,
@@ -74,7 +75,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         help="SUDO to USER after opening the session, the same as USER@INSTANCE. Linux only. "
         "Can't be used together with --document-name / --parameters. (optional)",
     )
-    group_session.add_argument("--reason", "-r", help="The reason for connecting to the instance.")
+    group_session.add_argument("--reason", "-r", type=session_reason, help="The reason for connecting to the instance.")
     group_session.add_argument(
         "--command",
         "-c",

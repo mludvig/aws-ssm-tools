@@ -316,6 +316,18 @@ def unique_login(*logins: str) -> str:
 
 # ---------------------------------------------------------
 
+__all__.append("session_reason")
+
+
+def session_reason(value: str) -> str:
+    """argparse type for --reason: what StartSession accepts. See docs/adr/0014-validate-before-start-session.md"""
+    if not re.fullmatch(r".{1,256}", value):
+        raise argparse.ArgumentTypeError("must be 1-256 characters on one line")
+    return value
+
+
+# ---------------------------------------------------------
+
 __all__.append("printable")
 
 

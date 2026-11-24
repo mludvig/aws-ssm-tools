@@ -36,6 +36,7 @@ from .common import (
     exit_on_signal,
     handle_boto_error,
     seconds_to_human,
+    session_reason,
     show_version,
     verify_plugin_version,
 )
@@ -99,7 +100,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         default=tunnel_cidr,
         help=f"By default the tunnel endpoint IPs are randomly assigned from the reserved {tunnel_cidr} block (RFC6598). This should be ok for most users.",
     )
-    group_network.add_argument("--reason", "-r", help="The reason for the session.")
+    group_network.add_argument("--reason", "-r", type=session_reason, help="The reason for the session.")
     group_network.add_argument(
         "--up-down",
         metavar="SCRIPT",

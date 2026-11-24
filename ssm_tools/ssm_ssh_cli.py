@@ -26,6 +26,7 @@ from .common import (
     add_general_parameters,
     configure_logging,
     handle_boto_error,
+    session_reason,
     show_version,
     unique_login,
     verify_awscli_version,
@@ -159,7 +160,7 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
     )
 
     group_ec2ic = parser.add_argument_group("EC2 Instance Connect")
-    group_ec2ic.add_argument("--reason", help="The reason for connecting to the instance.")
+    group_ec2ic.add_argument("--reason", type=session_reason, help="The reason for connecting to the instance.")
     group_ec2ic.add_argument(
         "--user",
         "-u",
