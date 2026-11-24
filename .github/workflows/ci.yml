@@ -146,9 +146,10 @@ jobs:
     needs: [build, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    environment: release   # PyPI's trusted publisher is bound to it
     permissions:
       contents: write      # the GitHub release
-      id-token: write      # the provenance attestation
+      id-token: write      # the provenance attestation and PyPI Trusted Publishing
       attestations: write
 
     steps:
@@ -201,6 +202,4 @@ jobs:
       uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
 
     - name: Publish to PyPI
-      env:
-        UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-      run: uv publish dist/*
+      run: uv publish --trusted-publishing always dist/*
