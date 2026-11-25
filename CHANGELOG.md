@@ -10,6 +10,7 @@
 - ssm-port-forward takes `--remote [HOST:]PORT` and `--local [HOST:]PORT`, and ssh's `-L [BIND:]PORT:HOST:HOSTPORT`. It can listen on any address, e.g. `--local 0.0.0.0:8080` for other hosts to connect.
 - `--list` and the target picker cut cells wider than 50 columns, so a very long name no longer pushes the host names and IP addresses off the screen.
 - All tools warn when session-manager-plugin is older than 1.2.764.0, which AWS will soon stop supporting.
+- ec2-ssh sets `ServerAliveInterval=15` unless the ssh_config or `-o` sets one, so ssh exits by itself about a minute after the SSM connection dies instead of hanging.
 
 ## 3.0.0 (2026-11-25)
 

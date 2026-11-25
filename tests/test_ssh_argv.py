@@ -137,7 +137,11 @@ def run(monkeypatch: pytest.MonkeyPatch) -> Any:
         monkeypatch.setattr(ssm_ssh_cli.os, "execvp", lambda _file, command: execs.append(command))
         monkeypatch.setattr(ssm_ssh_cli, "run_session", lambda command: execs.append(["(child)", *command]) or 0)
         if not real_ssh:
-            monkeypatch.setattr(ssm_ssh_cli, "ssh_config", lambda _options, dest: {"user": [f"sshuser-for-{dest}"]})
+            monkeypatch.setattr(
+                ssm_ssh_cli,
+                "ssh_config",
+                lambda _options, dest: {"user": [f"sshuser-for-{dest}"], "serveraliveinterval": ["60"]},
+            )
         if not real_keys:
             monkeypatch.setattr(ssm_ssh_cli, "select_key", lambda _config: "KEY")
         monkeypatch.setattr("sys.argv", ["ec2-ssh", *argv])
@@ -249,6 +253,24 @@ def test_login_precedence(run: Any, tmp_path: Any, argv: list[str], login: str) 
     config.write_text(SSH_CONFIG)
     _, sent_keys = run("-F", str(config), *argv, real_ssh=True)
     assert sent_keys[0][1] == login
+
+
+@pytest.mark.skipif(not shutil.which("ssh"), reason="needs ssh")
+@pytest.mark.parametrize(
+    ("config", "argv", "added"),
+    [
+        ("", ["u@web"], True),
+        ("", ["myalias"], True),
+        ("", ["-o", "ServerAliveInterval=5", "u@web"], False),
+        ("Host i-*\n  ServerAliveInterval 30\n", ["u@web"], False),  # ssh connects to the instance ID
+        ("Host web\n  ServerAliveInterval 30\n", ["u@web"], True),
+    ],
+)
+def test_server_alive_interval(run: Any, tmp_path: Any, config: str, argv: list[str], added: bool) -> None:
+    ssh_config = tmp_path / "ssh_config"
+    ssh_config.write_text(config)
+    command, _ = run("-F", str(ssh_config), *argv, real_ssh=True)
+    assert ("ServerAliveInterval=15" in command) == added
 
 
 @pytest.mark.skipif(not shutil.which("ssh"), reason="needs ssh")

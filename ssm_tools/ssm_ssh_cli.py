@@ -41,6 +41,8 @@ logger = logging.getLogger("ssm-tools.ec2-ssh")
 
 MIN_PLUGIN_VERSION = "1.1.23"  # AWS-StartSSHSession support
 MIN_AWSCLI_VERSION_ENDPOINT = "2.12.0"  # aws ec2-instance-connect open-tunnel
+# ssh exits about 60 s (4 intervals) after the tunnel dies, see docs/adr/0023-ec2-ssh-server-alive-interval.md
+SERVER_ALIVE_INTERVAL = 15
 
 # ssh(1) option letters without and with a value, as in OpenSSH's getopt() string
 SSH_FLAGS = "46AaCfGgKkMNnqsTtVvXxYy"
@@ -306,6 +308,8 @@ def main() -> int:
                 # E.g. an ssh_config alias, let ssh resolve it
                 logger.info("No instance found for '%s', passing it to ssh as is", args.host)
 
+            if ssh_config(ssh_args.options, ssh_args.destination)["serveraliveinterval"] == ["0"]:
+                ssh_args.options[:0] = ["-o", f"ServerAliveInterval={SERVER_ALIVE_INTERVAL}"]
             command = ssh_command(ssh_args, args.profile, args.region, args.use_endpoint, args.reason)
             logger.debug("Running: %s", command)
             # On Windows os.execvp() doesn't replace us, see docs/adr/0019-windows-and-macos.md

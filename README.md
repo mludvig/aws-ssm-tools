@@ -179,7 +179,9 @@ and for ECS Docker Exec: `ecs-session`
     or newer; `ec2-session` and `ecs-session` warn when yours is older.
     Otherwise kill `ec2-session` from another terminal: it ends the session
     and restores your terminal. `ec2-ssh` uses SSH's own `~.`, which works
-    even when the network is gone.
+    even when the network is gone. It also sets `ServerAliveInterval=15`
+    unless your ssh_config or `-o` sets one, so ssh exits by itself about a
+    minute after the connection dies.
 
 3. **Open SSH session** over SSM with *port forwarding*.
 
