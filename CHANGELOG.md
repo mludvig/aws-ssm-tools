@@ -3,6 +3,7 @@
 ## 3.1.0 (unreleased)
 
 ### Breaking changes
+- **`-l` is no longer `--list`** in ssm-port-forward and ssm-tunnel either, so `--list` is long-only in every tool. 3.0.0 wrongly said this had already happened.
 - **ssm-port-forward listens on a free port** when no local port is given, instead of the remote port number. The plugin prints which one. Use `--local PORT` for a fixed one.
 
 ### Changes
@@ -16,7 +17,7 @@ A reliability, security and consistency pass over all the tools. The decisions b
 
 ### Breaking changes
 - **Python 3.11 or newer is required.** Python 3.10 reached end of life in October 2026; on 3.10, pip keeps installing 2.2.1.
-- **`-l` is no longer `--list`** in ec2-session, ecs-session, ssm-port-forward or ssm-tunnel. `-u`, `-l`, `--user` and `USER@INSTANCE` are now the same login option everywhere. `--list` is long-only.
+- **`-l` is no longer `--list`** in ec2-session or ecs-session. `-u`, `-l`, `--user` and `USER@INSTANCE` are now the same login option everywhere. `--list` is long-only there.
 - **`--reason` has no short form** any more: `-r` is gone from ec2-session and ssm-port-forward. ssm-tunnel keeps `-r` for `--route`.
 - **ssm-tunnel: `--up-down` is just a script path.** It runs without a shell as `SCRIPT up|down DEVICE LOCAL REMOTE [ROUTE ...]`. Update `ssm-tunnel-agent` on your instances; ssm-tunnel warns when the agent is too old.
 - **ecs-session `-c` runs through `/bin/sh -c`**, so pipes and quotes work. For containers without a shell (distroless), use `ecs-session CONTAINER -- COMMAND [ARG ...]`.

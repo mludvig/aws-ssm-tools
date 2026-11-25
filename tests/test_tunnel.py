@@ -306,3 +306,11 @@ def test_help_works_on_any_platform(monkeypatch: pytest.MonkeyPatch, capsys: pyt
         ssm_tunnel_cli.main()
     assert exc.value.code == 0
     assert "--route" in capsys.readouterr().out
+
+
+def test_no_short_list(capsys: pytest.CaptureFixture[str]) -> None:
+    # --list is long-only in every tool, see docs/adr/0006-one-login-syntax.md
+    with pytest.raises(SystemExit) as exc:
+        parse_args(["-l"])
+    assert exc.value.code == 2
+    assert "unrecognized arguments: -l" in capsys.readouterr().err

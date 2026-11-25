@@ -9,6 +9,7 @@ Each tool named the login user differently. ec2-ssh took `-l` and `user@` from s
 ## Decision
 - ec2-session and ec2-ssh (and ecs-session, C09) accept `-u USER`, `-l USER`, `--user USER` and `USER@TARGET` as aliases. `common.unique_login()` merges them, and conflicting values are a usage error. `-l` is no longer `--list`.
 - `USER@TARGET` splits on the last `@`, like ssh. The target is not first looked up as a whole.
+- 3.1.0: ssm-port-forward and ssm-tunnel have no login option, but drop `-l` for `--list` too, so that `--list` is long-only everywhere. It's interactive, so scripts are unlikely to use it.
 - ec2-session quotes the user with `shlex.quote` and refuses `--user` on Windows instances, which have no `sudo`.
 
 ## Consequences

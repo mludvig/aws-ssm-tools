@@ -94,7 +94,6 @@ def parse_args(argv: list) -> argparse.Namespace:
     group_instance.add_argument("INSTANCE", nargs="?", help="Instance ID, Name, Host name or IP address")
     group_instance.add_argument(
         "--list",
-        "-l",
         dest="list",
         action="store_true",
         help="List instances available for SSM Session",

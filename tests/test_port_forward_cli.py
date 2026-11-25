@@ -227,3 +227,11 @@ def test_relay_port_in_use(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCa
             ssm_port_forward_cli.main()
     assert exc.value.code == 1
     assert f"Can't listen on 0.0.0.0 port {port}" in caplog.text
+
+
+def test_no_short_list(capsys: pytest.CaptureFixture[str]) -> None:
+    # --list is long-only in every tool, see docs/adr/0006-one-login-syntax.md
+    with pytest.raises(SystemExit) as exc:
+        parse_args(["-l"])
+    assert exc.value.code == 2
+    assert "unrecognized arguments: -l" in capsys.readouterr().err
