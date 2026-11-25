@@ -68,6 +68,9 @@ def _run_child(command: list[str], env: dict[str, str] | None) -> int:
 
     forwarded = [signal.SIGTERM] + ([signal.SIGHUP] if os.name == "posix" else [])
     old_handlers = {signum: signal.signal(signum, _forward) for signum in forwarded}
+    if os.name == "nt":
+        # The console sends Ctrl-C to the child as well, leave it to the child. See docs/adr/0019-windows-and-macos.md
+        old_handlers[signal.SIGINT] = signal.signal(signal.SIGINT, lambda _signum, _frame: None)
     try:
         returncode = proc.wait()
     except KeyboardInterrupt:  # As subprocess.call() did

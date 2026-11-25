@@ -7,7 +7,7 @@ from typing import Any
 import pexpect
 import pytest
 
-from ssm_tools.terminal import _SOFT_RESET, run_session
+from ssm_tools.terminal import _SOFT_RESET, _run_child, run_session
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX terminal handling")
 
@@ -104,3 +104,9 @@ def test_term_without_terminal_is_passed_on() -> None:
     output, _ = driver.communicate(timeout=10)
     assert driver.returncode == 143
     assert "child got TERM" in output
+
+
+def test_windows_leaves_ctrl_c_to_the_child(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Windows console sends Ctrl-C to the child too: the child's exit code is the result, not 130."""
+    monkeypatch.setattr(os, "name", "nt")
+    assert _run_child(["sh", "-c", "kill -INT $PPID; sleep 0.5; exit 3"], None) == 3
