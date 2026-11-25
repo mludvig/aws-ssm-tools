@@ -228,7 +228,9 @@ def proxy_command(profile: str, region: str, use_endpoint: bool, reason: str = "
     """
 
     def _quote(value: str) -> str:
-        return shlex.quote(value).replace("%", "%%")
+        # Win32-OpenSSH runs it without a shell, for aws.exe to split, see docs/adr/0019-windows-and-macos.md
+        quoted = subprocess.list2cmdline([value]) if os.name == "nt" else shlex.quote(value)
+        return quoted.replace("%", "%%")
 
     command = "aws"
     if profile:
@@ -306,7 +308,8 @@ def main() -> int:
 
             command = ssh_command(ssh_args, args.profile, args.region, args.use_endpoint, args.reason)
             logger.debug("Running: %s", command)
-            if key_dir:
+            # On Windows os.execvp() doesn't replace us, see docs/adr/0019-windows-and-macos.md
+            if key_dir or os.name == "nt":
                 return run_session(command)
             os.execvp(command[0], command)
 

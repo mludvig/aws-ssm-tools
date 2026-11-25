@@ -1,8 +1,10 @@
+import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
+import sys
 from typing import Any
 
 import pytest
@@ -88,6 +90,7 @@ def test_option_value() -> None:
 
 
 INSTANCES = {"web": "i-0123456789abcdef0"}
+SSH = ["(child)", "ssh"] if os.name == "nt" else ["ssh"]  # See test_windows_waits_for_ssh
 PROXY = [
     "-o",
     "ProxyCommand=aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p",
@@ -187,7 +190,7 @@ HYBRID = "mi-0123456789abcdef0"
 )
 def test_ssh_command(run: Any, argv: list[str], ssh_argv: list[str], sent: list[tuple[str, str, str]]) -> None:
     command, sent_keys = run(*argv)
-    assert command == ["ssh", *PROXY, *ssh_argv]
+    assert command == [*SSH, *PROXY, *ssh_argv]
     assert sent_keys == sent
 
 
@@ -283,6 +286,12 @@ def test_sends_the_key_for_the_instance_id(run: Any, tmp_path: Any, no_user_keys
     assert sent_keys == [(WEB, "x", keys["instance"])]
 
 
+def test_windows_waits_for_ssh(run: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os, "name", "nt")  # Where os.execvp() returns at once and loses the exit code
+    command, _ = run("u@web")
+    assert command[:2] == ["(child)", "ssh"]
+
+
 @pytest.mark.skipif(not shutil.which("ssh-keygen"), reason="needs ssh")
 def test_gen_key(run: Any, tmp_path: Any, no_user_keys: Any) -> None:
     mine = make_key(tmp_path / "mine")
@@ -307,7 +316,13 @@ def test_gen_key_without_sending(capsys: pytest.CaptureFixture) -> None:
 def run_proxy_command(proxy: str) -> list[str]:
     """Expand ssh's %-tokens in 'proxy' like ssh does and split it like the shell does."""
     tokens = {"%": "%", "h": WEB, "p": "22"}
-    return shlex.split(re.sub("%(.)", lambda match: tokens[match.group(1)], proxy))
+    command = re.sub("%(.)", lambda match: tokens[match.group(1)], proxy)
+    if os.name != "nt":
+        return shlex.split(command)
+    # Win32-OpenSSH starts it without a shell, and aws.exe splits its command line as Python does
+    program, _, args = command.partition(" ")
+    echo = subprocess.list2cmdline([sys.executable, "-c", "import json, sys; print(json.dumps(sys.argv[1:]))"])
+    return [program, *json.loads(subprocess.run(f"{echo} {args}", capture_output=True, check=True).stdout)]
 
 
 SSM_ARGV = ["ssm", "start-session", "--target", WEB, "--document-name", "AWS-StartSSHSession"]
