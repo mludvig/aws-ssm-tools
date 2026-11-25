@@ -31,7 +31,14 @@ def run_in_pty(child_script: str, redirect: str = "") -> dict[str, Any]:
     output = shell.before
     found = {key: re.search(rf"{key}=(\S+)".encode(), output) for key in ("BEFORE", "RC", "AFTER")}
     assert all(found.values()), output
-    return {key: match.group(1).decode() for key, match in found.items() if match} | {"output": output}
+    return {key: _no_pendin(match.group(1).decode()) for key, match in found.items() if match} | {"output": output}
+
+
+def _no_pendin(stty: str) -> str:
+    """macOS sets PENDIN when the terminal goes back to canonical mode, until the next read"""
+    if sys.platform != "darwin":
+        return stty
+    return re.sub(r"lflag=([0-9a-f]+)", lambda m: f"lflag={int(m[1], 16) & ~0x20000000:x}", stty)
 
 
 def assert_no_process(marker: str) -> None:
@@ -110,3 +117,10 @@ def test_windows_leaves_ctrl_c_to_the_child(monkeypatch: pytest.MonkeyPatch) -> 
     """The Windows console sends Ctrl-C to the child too: the child's exit code is the result, not 130."""
     monkeypatch.setattr(os, "name", "nt")
     assert _run_child(["sh", "-c", "kill -INT $PPID; sleep 0.5; exit 3"], None) == 3
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="DSUSP is BSD / macOS only")
+def test_macos_dsusp_disabled_during_session() -> None:
+    result = run_in_pty('stty -a | grep -o "dsusp = [^;]*"')
+    assert b"dsusp = <undef>" in result["output"]
+    assert result["AFTER"] == result["BEFORE"]

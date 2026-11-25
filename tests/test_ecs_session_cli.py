@@ -1,6 +1,7 @@
 import os
 import shlex
 import subprocess
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -50,7 +51,7 @@ def test_user_command(command: str) -> None:
     assert shlex.split(user_command("nobody", command)) == ["/bin/sh", "-c", USER_SWITCH_SCRIPT, "nobody", command]
 
 
-@pytest.mark.skipif(not os.path.exists("/bin/sh"), reason="needs /bin/sh")
+@pytest.mark.skipif(sys.platform != "linux", reason="the script runs in Linux containers, users in /etc/passwd")
 def test_user_switch_script_without_tools() -> None:
     # No runuser / su / chroot on the PATH: a clear error, and the uid was mapped to its name
     pwd = pytest.importorskip("pwd")

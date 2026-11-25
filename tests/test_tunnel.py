@@ -17,6 +17,9 @@ from ssm_tools.common import exit_on_signal
 from ssm_tools.ssm_tunnel_cli import SsmTunnel, parse_args, random_ips
 from ssm_tools.talker import PROMPT, SessionError, SsmTalker
 
+# ssm-tunnel only runs on Linux, see docs/adr/0019-windows-and-macos.md
+pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="ssm-tunnel is Linux only")
+
 
 @pytest.fixture
 def tunnel(monkeypatch: pytest.MonkeyPatch) -> Iterator[SsmTunnel]:

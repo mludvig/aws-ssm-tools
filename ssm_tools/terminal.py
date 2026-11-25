@@ -99,6 +99,11 @@ def _run_foreground_job(command: list[str], env: dict[str, str] | None) -> int:
     tty_fd = 0
     saved_attrs = termios.tcgetattr(tty_fd)
     received: list[int] = []
+    if sys.platform == "darwin":
+        # Ctrl-Y (DSUSP) breaks the plugin's stdin read, see docs/adr/0019-windows-and-macos.md
+        attrs = termios.tcgetattr(tty_fd)
+        attrs[6][termios.VDSUSP] = b"\xff"  # _POSIX_VDISABLE
+        termios.tcsetattr(tty_fd, termios.TCSANOW, attrs)
 
     def _child_setup() -> None:
         os.setpgid(0, 0)

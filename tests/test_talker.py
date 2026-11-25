@@ -1,3 +1,4 @@
+import sys
 from typing import Any
 from unittest.mock import Mock
 
@@ -6,6 +7,9 @@ import pytest
 
 from ssm_tools import talker
 from ssm_tools.talker import SessionError, SsmTalker
+
+# ssm-tunnel only runs on Linux, see docs/adr/0019-windows-and-macos.md
+pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="ssm-tunnel is Linux only")
 
 
 def connect(monkeypatch: pytest.MonkeyPatch, script: str, reason: str | None = None) -> tuple[SsmTalker, Mock]:
