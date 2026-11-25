@@ -8,7 +8,6 @@
 
 import argparse
 import copy
-import fcntl
 import ipaddress
 import logging
 import os
@@ -234,6 +233,8 @@ class SsmTunnel(SsmTalker):
 
         flags = IFF_TUN
         ifr = struct.pack("16sH22s", self.tun_name.encode(), flags, b"\x00" * 22)
+        import fcntl  # Linux only, so that main() can say so. See docs/adr/0019-windows-and-macos.md
+
         fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
 
         return tun_fd

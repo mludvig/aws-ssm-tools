@@ -9,7 +9,6 @@
 # Updated for Python 3.8+ compatibility as part of aws-ssm-tools modernization
 
 import contextlib
-import fcntl
 import os
 import select
 import signal
@@ -90,6 +89,8 @@ def setup_tun(tun_name: str) -> int:
 
     flags = IFF_TUN
     ifr = struct.pack("16sH22s", tun_name.encode(), flags, b"\x00" * 22)
+    import fcntl  # Linux only, and ssm-tunnel imports this module anywhere. See docs/adr/0019-windows-and-macos.md
+
     fcntl.ioctl(tun_fd, TUNSETIFF, ifr)
 
     return tun_fd
