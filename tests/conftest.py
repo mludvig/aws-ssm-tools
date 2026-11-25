@@ -15,6 +15,7 @@ def aws_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
         if var.startswith("AWS_"):
             monkeypatch.delenv(var)
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows' ~
     monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "aws-config"))
     monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(tmp_path / "aws-credentials"))
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
@@ -25,7 +26,7 @@ def aws_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
 @pytest.fixture(autouse=True)
 def signal_handlers() -> Iterator[None]:
     """Undo the handlers that the code under test installs."""
-    signums = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+    signums = [signal.SIGINT, signal.SIGTERM] + ([signal.SIGHUP] if os.name == "posix" else [])
     handlers = {signum: signal.getsignal(signum) for signum in signums}
     yield
     for signum, handler in handlers.items():

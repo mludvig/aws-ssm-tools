@@ -9,7 +9,8 @@ from ssm_tools import talker
 from ssm_tools.talker import SessionError, SsmTalker
 
 # ssm-tunnel only runs on Linux, see docs/adr/0019-windows-and-macos.md
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="ssm-tunnel is Linux only")
+if sys.platform != "linux":
+    pytest.skip("ssm-tunnel is Linux only", allow_module_level=True)
 
 
 def connect(monkeypatch: pytest.MonkeyPatch, script: str, reason: str | None = None) -> tuple[SsmTalker, Mock]:

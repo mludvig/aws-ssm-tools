@@ -38,6 +38,8 @@ def tty(monkeypatch: pytest.MonkeyPatch) -> Any:
 @pytest.fixture
 def menu(monkeypatch: pytest.MonkeyPatch) -> Any:
     """Install a fake simple_term_menu. Its show() runs 'on_show' and returns what that returns."""
+    if os.name == "nt":
+        pytest.skip("simple_term_menu doesn't run on Windows")
     shown: dict[str, Any] = {}
 
     class TerminalMenu:

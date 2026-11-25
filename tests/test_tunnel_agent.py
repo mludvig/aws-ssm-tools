@@ -10,6 +10,10 @@ import pytest
 
 from ssm_tools import ssm_tunnel_agent
 
+# ssm-tunnel-agent runs on the Linux instance
+if sys.platform != "linux":
+    pytest.skip("ssm-tunnel-agent is Linux only", allow_module_level=True)
+
 
 @pytest.fixture
 def agent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[list[str]]:
