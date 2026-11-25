@@ -22,7 +22,8 @@ A reliability, security and consistency pass over all the tools. The decisions b
 - ssm-tunnel gets its own session and detects a dead agent. It exits and cleans up when killed, and runs nothing through a shell.
 - Ports, the local port and `--reason` are checked before a session starts.
 - The `aws sso login` hint only appears for SSO profiles. botocore's tracebacks are hidden unless `--debug` is given (#53).
-- CI tests Python 3.11–3.15 and smoke-tests the Windows exes. Release files are published as they were tested, with SHA256SUMS and a build provenance attestation.
+- Windows: ec2-ssh works, ec2-session and ecs-session return the plugin's exit code after Ctrl-C, and ssm-tunnel says it's Linux only. macOS: Ctrl-Y no longer ends ec2-session and ecs-session sessions.
+- CI tests Python 3.11–3.15, runs the tests on Windows and macOS, and smoke-tests the Windows exes. Release files are published as they were tested, with SHA256SUMS and a build provenance attestation.
 
 ### Known issues
 - ec2-session and ecs-session don't return the remote command's exit code (aws/session-manager-plugin#59). In scripts, use `ec2-ssh INSTANCE COMMAND`.

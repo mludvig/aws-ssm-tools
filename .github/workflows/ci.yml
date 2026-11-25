@@ -46,9 +46,37 @@ jobs:
         uv run python -VV
         ./dev.sh test
 
+  # The tests only, on one Python. See docs/adr/0019-windows-and-macos.md
+  test-windows-macos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    env:
+      UV_PYTHON: "3.14"
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+
+    - name: Set up Python
+      run: uv python install 3.14
+
+    - name: Run tests
+      run: |
+        uv sync --locked
+        uv run python -VV
+        uv run pytest
+
   build:
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, test-windows-macos]
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -75,7 +103,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    needs: test
+    needs: [test, test-windows-macos]
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

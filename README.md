@@ -434,6 +434,12 @@ Python 3.8, see below.
 
 When no instance name is given, Windows shows a numbered list of instances instead of the interactive menu.
 
+Windows PowerShell 5.1 breaks double quotes inside the arguments it passes to
+programs, e.g. in `ec2-ssh HOST 'echo "a  b"'`. Use PowerShell 7.3 or newer,
+or Command Prompt.
+
+On macOS all the tools work as on Linux, except `ssm-tunnel`.
+
 #### Pre-built Windows binaries (no Python required)
 
 If you don't have Python installed, download the pre-built zip bundle from the
