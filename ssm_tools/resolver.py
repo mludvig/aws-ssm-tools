@@ -11,7 +11,7 @@ from botocore.exceptions import ClientError
 from tabulate import tabulate
 
 from .common import AWSSessionBase, printable
-from .picker import has_terminal, target_selector
+from .picker import _fit, has_terminal, target_selector
 
 logger = logging.getLogger("ssm-tools.resolver")
 
@@ -28,6 +28,15 @@ def instance_not_found(instance: str) -> NoReturn:
 # EC2 instance ID (old short or long form) or hybrid managed instance ID
 INSTANCE_ID_RE = re.compile(r"i-[0-9a-f]{8}|m?i-[0-9a-f]{17}", re.IGNORECASE)
 
+# Wider cells are cut, so that a very long name doesn't push the other columns off the screen.
+# See docs/adr/0020-list-column-width.md
+MAX_COLUMN_WIDTH = 50
+
+
+def _cell(text: str) -> str:
+    cut = _fit(text, MAX_COLUMN_WIDTH)
+    return cut if cut == text else _fit(text, MAX_COLUMN_WIDTH - 1) + "…"
+
 
 def print_targets(
     rows: list[dict[str, Any]],
@@ -41,7 +50,7 @@ def print_targets(
     """
     cells = [
         {
-            key: printable(", ".join(value) if isinstance(value, list) else str(value))
+            key: _cell(printable(", ".join(value) if isinstance(value, list) else str(value)))
             for key, value in row.items()
             if key not in hidden
         }

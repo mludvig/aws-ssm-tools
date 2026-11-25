@@ -301,6 +301,16 @@ def test_print_targets(capsys: pytest.CaptureFixture) -> None:
     assert targets[1]["Arn"] == "arn:2"  # Hidden from the table, not from the targets
 
 
+def test_print_targets_caps_the_columns(capsys: pytest.CaptureFixture) -> None:
+    # A very long name doesn't push the next columns off the screen
+    rows = [{"Id": "i-1", "Name": "名" * 30 + "x" * 100, "Ip": "10.0.0.1"}, {"Id": "i-2", "Name": "y" * 50, "Ip": ""}]
+    _, targets = print_targets(rows)
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[2].split() == ["i-1", "名" * 24 + "…", "10.0.0.1"]  # A wide character never sticks out
+    assert lines[3].split() == ["i-2", "y" * 50]  # Exactly 50 fits
+    assert targets[0]["Name"] == rows[0]["Name"]
+
+
 def test_print_targets_to_an_ascii_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
     stdout = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
     monkeypatch.setattr(sys, "stdout", stdout)

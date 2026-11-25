@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.0 (unreleased)
+
+### Changes
+- `--list` and the target picker cut cells wider than 50 columns, so a very long name no longer pushes the host names and IP addresses off the screen.
+
 ## 3.0.0 (2026-11-25)
 
 A reliability, security and consistency pass over all the tools. The decisions behind each change are in [docs/adr](docs/adr).
