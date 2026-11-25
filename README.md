@@ -263,7 +263,7 @@ and for ECS Docker Exec: `ecs-session`
     Forward RDP (port 3389) from `localhost:13389` to a Windows instance:
 
     ```
-    ~ $ ssm-port-forward my-windows-host --remote-port 3389 --local-port 13389
+    ~ $ ssm-port-forward my-windows-host --remote 3389 --local 13389
     ```
 
     Then connect your RDP client to `localhost:13389`.
@@ -272,11 +272,16 @@ and for ECS Docker Exec: `ecs-session`
     (the RDS endpoint never needs to be publicly accessible):
 
     ```
-    ~ $ ssm-port-forward my-bastion --remote-port 5432 --remote-host my-db.cluster.rds.amazonaws.com
+    ~ $ ssm-port-forward my-bastion --remote my-db.cluster.rds.amazonaws.com:5432
     ```
 
-    If `--local-port` is omitted it defaults to the same value as `--remote-port`.
-    With `--local-port 0` the plugin picks a free port and prints it.
+    Without `--local` the plugin picks a free port on `127.0.0.1` and prints it.
+    `--local 0.0.0.0:15432` lets other hosts connect too, and so does `[::]`
+    for IPv6. ssh's `-L [BIND:]PORT:HOST:HOSTPORT` works as well, e.g.
+    `-L 15432:my-db.cluster.rds.amazonaws.com:5432`, where `localhost` as
+    HOST is the instance itself, and `*` as BIND is all addresses.
+    `--remote-port`, `--remote-host`, `--local-port` and `--local-host` set
+    one part at a time.
 
     The SSM agent on the instance makes the connection to the remote host,
     out of `ssm-port-forward`'s sight. If the host refuses it or its name

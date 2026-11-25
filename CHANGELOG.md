@@ -2,7 +2,11 @@
 
 ## 3.1.0 (unreleased)
 
+### Breaking changes
+- **ssm-port-forward listens on a free port** when no local port is given, instead of the remote port number. The plugin prints which one. Use `--local PORT` for a fixed one.
+
 ### Changes
+- ssm-port-forward takes `--remote [HOST:]PORT` and `--local [HOST:]PORT`, and ssh's `-L [BIND:]PORT:HOST:HOSTPORT`. It can listen on any address, e.g. `--local 0.0.0.0:8080` for other hosts to connect.
 - `--list` and the target picker cut cells wider than 50 columns, so a very long name no longer pushes the host names and IP addresses off the screen.
 - All tools warn when session-manager-plugin is older than 1.2.764.0, which AWS will soon stop supporting.
 
