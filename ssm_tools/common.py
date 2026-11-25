@@ -179,6 +179,8 @@ PLUGIN_INSTALL_URL = (
 )
 # First with 'Enter ~.' to end a shell session, see docs/adr/0002-plugin-version-warning.md
 PLUGIN_ESCAPE_VERSION = "1.2.835.0"
+# The oldest that AWS will keep supporting, see docs/adr/0021-plugin-supported-version.md
+PLUGIN_SUPPORTED_VERSION = "1.2.764.0"
 
 __all__.append("ESCAPE_HELP")
 
@@ -213,7 +215,7 @@ __all__.append("verify_plugin_version")
 def verify_plugin_version(logger: logging.Logger, required: str | None = None, interactive: bool = False) -> bool:
     """
     Verify that session-manager-plugin is installed and, if given, of the 'required' version or newer.
-    For 'interactive' sessions warn if it's too old to support 'Enter ~.'.
+    Warn if AWS will soon stop supporting it, or for 'interactive' sessions if it's too old to support 'Enter ~.'.
     """
     try:
         version = _installed_version(["session-manager-plugin", "--version"], logger)
@@ -233,7 +235,14 @@ def verify_plugin_version(logger: logging.Logger, required: str | None = None, i
         )
         return False
 
-    if interactive and version < packaging.version.Version(PLUGIN_ESCAPE_VERSION):
+    if version < packaging.version.Version(PLUGIN_SUPPORTED_VERSION):
+        logger.warning(
+            "AWS will soon stop supporting session-manager-plugin %s, upgrade to %s or newer: %s",
+            version,
+            PLUGIN_SUPPORTED_VERSION,
+            PLUGIN_INSTALL_URL,
+        )
+    elif interactive and version < packaging.version.Version(PLUGIN_ESCAPE_VERSION):
         logger.warning(
             "session-manager-plugin %s can't end a stuck session with 'Enter ~.', upgrade to %s or newer: %s",
             version,

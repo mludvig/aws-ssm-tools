@@ -4,6 +4,7 @@
 
 ### Changes
 - `--list` and the target picker cut cells wider than 50 columns, so a very long name no longer pushes the host names and IP addresses off the screen.
+- All tools warn when session-manager-plugin is older than 1.2.764.0, which AWS will soon stop supporting.
 
 ## 3.0.0 (2026-11-25)
 

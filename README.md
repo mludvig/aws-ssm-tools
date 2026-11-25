@@ -386,7 +386,8 @@ installation guide](https://docs.aws.amazon.com/systems-manager/latest/userguide
 Note that `ec2-session`, `ecs-session`, `ssm-port-forward` and `ssm-tunnel` need
 `session-manager-plugin` version *1.2.497.0* or newer, `ec2-ssh` needs
 *1.1.23* or newer, and `Enter ~.` to end a stuck session needs *1.2.835.0*
-or newer.
+or newer. AWS will soon stop supporting versions older than *1.2.764.0*, and
+the tools warn about those.
 Upgrade if your version is older.
 
 ### Register your instances with Systems Manager

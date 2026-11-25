@@ -35,10 +35,12 @@ def version_output(monkeypatch: pytest.MonkeyPatch) -> Any:
     ("output", "kwargs", "ok", "message"),
     [
         ("1.2.896.0\n", {"interactive": True}, True, ""),
-        ("1.2.707.0\n", {"interactive": True}, True, "can't end a stuck session with 'Enter ~.'"),
-        ("1.2.707.0\n", {}, True, ""),
+        ("1.2.764.0\n", {"interactive": True}, True, "can't end a stuck session with 'Enter ~.'"),
+        ("1.2.764.0\n", {}, True, ""),
+        ("1.2.707.0\n", {}, True, "AWS will soon stop supporting session-manager-plugin 1.2.707.0"),
+        ("1.2.707.0\n", {"interactive": True}, True, "upgrade to 1.2.764.0 or newer"),
         ("1.1.22.0\n", {"required": "1.1.23"}, False, "1.1.23 or newer is required"),
-        ("1.1.23.0\n", {"required": "1.1.23"}, True, ""),
+        ("1.1.23.0\n", {"required": "1.1.23"}, True, "AWS will soon stop supporting"),
         ("", {"required": "1.1.23"}, True, "Can't parse the version"),
         ("garbage\xff", {"interactive": True}, True, "Can't parse the version"),
     ],
@@ -54,6 +56,7 @@ def test_plugin_version(
     version_output(output)
     assert verify_plugin_version(logging.getLogger("test"), **kwargs) is ok
     assert_logged(caplog, message)
+    assert len([record for record in caplog.records if record.levelno >= logging.WARNING]) <= 1  # Never two at once
 
 
 @pytest.mark.parametrize(
