@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.0.0 (unreleased)
+## 3.0.0 (2026-11-25)
 
 A reliability, security and consistency pass over all the tools. The decisions behind each change are in [docs/adr](docs/adr).
 
