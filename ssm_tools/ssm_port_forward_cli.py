@@ -25,6 +25,7 @@ from .common import (
     add_general_parameters,
     configure_logging,
     handle_boto_error,
+    port_number,
     session_reason,
     show_version,
     verify_plugin_version,
@@ -34,20 +35,6 @@ from .plugin import PLUGIN_ENV_VERSION, run_plugin
 from .resolver import InstanceResolver, instance_not_found
 
 logger = logging.getLogger("ssm-tools.ssm-port-forward")
-
-
-def port_number(lowest: int) -> Callable[[str], int]:
-    """argparse type for a port from 'lowest' to 65535. See docs/adr/0014-validate-before-start-session.md"""
-
-    def port(value: str) -> int:
-        try:
-            if lowest <= int(value) <= 65535:
-                return int(value)
-        except ValueError:
-            pass
-        raise argparse.ArgumentTypeError(f"{value} isn't a port number from {lowest} to 65535")
-
-    return port
 
 
 def _split(value: str) -> list[str]:

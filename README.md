@@ -258,6 +258,25 @@ and for ECS Docker Exec: `ecs-session`
     *environment variables* `AWS_DEFAULT_PROFILE` and
     `AWS_DEFAULT_REGION`.`
 
+    Or set up ssh once, and plain `ssh`, `scp`, `rsync`, `sftp`, `git`,
+    VS Code Remote-SSH, Ansible etc. reach the instances by ID or name:
+
+    ```
+    ~ $ ec2-ssh --profile aws-sandpit --region us-west-2 --print-ssh-config >> ~/.ssh/config
+    ~ $ scp some-file.tar.gz ec2-user@test1.ssm:
+    ~ $ ssh ec2-user@test1.eu-west-1.ssm         # In another region
+    ~ $ rsync -a ./site/ ec2-user@i-07c189021bc56e042:site/
+    ```
+
+    The stanza runs `ec2-ssh --proxy` for `i-*`, `mi-*` and `*.ssm` hosts,
+    with the `--profile`, `--region`, `--reason` and `--no-send-key` given to
+    `--print-ssh-config`. It sends a key that ssh will offer, from your
+    ssh_config or agent: a `-i` on the `ssh` command line doesn't reach it,
+    so put that key in an `IdentityFile` line under the `Host i-* mi-* *.ssm`
+    stanza instead. It needs `session-manager-plugin` *1.2.497.0* or newer,
+    but not the AWS CLI. In Windows PowerShell 5.1, `>>` writes UTF-16, which
+    ssh can't read: paste the output into the file with an editor instead.
+
 5. **Forward a local port** to an EC2 instance or a host in its VPC.
 
     No SSH, no open firewall ports - just SSM. Works on Linux, Mac and Windows.

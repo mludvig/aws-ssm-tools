@@ -13,8 +13,10 @@
 import argparse
 import contextlib
 import dataclasses
+import io
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -26,6 +28,7 @@ from .common import (
     add_general_parameters,
     configure_logging,
     handle_boto_error,
+    port_number,
     session_reason,
     show_version,
     unique_login,
@@ -34,7 +37,8 @@ from .common import (
 )
 from .ec2_instance_connect import EC2InstanceConnectHelper, generate_key, select_key
 from .picker import target_selector
-from .resolver import InstanceResolver
+from .plugin import PLUGIN_ENV_VERSION, run_plugin
+from .resolver import InstanceResolver, instance_not_found
 from .terminal import run_session
 
 logger = logging.getLogger("ssm-tools.ec2-ssh")
@@ -43,6 +47,8 @@ MIN_PLUGIN_VERSION = "1.1.23"  # AWS-StartSSHSession support
 MIN_AWSCLI_VERSION_ENDPOINT = "2.12.0"  # aws ec2-instance-connect open-tunnel
 # ssh exits about 60 s (4 intervals) after the tunnel dies, see docs/adr/0023-ec2-ssh-server-alive-interval.md
 SERVER_ALIVE_INTERVAL = 15
+# The REGION in NAME.REGION.ssm, e.g. ap-southeast-6, us-gov-west-1 or eusc-de-east-1
+REGION_RE = re.compile(r"([a-z]{2}|eusc)(-[a-z]+)+-\d+")
 
 # ssh(1) option letters without and with a value, as in OpenSSH's getopt() string
 SSH_FLAGS = "46AaCfGgKkMNnqsTtVvXxYy"
@@ -139,6 +145,26 @@ def ssh_config(options: list[str], destination: str) -> dict[str, list[str]]:
     return config
 
 
+def proxy_target(value: str) -> tuple[str, str, int]:
+    """argparse type for --proxy USER@HOST:PORT, ssh's %r@%h:%p"""
+    user_host, _, port = value.rpartition(":")
+    user, _, host = user_host.rpartition("@")
+    if not (user and host):
+        raise argparse.ArgumentTypeError(f"{value} isn't USER@HOST:PORT")
+    return user, host, port_number(1)(port)
+
+
+def split_host(host: str) -> tuple[str, str]:
+    """Split NAME[.REGION].ssm into NAME and REGION, or ''. Other host names come back as they are."""
+    name, dot, suffix = host.rpartition(".")
+    if not dot or suffix.lower() != "ssm":
+        return host, ""
+    rest, _, region = name.rpartition(".")
+    if rest and REGION_RE.fullmatch(region.lower()):
+        return rest, region.lower()
+    return name, ""
+
+
 def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
     """
     Parse command line arguments.
@@ -195,6 +221,21 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
         help="Connect using 'EC2 Instance Connect Endpoint'",
     )
 
+    group_config = parser.add_argument_group("ssh_config").add_mutually_exclusive_group()
+    group_config.add_argument(
+        "--print-ssh-config",
+        dest="print_ssh_config",
+        action="store_true",
+        help="Print an ssh_config stanza that lets ssh, scp, rsync, VS Code, etc. connect to "
+        "i-..., mi-..., NAME.ssm and NAME.REGION.ssm through %(prog)s --proxy",
+    )
+    group_config.add_argument(
+        "--proxy",
+        metavar="USER@HOST:PORT",
+        type=proxy_target,
+        help="Be ssh's ProxyCommand, as set up by --print-ssh-config",
+    )
+
     parser.description = "Open SSH connection through Session Manager"
     parser.epilog = f"""
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
@@ -216,11 +257,30 @@ Author: Michael Ludvig
     except ValueError as e:
         parser.error(str(e))
 
+    if (args.proxy or args.print_ssh_config) and (
+        ssh_args.destination or ssh_args.options or args.user or args.list or args.gen_key or args.use_endpoint
+    ):
+        parser.error("--proxy and --print-ssh-config only go with --profile, --region, --reason and --no-send-key")
+
     # If --version do it now and exit
     if args.show_version:
         show_version(args)
 
     return args, ssh_args
+
+
+def _quote(value: str) -> str:
+    # Win32-OpenSSH runs it without a shell, for aws.exe to split, see docs/adr/0019-windows-and-macos.md
+    quoted = subprocess.list2cmdline([value]) if os.name == "nt" else shlex.quote(value)
+    return quoted.replace("%", "%%")
+
+
+def _with_general_options(command: str, profile: str, region: str) -> str:
+    if profile:
+        command += f" --profile {_quote(profile)}"
+    if region:
+        command += f" --region {_quote(region)}"
+    return command
 
 
 def proxy_command(profile: str, region: str, use_endpoint: bool, reason: str = "") -> str:
@@ -229,16 +289,7 @@ def proxy_command(profile: str, region: str, use_endpoint: bool, reason: str = "
     their '%' escaped from ssh's own %h/%p expansion, see docs/adr/0005-proxycommand-quoting.md
     """
 
-    def _quote(value: str) -> str:
-        # Win32-OpenSSH runs it without a shell, for aws.exe to split, see docs/adr/0019-windows-and-macos.md
-        quoted = subprocess.list2cmdline([value]) if os.name == "nt" else shlex.quote(value)
-        return quoted.replace("%", "%%")
-
-    command = "aws"
-    if profile:
-        command += f" --profile {_quote(profile)}"
-    if region:
-        command += f" --region {_quote(region)}"
+    command = _with_general_options("aws", profile, region)
 
     if use_endpoint:
         if reason:
@@ -257,6 +308,61 @@ def ssh_command(ssh_args: SshArgs, profile: str, region: str, use_endpoint: bool
     return ["ssh", *proxy_option, *ssh_args.options, "--", ssh_args.destination, *ssh_args.command]
 
 
+def ssh_config_stanza(profile: str, region: str, reason: str, send_key: bool) -> str:
+    """The ssh_config for --print-ssh-config. See docs/adr/0024-ec2-ssh-proxy-mode.md"""
+    # The full path, for programs that run ssh without the user's PATH, e.g. VS Code.
+    # A PyInstaller exe's argv[0] is the name as typed.
+    program = sys.executable if getattr(sys, "frozen", False) else os.path.abspath(sys.argv[0])
+    # Quiet: no instance table or key message on every scp and rsync, only warnings and errors
+    command = _with_general_options(f"{_quote(program)} --quiet", profile, region)
+    if reason:
+        command += f" --reason {_quote(reason)}"
+    if not send_key:
+        command += " --no-send-key"
+    return (
+        "Host i-* mi-* *.ssm\n"
+        f"    ProxyCommand {command} --proxy %r@%h:%p\n"
+        f"    ServerAliveInterval {SERVER_ALIVE_INTERVAL}\n"
+    )
+
+
+def proxy(args: argparse.Namespace) -> int:
+    """
+    Be ssh's ProxyCommand: send the key for USER to HOST, and connect stdin and stdout to its PORT.
+    Nothing but the connection may go to stdout. See docs/adr/0024-ec2-ssh-proxy-mode.md
+    """
+    user, host, port = args.proxy
+    name, region = split_host(host)
+    args.region = region or args.region  # NAME.REGION.ssm beats --region
+
+    if not verify_plugin_version(logger, required=PLUGIN_ENV_VERSION):
+        return 1
+
+    instance_resolver = InstanceResolver(args)
+    instance_id, _ = instance_resolver.resolve_instance(name)
+    if not instance_id:
+        instance_not_found(name)
+    logger.debug("Resolved instance name '%s' to '%s'", name, instance_id)
+
+    # EC2 Instance Connect only knows EC2 instances. ssh -G knows the keys that ssh will offer,
+    # except a -i given to ssh itself.
+    if args.send_key and instance_id.startswith("i-"):
+        hint = "Give one with IdentityFile in the ssh_config, or add --no-send-key to the ProxyCommand."
+        public_key = select_key(ssh_config([], f"{user}@{host}"), hint)
+        EC2InstanceConnectHelper(args).send_ssh_key(instance_id, user, public_key)
+
+    ssm_client = instance_resolver.ssm_client
+    parameters = {
+        "Target": instance_id,
+        "DocumentName": "AWS-StartSSHSession",
+        "Parameters": {"portNumber": [str(port)]},
+    }
+    if args.reason:
+        parameters["Reason"] = args.reason
+    logger.debug("Starting session: %s", parameters)
+    return run_plugin(ssm_client, ssm_client.start_session(**parameters), parameters, args.profile)
+
+
 def main() -> int:
     args, ssh_args = parse_args(sys.argv[1:])
 
@@ -265,7 +371,16 @@ def main() -> int:
 
     configure_logging(args.log_level)
 
+    if args.print_ssh_config:
+        if isinstance(sys.stdout, io.TextIOWrapper):  # ssh reads its config as UTF-8
+            sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdout.write(ssh_config_stanza(args.profile, args.region, args.reason, args.send_key))
+        return 0
+
     try:
+        if args.proxy:
+            return proxy(args)
+
         instance_resolver = InstanceResolver(args)
 
         if args.list:

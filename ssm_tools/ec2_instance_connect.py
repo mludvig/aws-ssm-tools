@@ -55,7 +55,7 @@ def agent_keys(identity_agent: str) -> list[str]:
     return _output(["ssh-add", "-L"], env).splitlines()
 
 
-def select_key(config: dict[str, list[str]]) -> str:
+def select_key(config: dict[str, list[str]], hint: str = "Give one with -i, or use --gen-key or --no-send-key.") -> str:
     """
     Return the first RSA or Ed25519 public key that ssh will offer with this 'ssh -G' config,
     in the order of OpenSSH's pubkey_prepare(). See docs/adr/0010-eic-key-selection.md
@@ -82,7 +82,8 @@ def select_key(config: dict[str, list[str]]) -> str:
 
     logger.error(
         "None of the SSH keys that ssh would use is an RSA or Ed25519 key with a known public key, "
-        "which EC2 Instance Connect needs. Give one with -i, or use --gen-key or --no-send-key.",
+        "which EC2 Instance Connect needs. %s",
+        hint,
     )
     sys.exit(1)
 

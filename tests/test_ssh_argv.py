@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from ssm_tools import ssm_ssh_cli
+from ssm_tools import ec2_instance_connect, ssm_ssh_cli
 from ssm_tools.ssm_ssh_cli import SshArgs, parse_args, proxy_command
 
 RSYNC_COMMAND = ["rsync", "--server", "--sender", "-logDtpre.iLsfxCIvu", ".", "/etc/hostname"]
@@ -366,3 +366,177 @@ def test_proxy_command_endpoint(caplog: pytest.LogCaptureFixture) -> None:
     proxy = proxy_command("", "", use_endpoint=True, reason="why")
     assert run_proxy_command(proxy) == ["aws", "ec2-instance-connect", "open-tunnel", "--instance-id", WEB]
     assert "--reason is not supported with --use-endpoint" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("value", "target"),
+    [
+        ("u@web.ssm:22", ("u", "web.ssm", 22)),
+        ("a@b@i-0123456789abcdef0:2222", ("a@b", "i-0123456789abcdef0", 2222)),
+    ],
+)
+def test_proxy_target(value: str, target: tuple[str, str, int]) -> None:
+    args, _ = parse_args(["--proxy", value])
+    assert args.proxy == target
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["--proxy", "web.ssm:22"], "web.ssm:22 isn't USER@HOST:PORT"),
+        (["--proxy", "u@web.ssm"], "isn't USER@HOST:PORT"),
+        (["--proxy", "u@:22"], "isn't USER@HOST:PORT"),
+        (["--proxy", "u@web.ssm:0"], "0 isn't a port number"),
+        (["--proxy", "u@web.ssm:22", "--print-ssh-config"], "not allowed with argument"),
+        (["--proxy", "u@web.ssm:22", "web"], "only go with --profile"),
+        (["--print-ssh-config", "-i", "key"], "only go with --profile"),
+        (["--print-ssh-config", "--gen-key"], "only go with --profile"),
+        (["--proxy", "u@web.ssm:22", "--use-endpoint"], "only go with --profile"),
+        (["--proxy", "u@web.ssm:22", "--list"], "only go with --profile"),
+    ],
+)
+def test_bad_proxy(capsys: pytest.CaptureFixture, argv: list[str], message: str) -> None:
+    with pytest.raises(SystemExit) as exc:
+        parse_args(argv)
+    assert exc.value.code == 2
+    assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("host", "name", "region"),
+    [
+        ("web.ssm", "web", ""),
+        ("web.ap-southeast-6.ssm", "web", "ap-southeast-6"),
+        ("WEB.US-GOV-WEST-1.SSM", "WEB", "us-gov-west-1"),
+        ("web.eusc-de-east-1.ssm", "web", "eusc-de-east-1"),
+        ("web.prod.ssm", "web.prod", ""),  # Not a region: part of the name
+        ("db.prod.eu-west-1.ssm", "db.prod", "eu-west-1"),
+        ("ap-southeast-2.ssm", "ap-southeast-2", ""),  # Nothing left for a name
+        (f"{WEB}.eu-west-1.ssm", WEB, "eu-west-1"),
+        (WEB, WEB, ""),
+        ("web.example.com", "web.example.com", ""),
+    ],
+)
+def test_split_host(host: str, name: str, region: str) -> None:
+    assert ssm_ssh_cli.split_host(host) == (name, region)
+
+
+@pytest.fixture
+def run_proxy(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> Any:
+    """
+    Run ec2-ssh with 'argv' and return the region the resolver got, the keys sent,
+    the StartSession parameters, and what went to stdout.
+    """
+
+    def _run(*argv: str, select_key: Any = None) -> tuple[str, list[tuple[str, ...]], dict[str, Any], str]:
+        regions, sent, started = [], [], []
+
+        class SsmClient:
+            def start_session(self, **parameters: Any) -> dict[str, str]:
+                started.append(parameters)
+                return {"SessionId": "s-1"}
+
+        class Resolver(FakeResolver):
+            def __init__(self, args: Any) -> None:
+                regions.append(args.region)
+                self.ssm_client = SsmClient()
+
+        class FakeEIC:
+            def __init__(self, _args: Any) -> None:
+                pass
+
+            def send_ssh_key(self, *key_args: str) -> None:
+                sent.append(key_args)
+
+        monkeypatch.setattr(ssm_ssh_cli, "InstanceResolver", Resolver)
+        monkeypatch.setattr(ssm_ssh_cli, "EC2InstanceConnectHelper", FakeEIC)
+        monkeypatch.setattr(ssm_ssh_cli, "verify_plugin_version", lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(ssm_ssh_cli, "ssh_config", lambda options, dest: {"for": [*options, dest]})
+        monkeypatch.setattr(ssm_ssh_cli, "select_key", select_key or (lambda config, _hint: f"KEY for {config['for']}"))
+        monkeypatch.setattr(ssm_ssh_cli, "run_plugin", lambda _client, response, _parameters, _profile: 0)
+        monkeypatch.setattr("sys.argv", ["ec2-ssh", *argv])
+        assert ssm_ssh_cli.main() == 0
+        return regions[0], sent, started[0], capsys.readouterr().out
+
+    return _run
+
+
+def test_proxy(run_proxy: Any) -> None:
+    region, sent, parameters, out = run_proxy("--region", "eu-west-1", "--reason", "why", "--proxy", "u@web.ssm:2222")
+    assert region == "eu-west-1"
+    assert sent == [(WEB, "u", "KEY for ['u@web.ssm']")]  # The keys ssh will offer to the host it was given
+    assert parameters == {
+        "Target": WEB,
+        "DocumentName": "AWS-StartSSHSession",
+        "Parameters": {"portNumber": ["2222"]},
+        "Reason": "why",
+    }
+    assert out == ""  # stdout is ssh's connection
+
+
+def test_proxy_region_in_the_name(run_proxy: Any) -> None:
+    region, _, parameters, _ = run_proxy("--region", "eu-west-1", "--proxy", "u@web.ap-southeast-6.ssm:22")
+    assert (region, parameters["Target"]) == ("ap-southeast-6", WEB)
+
+
+@pytest.mark.parametrize("argv", [["--proxy", f"u@{HYBRID}:22"], ["--no-send-key", "--proxy", "u@web.ssm:22"]])
+def test_proxy_without_a_key(run_proxy: Any, argv: list[str]) -> None:
+    _, sent, parameters, _ = run_proxy(*argv)
+    assert sent == []
+    assert parameters["Target"] in (WEB, HYBRID)
+
+
+def test_proxy_not_found(run_proxy: Any, capsys: pytest.CaptureFixture, caplog: pytest.LogCaptureFixture) -> None:
+    with pytest.raises(SystemExit) as exc:
+        run_proxy("--proxy", "u@nosuch.ssm:22")
+    assert exc.value.code == 1
+    assert "No online SSM instance matches 'nosuch'" in caplog.text
+    assert capsys.readouterr().out == ""
+
+
+REASON = ["--reason", "it's 100% %h"]
+
+
+@pytest.mark.skipif(not shutil.which("ssh"), reason="needs ssh")
+def test_print_ssh_config(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Any,
+) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ec2-ssh", "--profile", "my profile", "--region", "eu-west-1", *REASON, "--no-send-key", "--print-ssh-config"],
+    )
+    assert ssm_ssh_cli.main() == 0
+    config = tmp_path / "ssh_config"
+    config.write_text(capsys.readouterr().out)
+    for host in (WEB, HYBRID, "web.ssm", "Web.AP-Southeast-6.ssm"):
+        settings = ssm_ssh_cli.ssh_config(["-F", str(config)], f"u@{host}")
+        assert settings["serveraliveinterval"] == ["15"]
+        tokens = {"%": "%", "r": "u", "h": settings["hostname"][0], "p": "22"}
+        command = re.sub("%(.)", lambda match: tokens[match.group(1)], settings["proxycommand"][0])
+        if os.name != "nt":  # Win32-OpenSSH runs it without a shell
+            assert shlex.split(command) == [
+                *[os.path.abspath(sys.argv[0]), "--quiet"],
+                *["--profile", "my profile", "--region", "eu-west-1", *REASON, "--no-send-key"],
+                *["--proxy", f"u@{host.lower()}:22"],
+            ]
+    assert ssm_ssh_cli.ssh_config(["-F", str(config)], "u@web.example.com").get("proxycommand") is None
+
+
+def test_print_ssh_config_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A PyInstaller exe's argv[0] is the name as typed, e.g. 'ec2-ssh' from PATH"""
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    monkeypatch.setattr("sys.executable", os.path.join(os.sep, "opt", "ssm tools", "ec2-ssh"))
+    monkeypatch.setattr("sys.argv", ["ec2-ssh"])
+    proxy = ssm_ssh_cli.ssh_config_stanza("", "", "", send_key=True).splitlines()[1]
+    assert proxy == f"    ProxyCommand {ssm_ssh_cli._quote(sys.executable)} --quiet --proxy %r@%h:%p"
+
+
+def test_proxy_key_hint(run_proxy: Any, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """ssh's -i and our --gen-key don't reach the proxy"""
+    monkeypatch.setattr(ec2_instance_connect, "agent_keys", lambda _agent: [])
+    with pytest.raises(SystemExit) as exc:
+        run_proxy("--proxy", "u@web.ssm:22", select_key=ec2_instance_connect.select_key)
+    assert exc.value.code == 1
+    assert "Give one with IdentityFile in the ssh_config, or add --no-send-key to the ProxyCommand." in caplog.text

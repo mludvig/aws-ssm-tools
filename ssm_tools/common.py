@@ -332,6 +332,23 @@ def session_reason(value: str) -> str:
     return value
 
 
+__all__.append("port_number")
+
+
+def port_number(lowest: int) -> Callable[[str], int]:
+    """argparse type for a port from 'lowest' to 65535. See docs/adr/0014-validate-before-start-session.md"""
+
+    def port(value: str) -> int:
+        try:
+            if lowest <= int(value) <= 65535:
+                return int(value)
+        except ValueError:
+            pass
+        raise argparse.ArgumentTypeError(f"{value} isn't a port number from {lowest} to 65535")
+
+    return port
+
+
 # ---------------------------------------------------------
 
 __all__.append("printable")
