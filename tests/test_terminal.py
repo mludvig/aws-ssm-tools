@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from typing import Any
@@ -126,6 +127,13 @@ def test_windows_leaves_ctrl_c_to_the_child(monkeypatch: pytest.MonkeyPatch) -> 
     """The Windows console sends Ctrl-C to the child too: the child's exit code is the result, not 130."""
     monkeypatch.setattr(os, "name", "nt")
     assert _run_child(["sh", "-c", "kill -INT $PPID; sleep 0.5; exit 3"], None) == 3
+
+
+def test_windows_ctrl_c_while_starting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Ctrl-C while on_start() runs, e.g. the watchdog setting up botocore, is left to the child too"""
+    monkeypatch.setattr(os, "name", "nt")
+    on_start = lambda _proc: os.kill(os.getpid(), signal.SIGINT)  # noqa: E731
+    assert _run_child(["sh", "-c", "sleep 0.5; exit 3"], None, on_start) == 3
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="DSUSP is BSD / macOS only")

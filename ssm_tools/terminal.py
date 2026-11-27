@@ -70,8 +70,6 @@ def _run_child(command: list[str], env: dict[str, str] | None, on_start: OnStart
     except FileNotFoundError:  # Windows, see run_session()
         logger.error("Command not found: %s", command[0])
         return 127
-    if on_start:
-        on_start(proc)
 
     def _forward(signum: int, _frame: object) -> None:
         received.append(signum)
@@ -83,6 +81,8 @@ def _run_child(command: list[str], env: dict[str, str] | None, on_start: OnStart
         # The console sends Ctrl-C to the child as well, leave it to the child. See docs/adr/0019-windows-and-macos.md
         old_handlers[signal.SIGINT] = signal.signal(signal.SIGINT, lambda _signum, _frame: None)
     try:
+        if on_start:  # After the handlers, so a Ctrl-C or TERM meanwhile is handled
+            on_start(proc)
         returncode = proc.wait()
     except KeyboardInterrupt:  # As subprocess.call() did
         received.append(signal.SIGINT)
@@ -124,8 +124,6 @@ def _run_foreground_job(command: list[str], env: dict[str, str] | None, on_start
     # We're in the background while the child runs; the child resets this in _child_setup()
     old_handlers = {signal.SIGTTOU: signal.signal(signal.SIGTTOU, signal.SIG_IGN)}
     proc = subprocess.Popen(command, env=env, preexec_fn=_child_setup)
-    if on_start:
-        on_start(proc)
 
     def _forward(signum: int, _frame: object) -> None:
         received.append(signum)
@@ -142,6 +140,8 @@ def _run_foreground_job(command: list[str], env: dict[str, str] | None, on_start
         old_handlers[signum] = signal.signal(signum, new_handler)
 
     try:
+        if on_start:  # After the handlers, so a TERM meanwhile is handled
+            on_start(proc)
         returncode = proc.wait()
     finally:
         # If the child died first its own children may still be in the group, reading the terminal.
