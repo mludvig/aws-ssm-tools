@@ -1,6 +1,7 @@
 import importlib
 import logging
 import subprocess
+import types
 from typing import Any
 
 import pytest
@@ -89,6 +90,8 @@ def test_not_installed(monkeypatch: pytest.MonkeyPatch, tmp_path: Any, caplog: p
 
 
 class FakeResolver:
+    session = types.SimpleNamespace(region_name=None)
+
     def __init__(self, _args: Any) -> None:
         pass
 

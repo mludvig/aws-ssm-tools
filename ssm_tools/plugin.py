@@ -22,6 +22,7 @@ PLUGIN_ENV_VERSION = "1.2.497.0"  # The first that reads the session from RESPON
 RESPONSE_ENV = "AWS_SSM_START_SESSION_RESPONSE"
 WATCH_INTERVAL = 10  # Seconds between the watchdog's checks
 KILL_AFTER = 3  # Seconds the plugin gets to exit after SIGTERM
+NOT_CONNECTED_LIMIT = 2  # Checks in a row, so an SSM agent that reconnects doesn't end the session
 
 
 def plugin_command(
@@ -90,6 +91,7 @@ class Watchdog:
         self._stopped.set()
 
     def _run(self, proc: subprocess.Popen[bytes]) -> None:
+        not_connected = 0
         while not self._stopped.wait(WATCH_INTERVAL):
             try:
                 status = self.ssm_client.get_connection_status(Target=self.target)["Status"]
@@ -99,7 +101,8 @@ class Watchdog:
             except botocore.exceptions.BotoCoreError as e:  # E.g. our own network is down: ask again
                 logger.debug("Can't check %s: %r", self.target, e)
                 continue
-            if status != "connected":
+            not_connected = not_connected + 1 if status != "connected" else 0
+            if not_connected == NOT_CONNECTED_LIMIT:
                 break
         else:
             return

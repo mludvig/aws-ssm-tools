@@ -163,19 +163,20 @@ def no_wait(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.usefixtures("no_wait")
 @pytest.mark.parametrize(("exits_on_term", "signals"), [(True, ["TERM"]), (False, ["TERM", "KILL"])])
 def test_watchdog_ends_the_plugin(caplog: pytest.LogCaptureFixture, exits_on_term: bool, signals: list[str]) -> None:
-    ssm = FakeSSM("connected", "connected", "notconnected")
+    ssm = FakeSSM("connected", "notconnected", "connected", "notconnected", "notconnected")
     watchdog, proc = watched(ssm, exits_on_term)
     watchdog._run(proc)
-    assert (ssm.calls, proc.signals, watchdog.fired) == (3, signals, True)
+    assert (ssm.calls, proc.signals, watchdog.fired) == (5, signals, True)  # Only two in a row
     assert "i-0123456789abcdef0 is no longer connected to SSM (notconnected), ending the session" in caplog.text
 
 
 @pytest.mark.usefixtures("no_wait")
 def test_watchdog_retries_our_errors() -> None:
-    ssm = FakeSSM(botocore.exceptions.EndpointConnectionError(endpoint_url="https://ssm"), "notconnected")
+    error = botocore.exceptions.EndpointConnectionError(endpoint_url="https://ssm")
+    ssm = FakeSSM("notconnected", error, "notconnected")
     watchdog, proc = watched(ssm)
     watchdog._run(proc)
-    assert (ssm.calls, proc.signals) == (2, ["TERM"])
+    assert (ssm.calls, proc.signals) == (3, ["TERM"])
 
 
 @pytest.mark.usefixtures("no_wait")
@@ -225,6 +226,7 @@ def test_watchdog_in_run_plugin(
     monkeypatch.setattr(plugin, "KILL_AFTER", 0.5)
     target = {"Target": PARAMETERS["Target"]}
     stubber = stub(ssm)
-    stubber.add_response("get_connection_status", {**target, "Status": "notconnected"}, target)
+    for _ in range(plugin.NOT_CONNECTED_LIMIT):
+        stubber.add_response("get_connection_status", {**target, "Status": "notconnected"}, target)
     stubber.add_response("terminate_session", {"SessionId": "s-1"}, {"SessionId": "s-1"})
     assert run_plugin(ssm, RESPONSE, PARAMETERS, None) == code

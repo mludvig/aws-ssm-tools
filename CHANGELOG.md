@@ -10,10 +10,14 @@
 - ssm-port-forward takes `--remote [HOST:]PORT` and `--local [HOST:]PORT`, and ssh's `-L [BIND:]PORT:HOST:HOSTPORT`. It can listen on any address, e.g. `--local 0.0.0.0:8080` for other hosts to connect.
 - `--list` and the target picker cut cells wider than 50 columns, so a very long name no longer pushes the host names and IP addresses off the screen.
 - All tools warn when session-manager-plugin is older than 1.2.764.0, which AWS will soon stop supporting.
-- ec2-session, ecs-session and ssm-port-forward end the session within about 20 s when its instance or task stops, instead of hanging. They check the target every 10 s with `ssm:GetConnectionStatus`.
+- ec2-session, ecs-session and ssm-port-forward end the session within about 30 s when its instance or task stops, instead of hanging. They check the target every 10 s with `ssm:GetConnectionStatus`.
 - `ec2-ssh --print-ssh-config` prints an ssh_config stanza, after which plain ssh, scp, rsync, sftp, git, VS Code and Ansible reach instances as `i-…`, `mi-…`, `NAME.ssm` and `NAME.REGION.ssm`. It runs the new `ec2-ssh --proxy`, which sends the key and starts the session without the AWS CLI.
 - ec2-ssh sets `ServerAliveInterval=15` unless the ssh_config or `-o` sets one, so ssh exits by itself about a minute after the SSM connection dies instead of hanging.
 - On Windows, the tools no longer run an `ssh.exe`, `aws.exe` or `session-manager-plugin.exe` that happens to be in the current directory, and neither do ssh's ProxyCommand and the plugin they start.
+
+### Fixes
+- `scp -S ec2-ssh` and `sftp -S ec2-ssh` work again with OpenSSH 9's scp, which uses SFTP by default. Before, they failed with "ssh -G failed: You must specify a subsystem to invoke".
+- ec2-ssh starts the session in the region it found the instance in, even when `AWS_REGION` is set to another region. The AWS CLI prefers `AWS_REGION`, which the tools don't use.
 
 ## 3.0.0 (2026-11-25)
 

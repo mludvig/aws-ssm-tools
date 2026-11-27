@@ -134,6 +134,8 @@ def ssh_config(options: list[str], destination: str) -> dict[str, list[str]]:
     Return the config that ssh would use for 'destination' with these options and the ssh_config,
     as {keyword: [values]}. Most keywords have one value, e.g. "user", some more, e.g. "identityfile".
     """
+    # -s (scp, sftp) only says the remote command is a subsystem, and ssh -G refuses it without one
+    options = [option for option in options if option != "-s"]
     result = subprocess.run(["ssh", "-G", *options, "--", destination], capture_output=True, text=True, check=False)
     if result.returncode != 0:
         logger.error("ssh -G failed: %s", result.stderr.strip())
@@ -429,7 +431,9 @@ def main() -> int:
 
             if ssh_config(ssh_args.options, ssh_args.destination)["serveraliveinterval"] == ["0"]:
                 ssh_args.options[:0] = ["-o", f"ServerAliveInterval={SERVER_ALIVE_INTERVAL}"]
-            command = ssh_command(ssh_args, args.profile, args.region, args.use_endpoint, args.reason)
+            # The AWS CLI prefers AWS_REGION, which boto3 ignores: give it the region the instance was found in
+            region = instance_resolver.session.region_name or ""
+            command = ssh_command(ssh_args, args.profile, region, args.use_endpoint, args.reason)
             logger.debug("Running: %s", command)
             # On Windows os.execvp() doesn't replace us, see docs/adr/0019-windows-and-macos.md
             if key_dir or os.name == "nt":
