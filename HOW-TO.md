@@ -197,6 +197,7 @@ sftp -S ec2-ssh ec2-user@web1
 ```
 
 `-S` takes no arguments: set `AWS_PROFILE` / `AWS_DEFAULT_REGION`, or use [ec2-ssh in ssh_config](#ec2-ssh-in-ssh_config).
+On Windows, scp and sftp don't search PATH for `-S`: give the full path, e.g. `scp -S (Get-Command ec2-ssh).Source …` in PowerShell.
 
 ### To connect with a one-off key
 
