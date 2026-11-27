@@ -35,7 +35,8 @@ def run_session(exec_args: list[str], env: dict[str, str] | None = None, on_star
     Run exec_args, with 'env' added to the environment, and return its exit code
     (128+N if it, or we, got signal N). Call on_start() with the child once it runs.
     """
-    executable = shutil.which(exec_args[0])
+    # which() on Windows may pick one in the cwd (3.11 always does). See docs/adr/0026-windows-program-lookup.md
+    executable = exec_args[0] if os.name == "nt" else shutil.which(exec_args[0])
     if not executable:
         logger.error("Command not found: %s", exec_args[0])
         return 127
@@ -64,7 +65,11 @@ def _run_child(command: list[str], env: dict[str, str] | None, on_start: OnStart
     so that our caller still cleans up.
     """
     received: list[int] = []
-    proc = subprocess.Popen(command, env=env)
+    try:
+        proc = subprocess.Popen(command, env=env)
+    except FileNotFoundError:  # Windows, see run_session()
+        logger.error("Command not found: %s", command[0])
+        return 127
     if on_start:
         on_start(proc)
 

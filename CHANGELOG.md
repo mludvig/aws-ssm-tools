@@ -13,6 +13,7 @@
 - ec2-session, ecs-session and ssm-port-forward end the session within about 20 s when its instance or task stops, instead of hanging. They check the target every 10 s with `ssm:GetConnectionStatus`.
 - `ec2-ssh --print-ssh-config` prints an ssh_config stanza, after which plain ssh, scp, rsync, sftp, git, VS Code and Ansible reach instances as `i-…`, `mi-…`, `NAME.ssm` and `NAME.REGION.ssm`. It runs the new `ec2-ssh --proxy`, which sends the key and starts the session without the AWS CLI.
 - ec2-ssh sets `ServerAliveInterval=15` unless the ssh_config or `-o` sets one, so ssh exits by itself about a minute after the SSM connection dies instead of hanging.
+- On Windows, the tools no longer run an `ssh.exe`, `aws.exe` or `session-manager-plugin.exe` that happens to be in the current directory, and neither do ssh's ProxyCommand and the plugin they start.
 
 ## 3.0.0 (2026-11-25)
 

@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -47,6 +48,14 @@ def assert_no_process(marker: str) -> None:
 
 
 def test_command_not_found(caplog: pytest.LogCaptureFixture) -> None:
+    assert run_session(["ssm-tools-no-such-command"]) == 127
+    assert "Command not found: ssm-tools-no-such-command" in caplog.text
+
+
+def test_windows_command_not_found(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """On Windows Popen() does the lookup, as which() looks in the cwd first"""
+    monkeypatch.setattr(os, "name", "nt")
+    monkeypatch.setattr(shutil, "which", lambda *_args: pytest.fail("used which()"))
     assert run_session(["ssm-tools-no-such-command"]) == 127
     assert "Command not found: ssm-tools-no-such-command" in caplog.text
 
