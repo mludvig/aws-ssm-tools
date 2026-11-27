@@ -136,7 +136,7 @@ and for ECS Docker Exec: `ecs-session`
 
     This opens an interactive shell session over SSM without the need for
     a password or SSH key. Note that by default the login user is `ssm-user`.
-    You can specify most a different user with e.g. `--user ec2-user` or
+    You can specify a different user with e.g. `--user ec2-user` or
     even `--user root`. `-u USER`, `-l USER`, `--sudo USER` and
     `USER@INSTANCE` do the same. This runs `sudo -i -u USER` on Linux
     instances and is refused for Windows instances.
@@ -148,7 +148,7 @@ and for ECS Docker Exec: `ecs-session`
 
     You can skip the interactive menu by specifying the server directly into the command.
     ```
-    ~ $ ec2-session -v nginx-web-server --user ec2-user --reason "optional - The reason why you are connecting to the instance"
+    ~ $ ec2-session nginx-web-server --user ec2-user --reason "optional - The reason why you are connecting to the instance"
     InstanceId           InstanceName       HostName                      Addresses
     -------------------  ----------------  -----------------------------  -------------
     i-07c189021bc56e042  nginx-web-server  ip-10-251-128-70.ec2.internal  10.251.128.70
@@ -320,7 +320,7 @@ and for ECS Docker Exec: `ecs-session`
     We will use `--route 192.168.44.0/23` that gives us access to the VPC CIDR.
 
     ```
-    ~ $ ssm-tunnel -v tunnel-test --route 192.168.44.0/23
+    ~ $ ssm-tunnel tunnel-test --route 192.168.44.0/23
     [ssm-tunnel] INFO: Local IP: 100.64.160.100 / Remote IP: 100.64.160.101
     00:00:15 | In:  156.0 B @    5.2 B/s | Out:  509.0 B @   40.4 B/s
     ```
@@ -353,11 +353,12 @@ All these tools support `--help` and a set of common parameters:
                         Configuration profile from ~/.aws/{credentials,config}
     --region REGION, -g REGION
                         Set / override AWS region.
-    --verbose, -v       Increase log level.
-    --debug, -d         Increase log level even more.
+    --verbose, -v       Default log level. Show informational messages only.
+    --debug, -d         Increase log level.
+    --quiet, -q         Decrease log level. Only show warnings and errors.
 
-`ec2-ssh` only supports the long options to prevent conflict with `ssh`'s
-own short options that are being passed through. It reads the command line
+`ec2-ssh` only supports the long options, and `-u USER`, to prevent conflict
+with `ssh`'s own short options that are being passed through. It reads the command line
 like `ssh` does: options, then `[user@]instance`, then the remote command.
 The remote command is passed through untouched, even if it contains options
 like `--profile`. A name that isn't an SSM instance, e.g. a `Host` alias from

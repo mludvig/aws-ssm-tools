@@ -114,7 +114,7 @@ def parse_args(argv: list) -> argparse.Namespace:
     parser.description = "Start IP tunnel to a given SSM instance"
     parser.epilog = f"""
 IMPORTANT: instances must be registered in AWS Systems Manager (SSM)
-before you can copy files to/from them! Instances not registered in SSM
+before you can start a tunnel to them! Instances not registered in SSM
 will not be recognised by {parser.prog} nor show up in --list output.
 
 Visit https://aws.nz/aws-utils/ssm-tunnel for more info and usage examples.

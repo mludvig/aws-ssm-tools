@@ -85,7 +85,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         "--list",
         dest="list",
         action="store_true",
-        help="List available containers configured for ECS RunTask",
+        help="List available containers configured for ECS Exec",
     )
     group_container.add_argument(
         "--cluster",
@@ -115,7 +115,7 @@ def parse_args(argv: list) -> argparse.Namespace:
         "The container needs runuser, su or chroot --userspec. (optional)",
     )
 
-    parser.description = "Execute 'ECS Run Task' in a given container"
+    parser.description = "Open a shell or run a command in an ECS container with ECS Exec"
     parser.epilog = f"""
 IMPORTANT: containers must have "execute-command" setting enabled or they
 will not be recognised by {parser.prog} nor show up in --list output.
