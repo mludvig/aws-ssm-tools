@@ -14,6 +14,10 @@
 - `ec2-ssh --print-ssh-config` prints an ssh_config stanza, after which plain ssh, scp, rsync, sftp, git, VS Code and Ansible reach instances as `i-…`, `mi-…`, `NAME.ssm` and `NAME.REGION.ssm`. It runs the new `ec2-ssh --proxy`, which sends the key and starts the session without the AWS CLI.
 - ec2-ssh sets `ServerAliveInterval=15` unless the ssh_config or `-o` sets one, so ssh exits by itself about a minute after the SSM connection dies instead of hanging.
 
+### Fixes
+- `scp -S ec2-ssh` and `sftp -S ec2-ssh` work again with OpenSSH 9's scp, which uses SFTP by default. Before, they failed with "ssh -G failed: You must specify a subsystem to invoke".
+- ec2-ssh starts the session in the region it found the instance in, even when `AWS_REGION` is set to another region. The AWS CLI prefers `AWS_REGION`, which the tools don't use.
+
 ## 3.0.0 (2026-11-25)
 
 A reliability, security and consistency pass over all the tools. The decisions behind each change are in [docs/adr](docs/adr).

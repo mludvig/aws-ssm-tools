@@ -30,7 +30,7 @@ ec2-session web1
 ```
 
 `-p` / `-g` are short for `--profile` / `--region`, except in `ec2-ssh`, which takes only long options.
-The tools ignore `AWS_REGION`, but the AWS CLI that `ec2-ssh` runs prefers it: unset it, or give `--region`.
+The tools use `AWS_DEFAULT_REGION`, not `AWS_REGION`, as boto3 does.
 
 ### To name the target instance
 
@@ -163,16 +163,16 @@ ec2-ssh -o ConnectTimeout=30 ec2-user@web1
 
 All short options are passed to `ssh` (`-u` is the only one `ec2-ssh` takes). Its own options are long-only and can't be abbreviated.
 
-### To copy files with rsync or scp
+### To copy files with rsync, scp or sftp
 
 ```
 rsync -e ec2-ssh -av ./site/ ec2-user@web1:site/
 rsync -e "ec2-ssh --profile prod --region eu-west-1" -av ec2-user@web1:/var/log/app/ ./logs/
-scp -O -S ec2-ssh ./app.tar.gz ec2-user@web1:/tmp/
+scp -S ec2-ssh ./app.tar.gz ec2-user@web1:/tmp/
+sftp -S ec2-ssh ec2-user@web1
 ```
 
-`scp -S` takes no arguments: set `AWS_PROFILE` / `AWS_DEFAULT_REGION`, or use [ec2-ssh in ssh_config](#ec2-ssh-in-ssh_config).
-scp needs `-O` (the old scp protocol) here: its default SFTP mode, and `sftp -S`, fail with `ssh -G failed`.
+`-S` takes no arguments: set `AWS_PROFILE` / `AWS_DEFAULT_REGION`, or use [ec2-ssh in ssh_config](#ec2-ssh-in-ssh_config).
 
 ### To connect with a one-off key
 
@@ -398,7 +398,7 @@ and needs `ssm-tunnel-agent` on the instance.
 
 ```
 python3 -c 'import ssm_tools.ssm_tunnel_agent as a; print(a.__file__)'
-scp -O -S ec2-ssh "$(python3 -c 'import ssm_tools.ssm_tunnel_agent as a; print(a.__file__)')" ec2-user@web1:/tmp/ssm-tunnel-agent
+scp -S ec2-ssh "$(python3 -c 'import ssm_tools.ssm_tunnel_agent as a; print(a.__file__)')" ec2-user@web1:/tmp/ssm-tunnel-agent
 ec2-ssh ec2-user@web1 sudo install -m 755 /tmp/ssm-tunnel-agent /usr/local/bin/ssm-tunnel-agent
 ```
 

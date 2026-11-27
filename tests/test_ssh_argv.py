@@ -5,6 +5,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import types
 from typing import Any
 
 import pytest
@@ -98,6 +99,8 @@ PROXY = [
 
 
 class FakeResolver:
+    session = types.SimpleNamespace(region_name=None)  # No region in the profile or environment
+
     def __init__(self, _args: Any) -> None:
         pass
 
@@ -198,6 +201,14 @@ def test_ssh_command(run: Any, argv: list[str], ssh_argv: list[str], sent: list[
     assert sent_keys == sent
 
 
+def test_ssh_command_region(run: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The AWS CLI would prefer AWS_REGION, so it gets the region boto3 found the instance in
+    monkeypatch.setattr(FakeResolver, "session", types.SimpleNamespace(region_name="eu-west-1"))
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    command, _ = run("u@web")
+    assert command[len(SSH) + 1].startswith("ProxyCommand=aws --region eu-west-1 ssm start-session ")
+
+
 def test_use_endpoint_rejects_hybrid(
     run: Any,
     monkeypatch: pytest.MonkeyPatch,
@@ -244,6 +255,7 @@ Host *
         (["-u", "uuser", "-o", "User=optuser", "web"], "uuser"),
         (["--user", "uuser", "web"], "uuser"),
         (["atuser@web"], "atuser"),
+        (["-x", "-oPermitLocalCommand=no", "-l", "scpuser", "-s", "--", "web", "sftp"], "scpuser"),  # scp, sftp -S
         ([WEB], "defaultuser"),
         ([], "defaultuser"),  # the picker
     ],
