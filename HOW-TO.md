@@ -4,6 +4,7 @@ Short recipes for `ec2-session`, `ec2-ssh`, `ecs-session`, `ssm-port-forward` an
 For installation, `session-manager-plugin` versions and the IAM and SSM agent set-up see [README.md](README.md).
 
 * [Common options](#common-options)
+* [When the target goes away](#when-the-target-goes-away) - instance or container stops mid-session
 * [ec2-session](#ec2-session) - shell or command on an EC2 or hybrid instance
 * [ec2-ssh](#ec2-ssh) - ssh, scp and rsync over SSM
 * [ec2-ssh in ssh_config](#ec2-ssh-in-ssh_config) - plain `ssh`, `scp`, VS Code, etc. to `i-*`, `mi-*` and `NAME.ssm`
@@ -71,6 +72,29 @@ ec2-session --version
 ```
 
 `ssm-session` and `ssm-ssh` are the old names of `ec2-session` and `ec2-ssh`, and still work.
+
+## When the target goes away
+
+### What happens when the instance or container stops, reboots or disconnects mid-session
+
+`session-manager-plugin` alone would wait forever and leave the session *Active*. Instead:
+
+| Tool | How it notices | Ends after |
+|---|---|---|
+| `ec2-session`, `ecs-session`, `ssm-port-forward`, `ec2-ssh` in ssh_config | `ssm:GetConnectionStatus` every 10 s, two *not connected* in a row | about 20-30 s, exit code 143 |
+| `ec2-ssh` | ssh's `ServerAliveInterval 15` | about 60 s, exit code 255 |
+| `ssm-tunnel` | the agent's keepalives stop | about 30-40 s |
+
+The first row warns `i-0123456789abcdef0 is no longer connected to SSM (notconnected), ending the session`,
+stops the plugin and terminates the session, so it doesn't stay *Active*.
+A check that fails because your own network is down doesn't count.
+
+### When it isn't watched
+
+* Without `ssm:GetConnectionStatus` in your IAM policy: one *AccessDenied* per session, then no checks.
+* With a profile that has `mfa_serial`: refreshing its credentials mid-session would prompt for a code.
+
+Then end it yourself: press `Enter` then `~.` (plugin 1.2.835.0 or newer), or kill the tool from another terminal.
 
 ## ec2-session
 
