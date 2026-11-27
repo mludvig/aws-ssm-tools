@@ -271,9 +271,11 @@ and for ECS Docker Exec: `ecs-session`
     The stanza runs `ec2-ssh --proxy` for `i-*`, `mi-*` and `*.ssm` hosts,
     with the `--profile`, `--region`, `--reason` and `--no-send-key` given to
     `--print-ssh-config`. It sends a key that ssh will offer, from your
-    ssh_config or agent: a `-i` on the `ssh` command line doesn't reach it,
-    so put that key in an `IdentityFile` line under the `Host i-* mi-* *.ssm`
-    stanza instead. It needs `session-manager-plugin` *1.2.497.0* or newer,
+    ssh_config or agent: a `-i` on the `ssh` command line or an `ssh -F`
+    config doesn't reach it, so put that key in an `IdentityFile` line under
+    the `Host i-* mi-* *.ssm` stanza, or in the agent. A `Host` alias whose
+    `HostName` is an instance needs its own copy of the stanza's `ProxyCommand`
+    line, which then sends the alias's `IdentityFile`. It needs `session-manager-plugin` *1.2.497.0* or newer,
     but not the AWS CLI. In Windows PowerShell 5.1, `>>` writes UTF-16, which
     ssh can't read: paste the output into the file with an editor instead.
 

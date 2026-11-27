@@ -235,6 +235,8 @@ def parse_args(argv: list) -> tuple[argparse.Namespace, SshArgs]:
         type=proxy_target,
         help="Be ssh's ProxyCommand, as set up by --print-ssh-config",
     )
+    # ssh's %n, the host as typed, e.g. a Host alias with its own IdentityFile
+    parser.add_argument("--ssh-host", help=argparse.SUPPRESS)
 
     parser.description = "Open SSH connection through Session Manager"
     parser.epilog = f"""
@@ -261,6 +263,8 @@ Author: Michael Ludvig
         ssh_args.destination or ssh_args.options or args.user or args.list or args.gen_key or args.use_endpoint
     ):
         parser.error("--proxy and --print-ssh-config only go with --profile, --region, --reason and --no-send-key")
+    if args.ssh_host and not args.proxy:
+        parser.error("--ssh-host only goes with --proxy")
 
     # If --version do it now and exit
     if args.show_version:
@@ -321,7 +325,7 @@ def ssh_config_stanza(profile: str, region: str, reason: str, send_key: bool) ->
         command += " --no-send-key"
     return (
         "Host i-* mi-* *.ssm\n"
-        f"    ProxyCommand {command} --proxy %r@%h:%p\n"
+        f"    ProxyCommand {command} --proxy %r@%h:%p --ssh-host %n\n"
         f"    ServerAliveInterval {SERVER_ALIVE_INTERVAL}\n"
     )
 
@@ -344,11 +348,11 @@ def proxy(args: argparse.Namespace) -> int:
         instance_not_found(name)
     logger.debug("Resolved instance name '%s' to '%s'", name, instance_id)
 
-    # EC2 Instance Connect only knows EC2 instances. ssh -G knows the keys that ssh will offer,
-    # except a -i given to ssh itself.
+    # EC2 Instance Connect only knows EC2 instances. ssh -G for the host as typed knows the keys
+    # that ssh will offer, except a -i given to ssh itself or an ssh -F config.
     if args.send_key and instance_id.startswith("i-"):
         hint = "Give one with IdentityFile in the ssh_config, or add --no-send-key to the ProxyCommand."
-        public_key = select_key(ssh_config([], f"{user}@{host}"), hint)
+        public_key = select_key(ssh_config([], f"{user}@{args.ssh_host or host}"), hint)
         EC2InstanceConnectHelper(args).send_ssh_key(instance_id, user, public_key)
 
     ssm_client = instance_resolver.ssm_client
