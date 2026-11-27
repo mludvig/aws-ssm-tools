@@ -11,6 +11,7 @@ import shutil
 import signal
 import subprocess
 import sys
+from collections.abc import Callable
 
 __all__ = ["run_session"]
 
@@ -26,10 +27,13 @@ _SOFT_RESET = (
 )
 
 
-def run_session(exec_args: list[str], env: dict[str, str] | None = None) -> int:
+OnStart = Callable[[subprocess.Popen[bytes]], None] | None
+
+
+def run_session(exec_args: list[str], env: dict[str, str] | None = None, on_start: OnStart = None) -> int:
     """
     Run exec_args, with 'env' added to the environment, and return its exit code
-    (128+N if it, or we, got signal N).
+    (128+N if it, or we, got signal N). Call on_start() with the child once it runs.
     """
     executable = shutil.which(exec_args[0])
     if not executable:
@@ -43,9 +47,9 @@ def run_session(exec_args: list[str], env: dict[str, str] | None = None) -> int:
     sys.stderr.flush()
 
     if os.name == "posix" and os.isatty(0) and os.tcgetpgrp(0) == os.getpgrp():
-        return _run_foreground_job(command, child_env)
+        return _run_foreground_job(command, child_env, on_start)
 
-    return _run_child(command, child_env)
+    return _run_child(command, child_env, on_start)
 
 
 def _exit_code(received: list[int], returncode: int) -> int:
@@ -54,13 +58,15 @@ def _exit_code(received: list[int], returncode: int) -> int:
     return returncode if returncode >= 0 else 128 - returncode
 
 
-def _run_child(command: list[str], env: dict[str, str] | None) -> int:
+def _run_child(command: list[str], env: dict[str, str] | None, on_start: OnStart = None) -> int:
     """
     No terminal of ours to manage (or Windows). Pass TERM and HUP on, and wait for the child,
     so that our caller still cleans up.
     """
     received: list[int] = []
     proc = subprocess.Popen(command, env=env)
+    if on_start:
+        on_start(proc)
 
     def _forward(signum: int, _frame: object) -> None:
         received.append(signum)
@@ -89,7 +95,7 @@ def _killpg(pgid: int, signum: int) -> None:
         os.killpg(pgid, signum)
 
 
-def _run_foreground_job(command: list[str], env: dict[str, str] | None) -> int:
+def _run_foreground_job(command: list[str], env: dict[str, str] | None, on_start: OnStart = None) -> int:
     """
     Run the command as the terminal's foreground process group, like a shell job,
     so that we can kill all of it (e.g. ssh *and* its ProxyCommand) and then restore the terminal.
@@ -113,6 +119,8 @@ def _run_foreground_job(command: list[str], env: dict[str, str] | None) -> int:
     # We're in the background while the child runs; the child resets this in _child_setup()
     old_handlers = {signal.SIGTTOU: signal.signal(signal.SIGTTOU, signal.SIG_IGN)}
     proc = subprocess.Popen(command, env=env, preexec_fn=_child_setup)
+    if on_start:
+        on_start(proc)
 
     def _forward(signum: int, _frame: object) -> None:
         received.append(signum)

@@ -5,18 +5,23 @@ plugin didn't. See docs/adr/0011-direct-plugin-invocation.md
 
 import json
 import logging
+import subprocess
+import threading
 from typing import Any
 
 import botocore.exceptions
+import botocore.session
 
 from .terminal import run_session
 
-__all__ = ["PLUGIN_ENV_VERSION", "plugin_command", "run_plugin", "terminate_session"]
+__all__ = ["PLUGIN_ENV_VERSION", "Watchdog", "plugin_command", "run_plugin", "terminate_session"]
 
 logger = logging.getLogger("ssm-tools.plugin")
 
 PLUGIN_ENV_VERSION = "1.2.497.0"  # The first that reads the session from RESPONSE_ENV
 RESPONSE_ENV = "AWS_SSM_START_SESSION_RESPONSE"
+WATCH_INTERVAL = 10  # Seconds between the watchdog's checks
+KILL_AFTER = 3  # Seconds the plugin gets to exit after SIGTERM
 
 
 def plugin_command(
@@ -47,13 +52,62 @@ def run_plugin(ssm_client: Any, response: dict[str, Any], parameters: dict[str, 
     Run the plugin on the session in 'response' (see plugin_command()), and return its exit code.
     """
     command, env = plugin_command(ssm_client, response, parameters, profile)
+    watchdog = Watchdog(ssm_client, parameters["Target"], profile)
     code = 1
     try:
-        code = run_session(command, env=env)
+        code = run_session(command, env=env, on_start=watchdog.watch)
     finally:
-        if code != 0:  # Killed, failed or never started: don't leave the session Active
+        watchdog.stop()
+        if code != 0 or watchdog.fired:  # Killed, failed or never started: don't leave the session Active
             terminate_session(ssm_client, response["SessionId"])
     return code
+
+
+class Watchdog:
+    """
+    End the plugin when its target is no longer connected to SSM, because the plugin
+    would wait for it forever. See docs/adr/0025-session-watchdog.md
+    """
+
+    def __init__(self, ssm_client: Any, target: str, profile: str | None) -> None:
+        self.ssm_client = ssm_client
+        self.target = target
+        self.profile = profile
+        self.fired = False
+        self._stopped = threading.Event()
+
+    def watch(self, proc: subprocess.Popen[bytes]) -> None:
+        """Start watching for 'proc', the plugin"""
+        session = botocore.session.Session(profile=self.profile)
+        if session.full_config["profiles"].get(session.profile or "default", {}).get("mfa_serial"):
+            # Refreshing the credentials would prompt for a code in the middle of the session
+            logger.debug("Not watching %s with an MFA profile", self.target)
+            return
+        threading.Thread(target=self._run, args=(proc,), daemon=True).start()
+
+    def stop(self) -> None:
+        """The plugin has exited"""
+        self._stopped.set()
+
+    def _run(self, proc: subprocess.Popen[bytes]) -> None:
+        while not self._stopped.wait(WATCH_INTERVAL):
+            try:
+                status = self.ssm_client.get_connection_status(Target=self.target)["Status"]
+            except botocore.exceptions.ClientError as e:  # E.g. no ssm:GetConnectionStatus: don't ask again
+                logger.debug("Not watching %s: %s", self.target, e)
+                return
+            except botocore.exceptions.BotoCoreError as e:  # E.g. our own network is down: ask again
+                logger.debug("Can't check %s: %r", self.target, e)
+                continue
+            if status != "connected":
+                break
+        else:
+            return
+        logger.warning("%s is no longer connected to SSM (%s), ending the session", self.target, status)
+        self.fired = True
+        proc.terminate()
+        if not self._stopped.wait(KILL_AFTER):
+            proc.kill()
 
 
 def terminate_session(ssm_client: Any, session_id: str) -> None:
