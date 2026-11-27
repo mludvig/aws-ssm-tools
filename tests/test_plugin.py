@@ -54,6 +54,18 @@ def test_runs_the_plugin(
     assert json.loads(session) == {"SessionId": "s-1", "TokenValue": "secret", "StreamUrl": "wss://ssm/1"}
 
 
+@pytest.mark.skipif(os.name != "posix", reason="fake plugin is a shell script")
+def test_windows_ctrl_c(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, ssm: Any) -> None:
+    """The console sends Ctrl-C to the plugin too, which ends the session itself. See docs/adr/0019-windows-and-macos.md"""
+    fake = tmp_path / "session-manager-plugin"
+    fake.write_text("#!/bin/sh\nsleep 0.5; kill -INT $PPID; sleep 0.5; exit 0\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path), prepend=os.pathsep)
+    monkeypatch.setattr(os, "name", "nt")
+    monkeypatch.setattr(ssm, "terminate_session", lambda **_kwargs: pytest.fail("terminated a clean session"))
+    assert run_plugin(ssm, RESPONSE, PARAMETERS, None) == 0
+
+
 def test_no_plugin(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
